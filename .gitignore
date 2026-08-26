@@ -1,0 +1,119 @@
+# ==============================================================
+# .gitignore — aipmmarketing
+# 스택 가정: Next.js + Node.js + Firebase
+# 코드 추가 후 실제 스택이 확정되면 이 파일도 함께 갱신할 것
+# ==============================================================
+
+# ---------- 의존성 (Dependencies) ----------
+# 용량이 수백 MB에 달하고, package.json + lock 파일로 언제든 재생성 가능
+node_modules/
+.pnp
+.pnp.js
+.yarn/cache
+.yarn/install-state.gz
+
+# ---------- 환경변수 / 시크릿 (Secrets) ----------
+# API 키·DB 비밀번호·토큰이 들어가는 파일. 유출 시 즉시 계정 탈취로 이어짐
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+
+# ↓ 예외: 실제 값 없이 "어떤 키가 필요한지"만 적은 템플릿이므로 공유해야 함
+!.env.example
+!.env.sample
+
+# ---------- Firebase 서비스 계정 키 (최고 위험) ----------
+# 이 JSON 하나면 DB 전체 읽기/쓰기/삭제가 가능한 관리자 권한을 획득함
+*serviceAccount*.json
+*service-account*.json
+serviceAccountKey.json
+*firebase-adminsdk*.json
+firebase-admin*.json
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+database-debug.log
+pubsub-debug.log
+
+# ---------- 인증서 / 개인키 ----------
+# SSL 인증서, SSH 키, Apple 푸시 키 등 — 시크릿과 동일한 위험도
+*.pem
+*.key
+*.p12
+*.p8
+*.pfx
+*.keystore
+*.jks
+
+# ---------- 빌드 산출물 (Build output) ----------
+# 소스코드에서 자동 생성되는 결과물. 커밋하면 merge 충돌만 유발함
+.next/
+out/
+dist/
+build/
+.turbo/
+.vercel/
+.swc/
+*.tsbuildinfo
+next-env.d.ts
+
+# ---------- 로그 (Logs) ----------
+# 실행 중 계속 변하는 기록이라 diff가 의미 없고, 종종 토큰·개인정보가 섞임
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ---------- 캐시 / 테스트 산출물 (Cache) ----------
+# 로컬 성능 최적화용 임시 데이터. 사람마다 내용이 달라 공유 가치가 없음
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+coverage/
+.nyc_output/
+*.tsbuildinfo
+
+# ---------- OS 생성 파일 ----------
+# macOS Finder / Windows 탐색기가 멋대로 만드는 메타데이터 파일
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ---------- 에디터 / IDE ----------
+# 개인 작업환경 설정. 팀원마다 달라서 커밋하면 서로 계속 덮어씀
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# VSCode: 개인 설정은 무시하되, 팀 공용 설정 2개는 공유
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# ---------- Claude Code ----------
+# 팀 공용 설정(.claude/settings.json)은 공유하고, 개인 로컬 설정만 제외
+.claude/settings.local.json
+
+# ---------- 기타 ----------
+*.tmp
+*.temp
+.tmp/
