@@ -1,0 +1,14 @@
+rules_version = '2';
+
+// 기본값은 "전부 차단"이다. 인증 방식과 데이터 구조가 확정되기 전까지
+// 열어두면, 규칙을 잊은 채 배포했을 때 DB가 그대로 공개된다.
+//
+// 컬렉션이 생길 때마다 아래에 match 블록을 추가하며 필요한 만큼만 연다.
+// 서버(Admin SDK)는 이 규칙을 우회하므로 API Route를 통한 접근은 영향받지 않는다.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
