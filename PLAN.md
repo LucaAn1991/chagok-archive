@@ -409,7 +409,8 @@ flowchart TD
 | POST | `/api/plans/[planId]/schedule` | 업로드 빈도에 맞춰 예정일 배정 | F4 · `card` `user` | ○ |
 | POST | `/api/plans/[planId]/continue` | 이전 맥락을 이어 새 대화 시작 | F11 · `plan` | ○ |
 | POST | `/api/cards/[cardId]/caption` | 캡션 생성 — **AI 호출** | F7 · `card` `user` | ○ |
-| POST | `/api/cards/[cardId]/render` | 카드뉴스 렌더링 — **satori + sharp (같은 프로세스 안)** | F8 · `card` | ○ |
+| POST | `/api/cards/[cardId]/render` | 카드뉴스 **구성 생성** — 슬라이드 레이아웃·텍스트를 만들어 저장, status→'crafted'. 완성 PNG는 저장하지 않는다 | F8 · `card` | ○ |
+| GET | `/api/cards/[cardId]/slides/[order]/image` | 슬라이드 1장을 **요청 시 PNG로 렌더링** — satori + sharp (같은 프로세스 안) | F8 · `card` | ○ |
 | PATCH | `/api/cards/[cardId]` | 기획 정보·예정일 수정 | F6 · 예정일 변경 · `card` | ○ |
 | PATCH | `/api/cards/[cardId]/status` | 발행 의향·발행 완료·버리기 | F9 · 카드 버리기 · `card` | ○ |
 | POST | `/api/cards/[cardId]/photos` | 사진 업로드 URL 발급 | F13 · `card` | ○ |
@@ -417,9 +418,15 @@ flowchart TD
 | DELETE | `/api/users/me` | 회원 탈퇴 — 계정 + 데이터 삭제 | 회원 탈퇴 · `user` `plan` `card` | ○ |
 
 **조회(GET)는 API route를 만들지 않는다.** 홈·캘린더·목록은 Firestore 보안 규칙으로 본인 문서만 읽게 하고 클라이언트 SDK로 직접 읽는다. 라운드트립이 한 번 줄고, 규칙이 이미 같은 보호를 한다.
+**예외는 슬라이드 이미지 GET 하나** — Firestore 조회가 아니라 서버 렌더링이라 route가 필요하다.
 
 > `[PRD §6 확정]` **외부 렌더링 서비스를 호출하지 않는다.** satori+sharp가 같은 Node 프로세스에서
 > 돌기 때문에 이 route가 곧 렌더러다. 네트워크 왕복이 없어 실패 지점이 하나 줄어든다.
+
+> **완성 PNG는 어디에도 저장하지 않는다 (08-27 확정).** `Slide` 스키마(§2-3)에는 렌더링 결과
+> 필드가 없다 — 카드에는 구성(layoutId·texts)만 저장하고, 이미지는 요청 시 즉석 렌더링한다
+> (장당 5~10ms 실측, `scripts/render-smoke.ts`). Storage 버킷·Blaze 업그레이드 없이 동작하므로
+> 무예산 전제(PRD §6)와 맞는다. 사용자 업로드 사진(F13)은 별개 — Storage가 필요하며 §8 TODO 유지.
 
 ---
 
@@ -544,6 +551,7 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 | 2026-08-27 | 렌더링을 Node(satori+sharp)로 확정 | 언어를 하나로 유지해야 3인이 서로의 코드를 본다(위험 7). 배포 대상도 1개 유지 | §6 · §8 · §12 |
 | 2026-08-27 | AI 모델을 Anthropic Claude로 확정 | 한국어 기획 대화 품질이 제품의 전부(PRD §3). 구조화 출력으로 F3 파싱 실패를 차단 | §8 · §9 · §12 |
 | 2026-08-27 | 보안 규칙 3건 확정 — `onboardedAt` 서버만 쓰기 · `cards` create 서버만 · `users`/`plans` 클라이언트 delete 금지 | firestore.rules 구현 중 미확정이던 지점을 결정(승인받음). 규칙 파일과 문서를 일치시킴 | §7 |
+| 2026-08-27 | 렌더링 산출물 무저장 확정 — 완성 PNG는 저장하지 않고 요청 시 렌더링. 슬라이드 이미지 GET route 신설 | Slide 스키마에 렌더링 결과 필드가 없고, Node 실측 5~10ms/장이라 저장·관리보다 즉석 렌더링이 싸다. Storage·Blaze 불필요(승인받음) | §6 |
 | 2026-08-27 | 레이아웃 6종 이름 확정 (`LayoutId`) | 이름은 렌더러 «구조»를, 시안은 그 «안»을 정한다. 나눠도 충돌하지 않고 F8 착수를 막지 않는다 | §2-3 · §12 |
 
 > **코딩 중 이 문서를 수정하게 되면 반드시 이 표에 기록한다.** (`CLAUDE.md` 「우선순위 및 충돌 처리」 3번)
