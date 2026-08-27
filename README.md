@@ -46,8 +46,8 @@ cp .env.example .env.local
 
 값 위치 — **Firebase 콘솔 > 프로젝트 설정 > 내 앱 > SDK 설정 및 구성**
 
-> ⚠️ **Firebase 프로젝트 ID는 `aipmmarketing-20ba0`입니다.**
-> 표시 이름(`aipmmarketing`)과 다릅니다. `aipmmarketing`으로 쓰면 "project not found"가 납니다.
+> ⚠️ **Firebase 프로젝트 ID는 `chagok-aa563`입니다.**
+> 표시 이름(`Chagok`)과 다릅니다. `chagok`으로 쓰면 "project not found"가 납니다.
 
 가장 빠른 방법은 팀 리드에게 `.env.local` 내용을 받는 것입니다.
 `NEXT_PUBLIC_` 값 6개는 브라우저에 노출되는 값이라 치명적이진 않지만,
