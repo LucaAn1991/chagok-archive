@@ -73,6 +73,11 @@ npm run dev                    # http://localhost:3000
 > 3000번 포트가 이미 사용 중이면 Next.js가 자동으로 3001로 넘어갑니다.
 > 터미널에 찍힌 주소를 확인하세요.
 
+> ⚠️ **클론 직후 `npm run verify`가 `Cannot find name 'LayoutProps'` 에러로 실패하면**
+> `npx next typegen`을 한 번 실행하세요. Next.js 16이 자동 생성하는 타입인데,
+> 한 번도 빌드·실행하지 않은 상태에서는 파일이 아직 없어서 나는 에러입니다.
+> (`npm run dev`를 한 번이라도 돌렸다면 자동으로 해결됩니다.)
+
 ---
 
 ## 명령어
