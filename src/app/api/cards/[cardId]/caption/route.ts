@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { getUidFromRequest } from "@/lib/api/auth";
 import { generateCaption, isClaudeConfigured } from "@/lib/ai/caption";
-import type { Card } from "@/types";
-import type { User } from "@/types";
+import type { Card, User } from "@/types";
 
 /**
  * POST /api/cards/[cardId]/caption — 캡션 생성 (F7).
@@ -17,17 +17,9 @@ export async function POST(
   ctx: RouteContext<"/api/cards/[cardId]/caption">,
 ) {
   // 1. 인증 — 토큰이 없거나 무효면 401
-  const authHeader = req.headers.get("authorization") ?? "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!idToken) {
+  const uid = await getUidFromRequest(req);
+  if (!uid) {
     return NextResponse.json({ error: "로그인이 필요해요." }, { status: 401 });
-  }
-
-  let uid: string;
-  try {
-    uid = (await adminAuth.verifyIdToken(idToken)).uid;
-  } catch {
-    return NextResponse.json({ error: "로그인이 만료됐어요. 다시 로그인해주세요." }, { status: 401 });
   }
 
   // 2. 카드 조회 + 소유 확인 — 남의 카드는 존재를 알리지 않고 404 (PLAN.md §4)
