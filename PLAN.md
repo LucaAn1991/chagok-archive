@@ -392,7 +392,7 @@ flowchart TD
 | POST | `/api/plans/[planId]/schedule` | 업로드 빈도에 맞춰 예정일 배정 | F4 · `card` `user` | ○ |
 | POST | `/api/plans/[planId]/continue` | 이전 맥락을 이어 새 대화 시작 | F11 · `plan` | ○ |
 | POST | `/api/cards/[cardId]/caption` | 캡션 생성 — **AI 호출** | F7 · `card` `user` | ○ |
-| POST | `/api/cards/[cardId]/render` | 카드뉴스 렌더링 — **Python/Pillow 서비스 호출** | F8 · `card` | ○ |
+| POST | `/api/cards/[cardId]/render` | 카드뉴스 렌더링 — **satori + sharp (같은 프로세스 안)** | F8 · `card` | ○ |
 | PATCH | `/api/cards/[cardId]` | 기획 정보·예정일 수정 | F6 · 예정일 변경 · `card` | ○ |
 | PATCH | `/api/cards/[cardId]/status` | 발행 의향·발행 완료·버리기 | F9 · 카드 버리기 · `card` | ○ |
 | POST | `/api/cards/[cardId]/photos` | 사진 업로드 URL 발급 | F13 · `card` | ○ |
@@ -401,8 +401,8 @@ flowchart TD
 
 **조회(GET)는 API route를 만들지 않는다.** 홈·캘린더·목록은 Firestore 보안 규칙으로 본인 문서만 읽게 하고 클라이언트 SDK로 직접 읽는다. 라운드트립이 한 번 줄고, 규칙이 이미 같은 보호를 한다.
 
-> **TODO: 렌더링 서비스의 실행 위치가 미확정이다.** App Hosting은 Node 런타임이라 Pillow가 돌지 않는다.
-> Cloud Run 별도 배포가 필요한데 무예산 전제와 부딪힌다 (`PRD.md` §10-11).
+> `[PRD §6 확정]` **외부 렌더링 서비스를 호출하지 않는다.** satori+sharp가 같은 Node 프로세스에서
+> 돌기 때문에 이 route가 곧 렌더러다. 네트워크 왕복이 없어 실패 지점이 하나 줄어든다.
 
 ---
 
@@ -452,11 +452,11 @@ plans  (userId ASC, status ASC, confirmedAt DESC)      지난 기획 목록
 | **스토리지** | Firebase Storage — 사용자 사진 업로드용. **TODO: 아직 버킷 미생성. 신규 프로젝트는 Blaze 필요할 수 있음** |
 | **배포** | Firebase App Hosting — GitHub push 자동 배포 · Secret Manager. **TODO: Blaze 업그레이드 필요** |
 | **스타일** | Tailwind CSS 4 + `DESIGN.md` 토큰 (`globals.css`) |
-| **폰트** | Pretendard 단일 (dynamic-subset CDN) |
+| **폰트** | Pretendard 단일. **UI는 dynamic-subset CDN, 렌더러는 `.ttf` 파일 직접 포함** — satori는 시스템 폰트를 읽지 못하고 폰트 버퍼를 넘겨받는다 |
 | **아이콘** | lucide-react. **TODO: 아직 미설치** |
 | **상태 관리** | 별도 라이브러리 없이 React 내장 + Firestore 실시간 구독으로 시작. 부족해지면 재검토 |
 | **결제 연동** | 없음 — v1 결제 제외 |
-| **카드뉴스 렌더링** | Python / Pillow. **TODO: 실행 위치 미정 (§6)** |
+| **카드뉴스 렌더링** | **satori** (HTML→SVG) + **sharp** (SVG→PNG). App Hosting 안에서 실행 · 배포 대상 1개 유지. **TODO: 두 패키지 미설치 — `CLAUDE.md` 「의존성」 규칙에 따라 F8 착수 시점에 허락을 구한다** |
 
 ### 타겟 디바이스 / 화면 크기
 
@@ -514,6 +514,7 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 |---|---|---|---|
 | 2026-08-27 | 최초 작성 | PRD·IA·DESIGN 기준 기술 설계 수립 | 전체 |
 | 2026-08-27 | AI 실패·재시도 처리 확정 | PRD §5-7 신설에 따름. F2·F3 화면 확정을 막던 TODO 해소 | §3 · §3-1 · §9 · §12 |
+| 2026-08-27 | 렌더링을 Node(satori+sharp)로 확정 | 언어를 하나로 유지해야 3인이 서로의 코드를 본다(위험 7). 배포 대상도 1개 유지 | §6 · §8 · §12 |
 
 > **코딩 중 이 문서를 수정하게 되면 반드시 이 표에 기록한다.** (`CLAUDE.md` 「우선순위 및 충돌 처리」 3번)
 
@@ -526,7 +527,8 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 | | 항목 | 무엇을 막고 있나 | 출처 |
 |---|---|---|---|
 | ~~1~~ | ~~AI 실패·재시도 처리 방식~~ | ✅ **해소 (08-27)** — `PRD.md` §5-7 확정 | `PRD.md` §10-9 |
-| 2 | **Python 렌더러 실행 위치** | F8 구현 착수 · 배포 구성 | `PRD.md` §10-11 |
+| ~~2~~ | ~~Python 렌더러 실행 위치~~ | ✅ **해소 (08-27)** — Node(satori+sharp)로 재작성 확정 | `PRD.md` §10-11 |
+| 2-1 | **렌더링 성능 재측정** | 스파이크의 «5장 0.05초»는 Pillow 기준이라 무효. Node로 실측 필요 | `PRD.md` §6 |
 | 3 | **AI 모델·제공사** | 응답 시간 측정(위험 3) · 비용 산정 | §9 |
 | 4 | **레이아웃 6종의 실제 ID·시안** | `Slide.layoutId` 확정 | `DESIGN.md` §18 |
 
