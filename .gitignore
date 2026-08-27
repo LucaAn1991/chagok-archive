@@ -104,10 +104,10 @@ desktop.ini
 .classpath
 .settings/
 
-# VSCode: 개인 설정은 무시하되, 팀 공용 설정 2개는 공유
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json
+# VSCode 계열(안티그래비티 포함): 전체 무시.
+# 팀원마다 IDE가 달라 메타데이터를 공유하면 계속 충돌한다.
+# 포맷 통일은 IDE 설정이 아니라 .editorconfig가 담당한다.
+.vscode/
 
 # ---------- Claude Code ----------
 # 팀 공용 설정(.claude/settings.json)은 공유하고, 개인 로컬 설정만 제외

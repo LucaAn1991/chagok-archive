@@ -1,0 +1,15 @@
+# 에디터 공통 포맷 규칙 — 인텔리제이는 기본 지원, VS Code 계열은 EditorConfig 확장 설치
+# IDE가 달라도 들여쓰기·줄바꿈·인코딩이 같아져 diff가 깨끗해진다.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.md]
+# 마크다운은 줄 끝 공백 2개가 줄바꿈 문법이라 지우면 안 된다
+trim_trailing_whitespace = false

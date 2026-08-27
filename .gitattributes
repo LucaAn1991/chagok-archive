@@ -1,0 +1,14 @@
+# 줄바꿈 통일 — 커밋 시 LF로 저장한다.
+# 팀원 OS(macOS/Windows)가 달라도 CRLF/LF 충돌 diff가 생기지 않는다.
+* text=auto eol=lf
+
+# 바이너리 — 줄바꿈 변환 대상에서 제외
+*.ttf  binary
+*.otf  binary
+*.woff binary
+*.woff2 binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.webp binary
+*.ico  binary
