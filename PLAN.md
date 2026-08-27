@@ -411,6 +411,7 @@ flowchart TD
 | POST | `/api/cards/[cardId]/caption` | 캡션 생성 — **AI 호출** | F7 · `card` `user` | ○ |
 | POST | `/api/cards/[cardId]/render` | 카드뉴스 **구성 생성** — 슬라이드 레이아웃·텍스트를 만들어 저장, status→'crafted'. 완성 PNG는 저장하지 않는다 | F8 · `card` | ○ |
 | GET | `/api/cards/[cardId]/slides/[order]/image` | 슬라이드 1장을 **요청 시 PNG로 렌더링** — satori + sharp (같은 프로세스 안) | F8 · `card` | ○ |
+| PATCH | `/api/cards/[cardId]/content` | 제작 결과 **부분 수정** — 캡션 전체 · 슬라이드 texts만. layoutId·imageUrl·order는 서버가 기존 값 유지(편집 범위 강제, DESIGN.md §12) | F7 F8 수정 · `card` | ○ |
 | PATCH | `/api/cards/[cardId]` | 기획 정보·예정일 수정 | F6 · 예정일 변경 · `card` | ○ |
 | PATCH | `/api/cards/[cardId]/status` | 발행 의향·발행 완료·버리기 | F9 · 카드 버리기 · `card` | ○ |
 | POST | `/api/cards/[cardId]/photos` | 사진 업로드 URL 발급 | F13 · `card` | ○ |
@@ -552,6 +553,7 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 | 2026-08-27 | AI 모델을 Anthropic Claude로 확정 | 한국어 기획 대화 품질이 제품의 전부(PRD §3). 구조화 출력으로 F3 파싱 실패를 차단 | §8 · §9 · §12 |
 | 2026-08-27 | 보안 규칙 3건 확정 — `onboardedAt` 서버만 쓰기 · `cards` create 서버만 · `users`/`plans` 클라이언트 delete 금지 | firestore.rules 구현 중 미확정이던 지점을 결정(승인받음). 규칙 파일과 문서를 일치시킴 | §7 |
 | 2026-08-27 | 렌더링 산출물 무저장 확정 — 완성 PNG는 저장하지 않고 요청 시 렌더링. 슬라이드 이미지 GET route 신설 | Slide 스키마에 렌더링 결과 필드가 없고, Node 실측 5~10ms/장이라 저장·관리보다 즉석 렌더링이 싸다. Storage·Blaze 불필요(승인받음) | §6 |
+| 2026-08-27 | 제작 결과 수정 route `/content` 신설 — caption·slides는 클라이언트 쓰기가 막힌 AI 필드라 «부분 수정»(PRD §5-7)도 서버 경유가 필요 | 기존 PATCH `/api/cards/[cardId]`(기획 정보·예정일)와 분리 — AI 산출물 수정은 편집 범위 강제 등 검증이 다르다(승인받음) | §6 |
 | 2026-08-27 | 레이아웃 6종 이름 확정 (`LayoutId`) | 이름은 렌더러 «구조»를, 시안은 그 «안»을 정한다. 나눠도 충돌하지 않고 F8 착수를 막지 않는다 | §2-3 · §12 |
 
 > **코딩 중 이 문서를 수정하게 되면 반드시 이 표에 기록한다.** (`CLAUDE.md` 「우선순위 및 충돌 처리」 3번)
