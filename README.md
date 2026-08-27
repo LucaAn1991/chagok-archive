@@ -124,18 +124,42 @@ npm run dev                    # http://localhost:3000
 
 ```
 src/
-  app/                  App Router
+  app/                  App Router — 화면 19개 라우트 (PLAN.md §4)
+  types/                핵심 객체 타입 — User · Plan · Card (PLAN.md §2의 코드판)
   lib/firebase/
     env.ts              환경변수 접근 · 검증
     client.ts           브라우저용 SDK (지연 초기화)
     admin.ts            서버 전용 SDK — 클라이언트에서 import 금지
 firebase.json           Firestore 규칙 + 에뮬레이터 포트
-firestore.rules         기본 전면 차단 — 컬렉션마다 열어간다
+firestore.rules         컬렉션 3개(users·plans·cards)의 접근 규칙 — PLAN.md §7 구현
 ```
 
 > **`src/lib/firebase/admin.ts`를 클라이언트 컴포넌트에서 import하지 마세요.**
 > 보안 규칙을 전부 우회하는 모듈이라, 브라우저 번들에 섞이면 DB 전체가 열립니다.
 > 최상단의 `server-only`가 빌드를 실패시키도록 막아뒀습니다.
+
+---
+
+## Firestore를 만질 때 — 규칙 3개
+
+Firestore 같은 NoSQL은 **틀린 필드 이름으로 저장해도 에러가 나지 않습니다.**
+SQL이라면 없는 컬럼에 쓰는 순간 막아주지만, Firestore는 세 사람이 각자
+`publishedAt` / `published_at` / `publishDate`로 저장해도 조용히 다 받아줍니다 —
+그리고 몇 주 뒤 조회 화면이 반쯤 비어서야 발견됩니다.
+
+그래서 스키마를 지키는 책임이 DB가 아니라 **우리 습관**에 있습니다. 규칙은 3개뿐입니다.
+
+```
+① Firestore를 읽고 쓰는 코드는 반드시 src/types의 타입을 import해서 쓴다.
+   AI에게 시킬 때도 "src/types의 Card 타입을 따라"라고 지시한다.
+② 필드를 새로 만들거나 바꾸고 싶으면 코드가 아니라 PLAN.md §7부터 고친다.
+   (승인 → PLAN.md 수정 + 변경 이력 → src/types 수정 → 코드 순서)
+③ 개발 중에는 실제 DB가 아니라 에뮬레이터(firebase emulators:start)에 붙는다.
+```
+
+`firestore.rules`가 마지막 안전망입니다 — 남의 데이터 접근, AI 생성 필드
+(slides·caption 등) 클라이언트 쓰기, 카드 삭제는 DB가 거부합니다.
+다만 규칙은 «틀린 접근»을 막지 «틀린 철자»는 못 막으므로, ①이 가장 중요합니다.
 
 ---
 
