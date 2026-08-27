@@ -1,26 +1,143 @@
+/*
+  DESIGN.md 토큰 레이어
+
+  이 파일의 값은 전부 DESIGN.md에서 온다. 여기서 값을 새로 만들지 않는다.
+  색을 바꿔야 하면 DESIGN.md를 먼저 고치고 그 결과를 여기 옮긴다.
+
+  Pretendard — SIL Open Font License 1.1 (상업적 사용 가능)
+  dynamic-subset은 화면에 실제로 쓰인 글자만 내려받는다. 한글 전체 폰트는 1MB가
+  넘어서, 통째로 받으면 첫 로딩이 눈에 띄게 느려진다.
+*/
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css");
 @import "tailwindcss";
 
+/* ============================================================
+   DESIGN.md §2 — 컬러 토큰
+   ============================================================ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Brand */
+  --berry:         #A85578;  /* Primary CTA · 선택 상태 · 핵심 강조 */
+  --berry-dark:    #914868;  /* Primary hover · 연한 브랜드 면 위 글자 */
+  --berry-light:   #F2DCE5;  /* 칩 배경 · soft background */
+  --berry-tint:    #F0E6EA;  /* berry-light보다 더 연한 면 */
+  --purple:        #806FA6;  /* AI 포인트 · 보조 강조 */
+  --coral:         #F28A72;  /* Accent — 장식 전용, 텍스트 금지 */
+
+  /* Surface */
+  --bg:            #FCF8F7;  /* 페이지 배경 Warm Blush */
+  --surface:       #FFFFFF;  /* 카드 · 입력 · 모달 */
+  --surface-muted: #F6F2F4;  /* 중립 표면 */
+  --line:          #E8E1E4;
+
+  /* Text */
+  --ink:           #2D292B;
+  --sub:           #746F72;
+
+  /* 카드 상태 — 명도 계단식 (진할수록 완료에 가깝다) */
+  --st-planned:    #D9CCE8;  /* 기획 완료 */
+  --st-crafted:    #E9A9C0;  /* 제작 완료 */
+  --st-pending:    #DE7E80;  /* 업로드 대기 */
+  --st-published:  #A85578;  /* 발행 완료 = berry */
+  --st-discarded:  #C4BDB7;  /* 버림 */
+
+  /* 에러 — DESIGN.md §2 하단 [제안, 확정 대기] */
+  --warn:          #B04F38;
+
+  /* 그라데이션 — 4곳에서만 (로고 · AI 아바타 · 생성 완료 · 기획 카드 테두리) */
+  --grad: linear-gradient(135deg, #806FA6, #A85578, #F28A72);
+
+  /* DESIGN.md §4 — Radius */
+  --r-sm:   8px;
+  --r-md:  12px;
+  --r-lg:  16px;
+  --r-xl:  20px;
+  --r-pill: 999px;
+
+  /*
+    다크 모드를 정의하지 않았다(DESIGN.md §18).
+    이 선언이 없으면 브라우저가 입력·스크롤바를 임의로 어둡게 칠해
+    Warm Blush 팔레트와 어긋난다.
+  */
+  color-scheme: light;
 }
 
+/* ============================================================
+   Tailwind 매핑 — 유틸리티 클래스로 노출
+   inline이라 값이 복사되지 않고 위 :root 변수를 그대로 참조한다
+   ============================================================ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-berry:         var(--berry);
+  --color-berry-dark:    var(--berry-dark);
+  --color-berry-light:   var(--berry-light);
+  --color-berry-tint:    var(--berry-tint);
+  --color-purple:        var(--purple);
+  --color-coral:         var(--coral);
+
+  --color-bg:            var(--bg);
+  --color-surface:       var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-line:          var(--line);
+
+  --color-ink:           var(--ink);
+  --color-sub:           var(--sub);
+
+  --color-st-planned:    var(--st-planned);
+  --color-st-crafted:    var(--st-crafted);
+  --color-st-pending:    var(--st-pending);
+  --color-st-published:  var(--st-published);
+  --color-st-discarded:  var(--st-discarded);
+
+  --color-warn:          var(--warn);
+
+  --radius-sm:   var(--r-sm);
+  --radius-md:   var(--r-md);
+  --radius-lg:   var(--r-lg);
+  --radius-xl:   var(--r-xl);
+  --radius-pill: var(--r-pill);
+
+  /* DESIGN.md §3 — 타이포 스케일 */
+  --text-display:               2.25rem;  /* 36 */
+  --text-display--line-height:  1.25;
+  --text-h1:                    1.875rem; /* 30 */
+  --text-h1--line-height:       1.30;
+  --text-h2:                    1.5rem;   /* 24 */
+  --text-h2--line-height:       1.35;
+  --text-h3:                    1.25rem;  /* 20 */
+  --text-h3--line-height:       1.40;
+  --text-title:                 1.125rem; /* 18 */
+  --text-title--line-height:    1.45;
+  --text-body-l:                1rem;     /* 16 */
+  --text-body-l--line-height:   1.60;
+  --text-body:                  0.875rem; /* 14 — 본문 최소치 */
+  --text-body--line-height:     1.60;
+  --text-caption:               0.75rem;  /* 12 */
+  --text-caption--line-height:  1.50;
+  --text-label:                 0.75rem;  /* 12 */
+  --text-label--line-height:    1.40;
+
+  --font-sans: 'Pretendard Variable', Pretendard, -apple-system,
+               BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR',
+               sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* ============================================================
+   Base
+   ============================================================ */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  /* DESIGN.md §3 — 본문 기본값 Body 14 / 1.60 */
+  font-size: var(--text-body);
+  line-height: 1.6;
+}
+
+/*
+  DESIGN.md §15 — focus는 항상 보여야 한다.
+  브라우저 기본 outline을 지우고 브랜드 색으로 교체한다.
+  «2px berry + 2px 여백»이 규칙이라 offset을 준다.
+*/
+:focus-visible {
+  outline: 2px solid var(--berry);
+  outline-offset: 2px;
 }
