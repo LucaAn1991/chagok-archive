@@ -13,4 +13,5 @@ export type {
   VisualType,
   Caption,
   Slide,
+  LayoutId,
 } from "./card";

@@ -59,7 +59,20 @@ export type Caption = {
 
 export type Slide = {
   order: number; // 0부터. 순서 변경 시 이 값을 다시 매긴다
-  layoutId: string; // 레이아웃 6종 중 하나. @TODO: 6종의 실제 ID 미확정 (DESIGN.md §18)
+  layoutId: LayoutId; // 레이아웃 6종 중 하나
   texts: Record<string, string>; // 레이아웃의 텍스트 슬롯별 내용. 글자 «내용»만 수정 가능
-  imageUrl: string | null; // text_only면 null
+  imageUrl: string | null; // 'text-only'면 null
 };
+
+/**
+ * 카드뉴스 레이아웃 6종 (PLAN.md §2-3, 08-27 확정).
+ * 사용자는 6종 중 «고르는» 것만 가능하고 직접 만들 수는 없다 (DESIGN.md §12).
+ */
+export type LayoutId =
+  | "cover" // 표지 — 첫 장. 캡션의 hook을 크게 싣는다
+  | "text-only" // 글자만. 이미지 폴백 3순위의 착지점 (DESIGN.md §12)
+  | "image-top" // 위 이미지 + 아래 글
+  | "image-full" // 전면 이미지 + 오버레이 글
+  | "list" // 번호 목록 — «3가지 이유» 같은 구조
+  | "closing"; // 마무리 — 캡션의 cta·팔로우 유도
+// @TODO: 각 레이아웃의 texts 슬롯 키·여백·글자 크기·이미지 비율은 시안 대기 (DESIGN.md §18)
