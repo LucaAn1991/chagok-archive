@@ -410,7 +410,7 @@ flowchart TD
 
 | 컬렉션 | 문서 ID 규칙 | 서브컬렉션 | 보안 규칙 메모 |
 |---|---|---|---|
-| `users` | **Firebase Auth uid** | 없음 | 본인(`uid == request.auth.uid`)만 읽기·쓰기. `onboardedAt`은 클라이언트가 임의로 못 쓰게 서버 전용 검토 |
+| `users` | **Firebase Auth uid** | 없음 | 본인(`uid == request.auth.uid`)만 읽기·쓰기. `onboardedAt`은 **서버만 쓰기** (08-27 확정 — 온보딩 저장이 어차피 `PATCH /api/users/me`를 거친다) |
 | `plans` | 자동 생성 ID | `messages` *(대화가 길어지면 분리)* | `userId == request.auth.uid`인 문서만. `status`·`cardCount`는 **서버만 쓰기** |
 | `cards` | 자동 생성 ID | 없음 | `userId == request.auth.uid`인 문서만. `slides`·`caption`은 **서버만 쓰기**(AI 생성물). `status`·`publishIntent`·`scheduledDate`는 클라이언트 쓰기 허용 |
 
@@ -430,14 +430,20 @@ plans  (userId ASC, status ASC, confirmedAt DESC)      지난 기획 목록
 ### 보안 규칙에서 특히 신경 쓸 것
 
 ```
-① 본인 데이터만 — 모든 컬렉션에 userId 검사. 지금 firestore.rules는 전면 차단이라
-   컬렉션을 열 때마다 이 조건을 붙인다
+① 본인 데이터만 — 모든 컬렉션에 userId 검사. (08-27: firestore.rules 작성 완료 —
+   전면 차단에서 컬렉션 3개를 열었다. 새 컬렉션을 열 때마다 이 조건을 붙인다)
 ② AI 생성 필드는 서버만 쓰기 — slides · caption · intent · shortTitle
    클라이언트가 쓸 수 있으면 «AI가 만들었다»는 전제가 깨진다
 ③ status는 클라이언트 쓰기를 허용하되 값 검증 — 정해진 5개 값만,
    published로 갈 때 publishedAt이 함께 기록되는지 확인
 ④ 버림은 삭제가 아니다 — cards 문서 delete를 막는다. discarded로만 바뀌어야
    발행률 분모가 유지된다 (DESIGN.md §11)
+⑤ onboardedAt은 서버만 쓰기 — 라우트 가드의 근거라 클라이언트가 임의로 못 쓴다.
+   온보딩 저장은 PATCH /api/users/me(서버)가 담당 (08-27 확정)
+⑥ cards create는 서버만 — 카드는 기획 확정 API(confirm)가 AI로 생성한다.
+   클라이언트가 만들 경로가 없다 (08-27 확정)
+⑦ users·plans도 클라이언트 delete 금지 — v1에 삭제 기능이 없고,
+   탈퇴 시 삭제는 서버(DELETE /api/users/me)가 한다 (08-27 확정)
 ```
 
 ---
@@ -520,6 +526,7 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 | 2026-08-27 | AI 실패·재시도 처리 확정 | PRD §5-7 신설에 따름. F2·F3 화면 확정을 막던 TODO 해소 | §3 · §3-1 · §9 · §12 |
 | 2026-08-27 | 렌더링을 Node(satori+sharp)로 확정 | 언어를 하나로 유지해야 3인이 서로의 코드를 본다(위험 7). 배포 대상도 1개 유지 | §6 · §8 · §12 |
 | 2026-08-27 | AI 모델을 Anthropic Claude로 확정 | 한국어 기획 대화 품질이 제품의 전부(PRD §3). 구조화 출력으로 F3 파싱 실패를 차단 | §8 · §9 · §12 |
+| 2026-08-27 | 보안 규칙 3건 확정 — `onboardedAt` 서버만 쓰기 · `cards` create 서버만 · `users`/`plans` 클라이언트 delete 금지 | firestore.rules 구현 중 미확정이던 지점을 결정(승인받음). 규칙 파일과 문서를 일치시킴 | §7 |
 
 > **코딩 중 이 문서를 수정하게 되면 반드시 이 표에 기록한다.** (`CLAUDE.md` 「우선순위 및 충돌 처리」 3번)
 
