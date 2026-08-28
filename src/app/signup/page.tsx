@@ -208,7 +208,7 @@ function signupErrorMessage(err: unknown): string {
   if (err instanceof FirebaseError) {
     switch (err.code) {
       case "auth/email-already-in-use":
-        return "이미 가입된 이메일이에요. 로그인해주세요.";
+        return "이미 가입된 이메일이에요. 아래에서 바로 로그인할 수 있어요.";
       case "auth/invalid-email":
         return "이메일 형식을 확인해주세요.";
       case "auth/weak-password":
