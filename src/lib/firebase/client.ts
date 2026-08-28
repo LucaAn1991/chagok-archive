@@ -8,13 +8,15 @@
  * 초기화는 **첫 사용 시점까지 미룬다.** import만으로 초기화하면
  * .env.local이 비어 있는 동안 빌드가 통과하지 못한다.
  *
- * Storage는 아직 이 프로젝트에서 쓰지 않는다. 필요해지면
- * `firebase/storage`의 `getStorage`를 여기에 같은 형태로 추가한다.
+ * Storage는 사용자 사진 업로드(F13)에 쓴다. 업로드 자체는 서버가 발급한
+ * 서명 URL로 하고(`POST /api/cards/[cardId]/photos`), 클라이언트 SDK는
+ * 업로드된 파일의 **영구 다운로드 URL을 받아오는 용도**로만 쓴다.
  */
 
 import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
 import { getFirebaseClientEnv } from "./env";
 
 const APP_NAME = "[DEFAULT]";
@@ -31,6 +33,10 @@ export function getFirebaseAuth(): Auth {
 
 export function getFirebaseDb(): Firestore {
   return getFirestore(getFirebaseApp());
+}
+
+export function getFirebaseStorage(): FirebaseStorage {
+  return getStorage(getFirebaseApp());
 }
 
 /*
@@ -57,3 +63,4 @@ function lazy<T extends object>(resolve: () => T): T {
 export const app: FirebaseApp = lazy(getFirebaseApp);
 export const auth: Auth = lazy(getFirebaseAuth);
 export const db: Firestore = lazy(getFirebaseDb);
+export const storage: FirebaseStorage = lazy(getFirebaseStorage);
