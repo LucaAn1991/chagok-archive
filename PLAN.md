@@ -443,6 +443,20 @@ flowchart TD
 
 **`plan.messages`는 일단 문서 안 배열로 둔다.** 대화가 길어져 문서 1MB 한도에 가까워지면 서브컬렉션으로 옮긴다. TODO: 턴 수 상한 미확정.
 
+### Cloud Storage (사용자 사진, F13)
+
+| 경로 | 담기는 것 | 보안 규칙 메모 |
+|---|---|---|
+| `cards/{cardId}/photos/{uuid}.{jpg\|png\|webp}` | 재료 추가에서 올린 사진. 순서는 `card.photoUrls` 배열 순서를 따른다 | `storage.rules` — Firestore의 `cards/{cardId}.userId`를 조회해 **본인 카드만** 읽기·쓰기. 형식 3종·10MB 제한. delete 금지 |
+
+**파일명은 사용자가 준 이름을 쓰지 않는다.** 원본 이름에는 경로 문자나 개인정보가 섞일 수 있고, 같은 이름을 다시 올리면 앞의 것을 덮어쓴다. 서버가 UUID로 새로 짓는다.
+
+**업로드는 서명 URL 방식이다.** 서버(`POST /api/cards/[cardId]/photos`)가 소유권·형식·장수를 검사하고 10분짜리 서명 URL만 발급하며, 파일 본체는 브라우저 → Storage로 직접 간다. 앱 서버가 사진 용량만큼의 메모리·시간을 쓰지 않게 하려는 구조다. 서명 URL은 Admin 권한이라 `storage.rules`를 우회하므로, **쓰기 방어는 API 라우트가, 읽기 방어는 규칙이 맡는다.**
+
+`photoUrls`에 저장하는 값은 **다운로드 토큰이 붙은 영구 URL**이다. 서명된 읽기 URL은 최대 7일이라 저장할 수 없어, 업로드 시점에 토큰을 함께 심는다.
+
+> **브라우저에서 직접 PUT 하려면 버킷 CORS 설정이 필요하다** (`storage.cors.json`). 빠뜨리면 업로드가 CORS 오류로 조용히 실패한다. 배포 도메인이 생기면 `origin`에 추가해야 한다.
+
 ### 필요한 인덱스
 
 ```
@@ -480,7 +494,7 @@ plans  (userId ASC, status ASC, confirmedAt DESC)      지난 기획 목록
 | **프레임워크** | Next.js 16.3 (App Router) |
 | **언어** | TypeScript 5 |
 | **백엔드 / DB / 인증** | Firebase — Auth(이메일·비밀번호) · Firestore |
-| **스토리지** | Firebase Storage — 사용자 사진 업로드용. **TODO: 아직 버킷 미생성. 신규 프로젝트는 Blaze 필요할 수 있음** |
+| **스토리지** | Firebase Storage — 사용자 사진 업로드용. **Blaze 필요를 08-28 확인(CLI 검증 — Spark에서는 버킷 생성 불가).** 코드·보안 규칙·CORS 설정은 완료, **버킷 생성만 남음.** 버킷이 없는 동안 업로드 API는 503 + `storage_not_configured`로 답하고 화면은 「준비 중」으로 내려앉는다 |
 | **배포** | Firebase App Hosting — GitHub push 자동 배포 · Secret Manager. **TODO: Blaze 업그레이드 필요** |
 | **스타일** | Tailwind CSS 4 + `DESIGN.md` 토큰 (`globals.css`) |
 | **폰트** | Pretendard 단일. **UI는 dynamic-subset CDN, 렌더러는 `.ttf` 파일 직접 포함** — satori는 시스템 폰트를 읽지 못하고 폰트 버퍼를 넘겨받는다 |
@@ -557,6 +571,7 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 | 2026-08-27 | 레이아웃 6종 이름 확정 (`LayoutId`) | 이름은 렌더러 «구조»를, 시안은 그 «안»을 정한다. 나눠도 충돌하지 않고 F8 착수를 막지 않는다 | §2-3 · §12 |
 | 2026-08-27 | F2 ②단계를 «후보 선택 폼» → «AI 선제 제안 + 기획안 카드 부분 수정»으로 변경 | 선택 피로 최소화 — AI decides first, user confirms (DESIGN §1). 사용자 확정 지시 | §2-2 · §3 · §3-1 · §5 |
 | 2026-08-27 | F2를 IA 원안으로 복원 — ①주제 후보 4개(열린 질문 금지) · ②대상·목적 후보 멀티선택+기타 입력. 기획안 카드 부분 수정은 보조로 유지 | 사용자가 IA(claude_14) 첨부로 원안 확정. 직전 변경을 되돌림 | §2-2 · §3 · §3-1 · §5 |
+| 2026-08-28 | 사진 업로드(F13) 구현 — 서명 URL 방식 확정 · Storage 경로·보안 규칙(`storage.rules`)·CORS 설정 신설 | 파일이 앱 서버를 거치지 않게 해 메모리·시간 부담을 없앤다. 버킷 생성에 Blaze가 필요함을 CLI로 확인했으나(§8), 사진은 «있으면 쓰는» 재료라(DESIGN §12) 버킷 없이도 화면이 동작하도록 503 폴백을 넣고 코드를 먼저 완성(승인받음) | §7 · §8 |
 
 > **코딩 중 이 문서를 수정하게 되면 반드시 이 표에 기록한다.** (`CLAUDE.md` 「우선순위 및 충돌 처리」 3번)
 

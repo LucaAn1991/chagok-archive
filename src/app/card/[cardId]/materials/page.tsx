@@ -6,17 +6,19 @@ import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
+import CardPhotoUploader from "@/components/CardPhotoUploader";
+import { MAX_PHOTOS_PER_CARD } from "@/lib/storage/limits";
 import type { Card, Plan } from "@/types";
 
 /**
  * 재료 추가 (F13) — 사진 · 템플릿 변수 · 이번에 꼭 넣을 내용.
  *
- * - extraNote·templateVars는 보안 규칙이 클라이언트 쓰기를 허용한다 → SDK 직접 저장
+ * - photoUrls·extraNote·templateVars는 보안 규칙이 클라이언트 쓰기를 허용한다 → SDK 직접 저장
  * - 템플릿 변수 입력칸은 기록형일 때 plan.templateVarNames로 자동 생성 (PLAN.md §2-2)
  * - 사진 업로드를 «묻는 단계»로 만들지 않는다 — 있으면 쓰고 없으면 넘어간다 (DESIGN.md §12)
  *
- * @TODO: 사진 업로드 — Firebase Storage 버킷 생성 후 (PLAN.md §8 TODO).
- *   POST /api/cards/[cardId]/photos 로 업로드 URL 발급 → 개별 실패는 그 사진만 인라인 표시
+ * 사진 파일은 서버가 발급한 서명 URL로 브라우저 → Storage에 직접 올라간다.
+ * 여기서는 «올라간 사진의 주소 목록»만 들고 있다가 나머지 입력과 함께 저장한다.
  */
 
 type Phase = "loading" | "ready" | "not-found" | "error";
@@ -29,6 +31,7 @@ export default function CardMaterialsPage() {
   const [card, setCard] = useState<Card | null>(null);
   const [varNames, setVarNames] = useState<string[]>([]);
   const [extraNote, setExtraNote] = useState("");
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [templateVars, setTemplateVars] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -48,6 +51,7 @@ export default function CardMaterialsPage() {
         }
         setCard(data);
         setExtraNote(data.extraNote);
+        setPhotoUrls(data.photoUrls ?? []);
         setTemplateVars(data.templateVars);
 
         // 기록형이면 plan의 변수 이름으로 입력칸을 만든다. plan이 없으면 기존 값의 키로 대체
@@ -71,7 +75,15 @@ export default function CardMaterialsPage() {
   const dirty =
     card !== null &&
     (extraNote !== card.extraNote ||
+      JSON.stringify(photoUrls) !== JSON.stringify(card.photoUrls ?? []) ||
       JSON.stringify(templateVars) !== JSON.stringify(card.templateVars));
+
+  /** 업로드 URL 발급 API를 부를 때 쓰는 Firebase ID 토큰 */
+  async function getToken(): Promise<string> {
+    const user = auth.currentUser;
+    if (!user) throw new Error("로그인이 필요해요.");
+    return user.getIdToken();
+  }
 
   /** 변경 사항 저장 후 제작 결과로 이동 */
   async function saveAndCraft() {
@@ -80,7 +92,11 @@ export default function CardMaterialsPage() {
     setSaveError(null);
     try {
       if (dirty) {
-        await updateDoc(doc(db, "cards", cardId), { extraNote, templateVars });
+        await updateDoc(doc(db, "cards", cardId), {
+          extraNote,
+          photoUrls,
+          templateVars,
+        });
       }
       router.push(`/card/${cardId}/result`);
     } catch {
@@ -122,16 +138,14 @@ export default function CardMaterialsPage() {
         </p>
       </header>
 
-      {/* 사진 — Storage 버킷 생성 전까지 준비 중 */}
-      <section aria-label="사진" className="flex flex-col gap-2 rounded-lg border border-line bg-surface p-6">
-        <span className="text-label font-semibold text-sub">사진</span>
-        <div className="flex h-28 items-center justify-center rounded-md bg-surface-muted">
-          <p className="text-body text-sub">사진 업로드는 준비 중이에요</p>
-        </div>
-        <p className="text-caption text-sub">
-          사진이 없어도 카드뉴스는 완성돼요 — 지금은 텍스트 중심으로 만들어져요.
-        </p>
-      </section>
+      {/* 사진 — 버킷이 없으면 컴포넌트가 스스로 「준비 중」으로 내려앉는다 */}
+      <CardPhotoUploader
+        cardId={cardId}
+        photoUrls={photoUrls}
+        onChange={setPhotoUrls}
+        getToken={getToken}
+        maxPhotos={MAX_PHOTOS_PER_CARD}
+      />
 
       {/* 이번에 꼭 넣을 내용 */}
       <section className="flex flex-col gap-2 rounded-lg border border-line bg-surface p-6">
