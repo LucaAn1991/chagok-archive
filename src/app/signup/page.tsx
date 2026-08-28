@@ -142,7 +142,10 @@ export default function SignupPage() {
                 type="email"
                 autoComplete="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setError(null); // 한 글자라도 고치기 시작하면 제출 알럿은 지운다
+                }}
                 placeholder="you@example.com"
                 className={inputClass}
               />
@@ -152,7 +155,10 @@ export default function SignupPage() {
               id="password"
               label="비밀번호"
               value={password}
-              onChange={setPassword}
+              onChange={(v) => {
+                setPassword(v);
+                setError(null);
+              }}
               autoComplete="new-password"
               placeholder="비밀번호를 입력해주세요"
               hasError={error != null}
@@ -163,7 +169,10 @@ export default function SignupPage() {
               id="password-confirm"
               label="비밀번호 확인"
               value={passwordConfirm}
-              onChange={setPasswordConfirm}
+              onChange={(v) => {
+                setPasswordConfirm(v);
+                setError(null);
+              }}
               autoComplete="new-password"
               placeholder="비밀번호를 입력해주세요"
               hasError={error != null}
@@ -175,7 +184,10 @@ export default function SignupPage() {
               <input
                 type="checkbox"
                 checked={agreed}
-                onChange={(e) => setAgreed(e.target.checked)}
+                onChange={(e) => {
+                  setAgreed(e.target.checked);
+                  setError(null);
+                }}
                 className="mt-[3px] size-[18px] shrink-0 accent-[var(--berry)]"
               />
               <span>

@@ -100,7 +100,10 @@ export default function LoginPage() {
                 type="email"
                 autoComplete="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setError(null); // 고치기 시작하면 제출 알럿은 지운다
+                }}
                 placeholder="you@example.com"
                 className={inputClass}
               />
@@ -110,7 +113,10 @@ export default function LoginPage() {
               id="password"
               label="비밀번호"
               value={password}
-              onChange={setPassword}
+              onChange={(v) => {
+                setPassword(v);
+                setError(null);
+              }}
               autoComplete="current-password"
               hasError={error != null}
             />

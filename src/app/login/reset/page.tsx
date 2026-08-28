@@ -121,7 +121,10 @@ export default function PasswordResetPage() {
                     type="email"
                     autoComplete="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setError(null); // 고치기 시작하면 제출 알럿은 지운다
+                    }}
                     placeholder="you@example.com"
                     className={inputClass}
                   />
