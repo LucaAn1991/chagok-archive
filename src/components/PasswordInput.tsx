@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import InlineAlert from "@/components/InlineAlert";
 
 /**
  * 비밀번호 입력칸 — 오른쪽 눈 버튼으로 입력값 보이기/숨기기를 전환한다.
@@ -40,7 +41,7 @@ export default function PasswordInput({
 
   return (
     <div className="flex flex-col gap-2">
-      <label htmlFor={id} className="text-label font-semibold text-ink">
+      <label htmlFor={id} className="text-body font-semibold text-ink">
         {label}
       </label>
       <div className="relative">
@@ -70,10 +71,10 @@ export default function PasswordInput({
         </button>
       </div>
       {notice && (
-        /* 빨간색을 쓰지 않는다 — 글자는 --ink (DESIGN.md §2) */
-        <p aria-live="polite" className="text-body text-ink">
-          {notice}
-        </p>
+        /* 원인이 된 칸 바로 밑에 붙인다 — 다른 섹션처럼 떨어져 보이면 안 된다 */
+        <div className="-mt-0.5">
+          <InlineAlert>{notice}</InlineAlert>
+        </div>
       )}
     </div>
   );

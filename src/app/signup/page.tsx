@@ -9,6 +9,7 @@ import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import BrandPanel from "@/components/BrandPanel";
 import PasswordInput from "@/components/PasswordInput";
+import InlineAlert from "@/components/InlineAlert";
 
 /**
  * 회원가입 — PLAN.md §3-1 · IA 0.2.
@@ -124,7 +125,7 @@ export default function SignupPage() {
 
           <form onSubmit={handleSubmit} noValidate className="mt-8 flex flex-col gap-4">
             <div className="flex flex-col gap-2">
-              <label htmlFor="email" className="text-label font-semibold text-ink">
+              <label htmlFor="email" className="text-body font-semibold text-ink">
                 이메일
               </label>
               <input
@@ -169,22 +170,18 @@ export default function SignupPage() {
                 className="mt-[3px] size-[18px] shrink-0 accent-[var(--berry)]"
               />
               <span>
-                <Link href="/terms" className="text-berry-dark underline">
+                <Link href="/terms" target="_blank" rel="noopener" className="text-berry-dark underline">
                   이용약관
                 </Link>
                 과{" "}
-                <Link href="/privacy" className="text-berry-dark underline">
+                <Link href="/privacy" target="_blank" rel="noopener" className="text-berry-dark underline">
                   개인정보처리방침
                 </Link>
                 에 동의합니다.
               </span>
             </label>
 
-            {error && (
-              <p role="alert" className="text-body text-ink">
-                {error}
-              </p>
-            )}
+            {error && <InlineAlert>{error}</InlineAlert>}
 
             <button
               type="submit"

@@ -9,6 +9,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import BrandPanel from "@/components/BrandPanel";
 import PasswordInput from "@/components/PasswordInput";
+import InlineAlert from "@/components/InlineAlert";
 
 /**
  * 로그인 — PLAN.md §3-1.
@@ -91,7 +92,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} noValidate className="mt-8 flex flex-col gap-4">
             <div className="flex flex-col gap-2">
-              <label htmlFor="email" className="text-label font-semibold text-ink">
+              <label htmlFor="email" className="text-body font-semibold text-ink">
                 이메일
               </label>
               <input
@@ -114,11 +115,7 @@ export default function LoginPage() {
               hasError={error != null}
             />
 
-            {error && (
-              <p role="alert" className="text-body text-ink">
-                {error}
-              </p>
-            )}
+            {error && <InlineAlert>{error}</InlineAlert>}
 
             {/* 이 화면의 primary는 이것 하나다 (DESIGN.md §6) */}
             <button

@@ -6,6 +6,7 @@ import { FirebaseError } from "firebase/app";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 import BrandPanel from "@/components/BrandPanel";
+import InlineAlert from "@/components/InlineAlert";
 
 /**
  * 비밀번호 재설정 — PLAN.md §3-1 · §4.
@@ -112,7 +113,7 @@ export default function PasswordResetPage() {
 
               <form onSubmit={handleSubmit} noValidate className="mt-6 flex flex-col gap-4">
                 <div className="flex flex-col gap-2">
-                  <label htmlFor="email" className="text-label font-semibold text-ink">
+                  <label htmlFor="email" className="text-body font-semibold text-ink">
                     이메일
                   </label>
                   <input
@@ -126,11 +127,7 @@ export default function PasswordResetPage() {
                   />
                 </div>
 
-                {error && (
-                  <p role="alert" className="text-body text-ink">
-                    {error}
-                  </p>
-                )}
+                {error && <InlineAlert>{error}</InlineAlert>}
 
                 {/* 이 화면의 primary는 이것 하나다 (DESIGN.md §6) */}
                 <button
