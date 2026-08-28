@@ -44,8 +44,13 @@ export default function SignupPage() {
       setError("이메일을 입력해주세요.");
       return;
     }
-    if (password.length < 6) {
-      setError("비밀번호는 6자 이상으로 만들어주세요.");
+    // 비밀번호 규칙 — 8자 이상 · 64자 이하, 조합 자유 (08-28 확정 · PLAN.md 변경 이력)
+    if (password.length < 8) {
+      setError("비밀번호는 8자 이상으로 만들어주세요.");
+      return;
+    }
+    if (password.length > 64) {
+      setError("비밀번호는 64자 이하로 해주세요.");
       return;
     }
     if (password !== passwordConfirm) {
@@ -131,7 +136,7 @@ export default function SignupPage() {
               value={password}
               onChange={setPassword}
               autoComplete="new-password"
-              placeholder="6자 이상"
+              placeholder="8자 이상"
               hasError={error != null}
             />
 
@@ -207,7 +212,7 @@ function signupErrorMessage(err: unknown): string {
       case "auth/invalid-email":
         return "이메일 형식을 확인해주세요.";
       case "auth/weak-password":
-        return "비밀번호는 6자 이상으로 만들어주세요.";
+        return "비밀번호는 8자 이상으로 만들어주세요.";
       case "auth/operation-not-allowed":
         return "지금은 가입할 수 없어요. 잠시 후 다시 시도해주세요.";
       case "auth/too-many-requests":
