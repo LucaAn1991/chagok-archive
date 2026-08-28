@@ -45,13 +45,22 @@ export default function SignupPage() {
       setError("이메일을 입력해주세요.");
       return;
     }
-    // 비밀번호 규칙 — 8자 이상 · 20자 이하, 조합 자유 (08-28 확정 · PLAN.md 변경 이력)
-    if (!isPasswordValid(password)) {
-      setError("8자 이상 20자 이내로 입력해주세요.");
+    // 빈 칸은 제출 알럿으로 — 뭘 채워야 하는지 알려준다
+    if (!password) {
+      setError("비밀번호를 입력해주세요.");
       return;
     }
-    if (password !== passwordConfirm) {
-      setError("비밀번호가 일치하지 않습니다.");
+    if (!passwordConfirm) {
+      setError("비밀번호를 한 번 더 입력해주세요.");
+      return;
+    }
+    /*
+      규칙 오류·불일치는 여기서 문구를 내지 않는다 — 해당 칸 바로 밑
+      실시간 안내가 이미 같은 말을 하고 있다 (08-28 확정: 규칙 오류
+      문구는 비밀번호 칸 아래 실시간 전용). 제출만 막는다.
+    */
+    if (!isPasswordValid(password) || password !== passwordConfirm) {
+      setError(null);
       return;
     }
     if (!agreed) {
