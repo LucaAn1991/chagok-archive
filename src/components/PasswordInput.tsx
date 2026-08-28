@@ -22,6 +22,8 @@ type PasswordInputProps = {
   autoComplete: "current-password" | "new-password";
   placeholder?: string;
   hasError?: boolean;
+  /** 입력 중 실시간 안내 — 규칙 미달일 때만 값을 주면 밑에 표시되고, null이면 사라진다 */
+  notice?: string | null;
 };
 
 export default function PasswordInput({
@@ -32,6 +34,7 @@ export default function PasswordInput({
   autoComplete,
   placeholder,
   hasError = false,
+  notice = null,
 }: PasswordInputProps) {
   const [visible, setVisible] = useState(false);
 
@@ -66,6 +69,12 @@ export default function PasswordInput({
           {visible ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>
       </div>
+      {notice && (
+        /* 빨간색을 쓰지 않는다 — 글자는 --ink (DESIGN.md §2) */
+        <p aria-live="polite" className="text-body text-ink">
+          {notice}
+        </p>
+      )}
     </div>
   );
 }
