@@ -11,6 +11,7 @@ import MobileBottomNav from "@/components/MobileBottomNav";
 import AIChatBubble from "@/components/AIChatBubble";
 import PlanningSummaryPanel, {
   PlanningSummaryInline,
+  TopicLine,
   type PlanSummary,
   type PlanSummaryPatch,
 } from "@/components/PlanningSummaryPanel";
@@ -100,6 +101,7 @@ function NewPlanScreen() {
 
   const [resumeCandidate, setResumeCandidate] = useState<ResumeCandidate | null>(null);
   const [confirming, setConfirming] = useState(false); // ③ 카드 생성 진행 중
+  const [confirmedLock, setConfirmedLock] = useState(false); // 카드 생성 후 — 주제 읽기 전용
   const [confirmError, setConfirmError] = useState(false);
 
   // 사진 — 추천 1번을 미리 골라둔다 (「이렇게 골랐어요」 — DESIGN §1·§12).
@@ -143,8 +145,11 @@ function NewPlanScreen() {
       if (data.summary && typeof data.summary === "object") {
         setSummary(data.summary as PlanSummary);
       }
-      setTopicSuggestions((data.topicSuggestions as string[] | null) ?? null);
-      setProposal((data.proposal as Proposal | null) ?? null);
+      if (payload.kind !== "update") {
+        // 주제 등 부분 수정 턴에서는 후보·선택 상태를 건드리지 않는다 (08-28 — 선택 유지)
+        setTopicSuggestions((data.topicSuggestions as string[] | null) ?? null);
+        setProposal((data.proposal as Proposal | null) ?? null);
+      }
       setReady(Boolean(data.readyToConfirm));
       setIsMock(Boolean(data.isMock));
       setChatMode(false); // 응답이 오면 액션 바로 되돌린다
@@ -277,6 +282,7 @@ function NewPlanScreen() {
     setConfirmError(false);
     try {
       const res = await postWithRetry(`/api/plans/${planId}/confirm`, {});
+      setConfirmedLock(true); // 카드가 만들어졌다 — 이후 주제 수정은 「이어서 기획하기」로
       await postWithRetry(`/api/plans/${planId}/schedule`, {});
       // 상한을 넘겨 8장까지만 만든 경우 — 결과 화면이 한 줄 안내를 띄운다
       router.push(`/plan/${planId}/result${res.capped ? "?capped=1" : ""}`);
@@ -296,6 +302,8 @@ function NewPlanScreen() {
   const summaryProps = {
     summary,
     onSave: saveSummaryPatch,
+    topicLocked: confirmedLock,
+    continueHref: planId ? `/plan/new?from=${planId}` : undefined,
     showPhotos: ready, // 기획이 정리된 뒤에 사진을 고른다 — 순서를 앞지르지 않는다
     photos: {
       selectedStockId,
@@ -355,9 +363,14 @@ function NewPlanScreen() {
                 <TopicSuggestionPicker suggestions={topicSuggestions} onPick={sendText} />
               )}
 
-              {/* ② 대상·목적 후보 — 멀티 선택 + 기타 입력 (IA 2.1-②) */}
-              {proposal && !sending && !failed && (
-                <ProposalPicker proposal={proposal} onSubmit={sendSelection} />
+              {/* ② 대상 후보 — sending 중에도 유지한다: 주제 저장 중 선택이 사라지면 안 된다 (08-28) */}
+              {proposal && !failed && (
+                <ProposalPicker
+                  proposal={proposal}
+                  topic={summary.topic}
+                  onSaveTopic={(next) => saveSummaryPatch({ topic: next })}
+                  onSubmit={sendSelection}
+                />
               )}
 
               {/* <1280 — 기획안 인라인 카드. 수정도 여기서 한다 (DESIGN §7) */}
@@ -602,9 +615,13 @@ function Chip({
 
 function ProposalPicker({
   proposal,
+  topic,
+  onSaveTopic,
   onSubmit,
 }: {
   proposal: Proposal;
+  topic: string;
+  onSaveTopic: (next: string) => void;
   onSubmit: (audiences: string[]) => void;
 }) {
   const [audienceOptions, setAudienceOptions] = useState(proposal.audiences);
@@ -625,6 +642,11 @@ function ProposalPicker({
 
   return (
     <div className="rounded-lg border border-line bg-surface p-4">
+      {/* 주제 줄 — 대상을 고르는 동안에도 주제가 보이고, 그 자리에서 고칠 수 있다 (08-28).
+          데스크톱·모바일 동일 노출 — 우측 패널 유무와 무관 */}
+      <TopicLine topic={topic} onSave={onSaveTopic} />
+      <div className="my-3 border-t border-line" />
+
       <h2 className="text-body font-bold text-ink">누구에게 말할까요?</h2>
       <div className="mt-3 flex flex-wrap gap-2">
         {audienceOptions.map((a) => (

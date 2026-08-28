@@ -145,28 +145,46 @@ export async function POST(
 
     // ── 기획안 카드 부분 수정 — AI 호출 없이 반영하고 짧게 답한다 ──
     if (update) {
+      const prevTopic: string = planSnap.get("topic") ?? "";
       const merged = {
-        topic: update.topic ?? planSnap.get("topic"),
+        topic: update.topic ?? prevTopic,
         audiences: update.audiences ?? planSnap.get("audiences"),
         purposes: update.purposes ?? planSnap.get("purposes"),
         intent: update.intent ?? planSnap.get("intent"),
       };
-      const reply = "반영했어요. 기획안을 업데이트했습니다.";
+
+      // 주제만 바뀐 경우 — 흔적을 대화에 한 줄 남긴다 (08-28).
+      // 과거 발화는 고치지 않고, 전/후 주제·시각이 히스토리(messages)에 그대로 남는다
+      const topicOnly =
+        update.topic !== undefined && update.topic !== prevTopic &&
+        update.audiences === undefined && update.purposes === undefined &&
+        update.intent === undefined;
+
+      const reply = topicOnly
+        ? prevTopic
+          ? `주제를 「${prevTopic}」에서 「${update.topic}」(으)로 바꿨어요. 대상은 그대로 둘게요.`
+          : `주제를 「${update.topic}」(으)로 정했어요.`
+        : "반영했어요. 기획안을 업데이트했습니다.";
+
+      const appended = topicOnly
+        ? [{ role: "assistant", text: reply, createdAt: now }]
+        : [
+            { role: "user", text: updateLabel(update), createdAt: now },
+            { role: "assistant", text: reply, createdAt: now },
+          ];
+
       await planRef.update({
         ...merged,
         seriesTitle: update.topic ?? planSnap.get("seriesTitle") ?? merged.topic,
-        messages: [
-          ...planSnap.get("messages"),
-          { role: "user", text: updateLabel(update), createdAt: now },
-          { role: "assistant", text: reply, createdAt: now },
-        ],
+        messages: [...planSnap.get("messages"), ...appended],
       });
       return NextResponse.json({
         reply,
         proposal: null,
         topicSuggestions: null,
         summary: merged,
-        readyToConfirm: true,
+        // 단계를 앞지르지 않는다 — 대상이 정해진 뒤에만 카드 생성으로 갈 수 있다 (08-28)
+        readyToConfirm: merged.audiences.length > 0,
         isMock,
       });
     }

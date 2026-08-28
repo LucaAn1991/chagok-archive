@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Check, Pencil, X } from "lucide-react";
 import PlanPhotoPicker from "@/components/PlanPhotoPicker";
 
@@ -27,6 +28,106 @@ function splitList(value: string): string[] {
     .split(/[,·]/)
     .map((v) => v.trim())
     .filter(Boolean);
+}
+
+/**
+ * 주제 한 줄 편집기 — 대상 선택 카드와 기획안 패널이 **같은 컴포넌트**를 쓴다 (08-28).
+ * 라벨 「주제」 · 현재 값(말줄임) · 오른쪽 연필. 탭하면 그 자리가 입력 칸으로 바뀐다.
+ * 모달·새 화면·바텀시트를 열지 않는다 — 대상 선택 상태가 시야에서 사라지면 안 된다.
+ * 카드 생성 후에는 locked — 연필 대신 [이어서 기획하기].
+ */
+export function TopicLine({
+  topic,
+  onSave,
+  locked,
+  continueHref,
+}: {
+  topic: string;
+  onSave: (next: string) => void;
+  locked?: boolean;
+  continueHref?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(topic);
+
+  function start() {
+    setDraft(topic);
+    setEditing(true);
+  }
+  function save() {
+    setEditing(false);
+    const next = draft.trim();
+    if (next && next !== topic) onSave(next);
+  }
+
+  if (locked) {
+    return (
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="shrink-0 text-label font-semibold text-sub">주제</span>
+        <span className="min-w-0 flex-1 truncate text-body text-ink">{topic}</span>
+        {continueHref && (
+          <Link
+            href={continueHref}
+            className="shrink-0 text-body font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
+          >
+            이어서 기획하기
+          </Link>
+        )}
+      </div>
+    );
+  }
+
+  if (!editing) {
+    return (
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="shrink-0 text-label font-semibold text-sub">주제</span>
+        <span className="min-w-0 flex-1 truncate text-body text-ink">{topic}</span>
+        <button
+          type="button"
+          onClick={start}
+          aria-label="주제 수정"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
+        >
+          <Pencil size={14} aria-hidden />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      <span className="shrink-0 text-label font-semibold text-sub">주제</span>
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            save();
+          }
+          if (e.key === "Escape") setEditing(false);
+        }}
+        aria-label="주제 입력"
+        className="h-10 min-w-0 flex-1 rounded-md border border-line bg-surface px-3 text-body text-ink"
+      />
+      <button
+        type="button"
+        onClick={save}
+        aria-label="주제 확정"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-berry text-white transition-colors duration-200 hover:bg-berry-dark"
+      >
+        <Check size={16} aria-hidden />
+      </button>
+      <button
+        type="button"
+        onClick={() => setEditing(false)}
+        className="shrink-0 px-1 text-body text-sub transition-colors duration-200 hover:text-ink"
+      >
+        취소
+      </button>
+    </div>
+  );
 }
 
 function EditableRow({
@@ -131,17 +232,21 @@ function EditableRow({
 function SummaryBody({
   summary,
   onSave,
+  topicLocked,
+  continueHref,
 }: {
   summary: PlanSummary;
   onSave: (patch: PlanSummaryPatch) => void;
+  topicLocked?: boolean;
+  continueHref?: string;
 }) {
   return (
     <dl className="flex flex-col gap-4">
-      <EditableRow
-        label="주제"
-        display={summary.topic}
-        editValue={summary.topic}
-        onSave={(raw) => onSave({ topic: raw.trim() })}
+      <TopicLine
+        topic={summary.topic}
+        onSave={(next) => onSave({ topic: next })}
+        locked={topicLocked}
+        continueHref={continueHref}
       />
       <EditableRow
         label="대상"
@@ -191,17 +296,26 @@ type PanelProps = {
   onSave: (patch: PlanSummaryPatch) => void;
   photos: PlanPhotos;
   showPhotos: boolean; // 기획 확정 후에만 사진 섹션을 연다
+  topicLocked?: boolean; // 카드 생성 후 — 주제 읽기 전용 (08-28)
+  continueHref?: string; // 잠금 상태에서 연필 대신 보여줄 [이어서 기획하기]
 };
 
 /** >=1280 우측 고정 패널 */
-export default function PlanningSummaryPanel({ summary, onSave, photos, showPhotos }: PanelProps) {
+export default function PlanningSummaryPanel({
+  summary,
+  onSave,
+  photos,
+  showPhotos,
+  topicLocked,
+  continueHref,
+}: PanelProps) {
   return (
     <aside className="hidden w-[320px] shrink-0 min-[1280px]:block">
       <div className="sticky top-6">
         <GradientFrame>
           <h2 className="text-title font-bold text-ink">기획안</h2>
           <div className="mt-4">
-            <SummaryBody summary={summary} onSave={onSave} />
+            <SummaryBody summary={summary} onSave={onSave} topicLocked={topicLocked} continueHref={continueHref} />
           </div>
           {showPhotos && (
             <div className="mt-4 border-t border-line pt-4">
@@ -215,13 +329,20 @@ export default function PlanningSummaryPanel({ summary, onSave, photos, showPhot
 }
 
 /** <1280 — 대화 중간에 인라인으로 등장하는 같은 내용의 카드 */
-export function PlanningSummaryInline({ summary, onSave, photos, showPhotos }: PanelProps) {
+export function PlanningSummaryInline({
+  summary,
+  onSave,
+  photos,
+  showPhotos,
+  topicLocked,
+  continueHref,
+}: PanelProps) {
   return (
     <div className="min-[1280px]:hidden">
       <GradientFrame>
         <h2 className="text-body font-bold text-ink">기획안</h2>
         <div className="mt-3">
-          <SummaryBody summary={summary} onSave={onSave} />
+          <SummaryBody summary={summary} onSave={onSave} topicLocked={topicLocked} continueHref={continueHref} />
         </div>
         {showPhotos && (
           <div className="mt-4 border-t border-line pt-4">
