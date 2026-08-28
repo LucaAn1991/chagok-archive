@@ -427,22 +427,73 @@ const TOPIC_KEYWORDS: Record<string, string[]> = {
 };
 
 /**
- * ①단계 콘텐츠 방향(field)에서 주제를 고른다 — 키워드가 더 많이 겹치는
- * 주제 승, 무승부·무매칭이면 fitness.
+ * 두 주제 모두에 걸칠 수 있는 공용 키워드 — 이것만 걸리면(또는 두 주제가
+ * 동점이면) 어느 한쪽으로 단정하지 않고 혼합 세트를 보여준다.
+ * 혼합에서 사용자가 뭘 고르는지 자체가 주제 취향 신호가 된다.
+ */
+const SHARED_KEYWORDS = [
+  "루틴", "모닝루틴", "나이트루틴", "데일리루틴", "아침루틴", "저녁루틴",
+  "자기관리", "관리", "관리법", "셀프케어", "습관", "챌린지", "갓생",
+  "미라클모닝", "웰니스", "건강", "건강관리", "바디", "비포애프터", "변화",
+  "클래스", "원데이클래스", "추천템", "꿀템",
+  "routine", "selfcare", "wellness", "daily",
+];
+
+/** 9개 프레임 순서 — 혼합 세트 구성용 */
+const DIRECTIONS: Direction[] = [
+  "warm", "editorial", "graphic", "casual", "soft", "info", "boldphoto", "collage", "product",
+];
+
+/** 문자열 시드 난수 — 같은 입력이면 항상 같은 믹스 (하이드레이션·QA 안정) */
+function seededRandom(seed: string): () => number {
+  let h = 1779033703 ^ seed.length;
+  for (let i = 0; i < seed.length; i++) {
+    h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return () => {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  };
+}
+
+/** 프레임(9개)별로 두 세트에서 하나씩 — 겹치지 않게 랜덤 배분 */
+function mixedSet(seed: string): StyleExample[] {
+  const rnd = seededRandom(seed);
+  const picks = DIRECTIONS.map(() => (rnd() < 0.5 ? "beauty" : "fitness"));
+  // 우연히 전부 한쪽이면 하나 뒤집는다 — 혼합의 의미 유지
+  if (picks.every((topic) => topic === picks[0])) {
+    picks[0] = picks[0] === "beauty" ? "fitness" : "beauty";
+  }
+  return DIRECTIONS.map(
+    (direction, i) => SAMPLE_SETS[picks[i]].find((e) => e.direction === direction)!,
+  );
+}
+
+/**
+ * ①단계 콘텐츠 방향(field)에서 세트를 고른다.
+ * ① 주제 키워드가 더 많이 겹치는 쪽 승
+ * ② 동점(둘 다 걸림) 또는 공용 키워드만 걸림 → 혼합 세트 (시드 랜덤)
+ * ③ 아무것도 안 걸림 → fitness (기본)
  * V2: LLM 카피+이미지 동적 생성 — PRD §10-15 참조 (실패 시 이 세트들이 fallback).
  */
 export function getSampleSet(field?: string): StyleExample[] {
   const text = (field ?? "").toLowerCase();
-  let best = "fitness";
-  let bestScore = 0;
-  for (const [topic, words] of Object.entries(TOPIC_KEYWORDS)) {
-    const score = words.reduce((n, w) => (text.includes(w) ? n + 1 : n), 0);
-    if (score > bestScore) {
-      best = topic;
-      bestScore = score;
-    }
+  const score = (words: string[]) =>
+    words.reduce((n, w) => (text.includes(w) ? n + 1 : n), 0);
+
+  const beauty = score(TOPIC_KEYWORDS.beauty);
+  const fitness = score(TOPIC_KEYWORDS.fitness);
+
+  if (beauty > fitness) return SAMPLE_SETS.beauty;
+  if (fitness > beauty) return SAMPLE_SETS.fitness;
+  // 동점 — 둘 다 같은 수로 걸렸거나(혼합 입력), 공용 키워드만 걸린 경우
+  if (beauty > 0 || SHARED_KEYWORDS.some((w) => text.includes(w))) {
+    return mixedSet(text);
   }
-  return SAMPLE_SETS[best] ?? SAMPLE_SETS.fitness;
+  return SAMPLE_SETS.fitness;
 }
 
 /** 서버 검증·속성 매핑용 — 모든 세트의 예시 */
