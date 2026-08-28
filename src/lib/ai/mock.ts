@@ -1,6 +1,7 @@
 import "server-only";
 
 import { AUDIENCES, AUDIENCE_DEFAULT, MAX_CARDS_PER_RUN } from "@/lib/audiences";
+import { suffix을 } from "@/lib/josa";
 import type { CardDraft, PlanningAI, PlanProposal, PlanTurnResult } from "./types";
 
 /**
@@ -10,13 +11,6 @@ import type { CardDraft, PlanningAI, PlanProposal, PlanTurnResult } from "./type
  * 고정 문구는 어떤 주제·분야에도 성립하는 것만 쓴다 (08-27 피드백).
  * 실구현이 붙으면 후보·기획의도는 주제를 이해하고 실시간으로 만들어진다.
  */
-
-/** 받침 유무로 조사를 고른다 — 한글이 아니면 뒤 조사를 쓴다 (예: 을/를 → 를) */
-function particle(word: string, withBatchim: string, without: string): string {
-  const last = word.charCodeAt(word.length - 1);
-  if (last < 0xac00 || last > 0xd7a3) return without;
-  return (last - 0xac00) % 28 > 0 ? withBatchim : without;
-}
 
 /** 사용자가 쓴 아이디어 문장을 주제로 다듬는 흉내 — 앞뒤 공백 제거 + 길이 제한 */
 function toTopic(idea: string): string {
@@ -79,7 +73,7 @@ export const mockPlanningAI: PlanningAI = {
     // 목적은 대상에 딸려온다 (08-28 확정) — 기획안 카드에서 수정 가능
     const purposes = purposesFor(audiences);
     const picked = selected.audiences.length === 0;
-    const intent = `「${topic}」${particle(topic, "을", "를")} ${audiences[0]}의 눈높이에서 ${purposes[0]} 중심으로 풀어내는 시리즈`;
+    const intent = `「${topic}」${suffix을(topic)} ${audiences[0]}의 눈높이에서 ${purposes[0]} 중심으로 풀어내는 시리즈`;
 
     return {
       reply: [
@@ -114,8 +108,8 @@ export const mockPlanningAI: PlanningAI = {
       shortTitle: `${short}·${meta ? suffix[meta.id] : "이야기"}`,
       audience,
       intent: meta
-        ? `「${topic}」${particle(topic, "을", "를")} ${audience}에게. ${meta.prompt}`
-        : `「${topic}」${particle(topic, "을", "를")} ${audience}의 눈높이에서 ${purposes[0] ?? "공감 얻기"} 중심으로 풀어낸다`,
+        ? `「${topic}」${suffix을(topic)} ${audience}에게. ${meta.prompt}`
+        : `「${topic}」${suffix을(topic)} ${audience}의 눈높이에서 ${purposes[0] ?? "공감 얻기"} 중심으로 풀어낸다`,
     };
   },
 };

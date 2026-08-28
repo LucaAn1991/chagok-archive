@@ -8,7 +8,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
-import AIChatBubble from "@/components/AIChatBubble";
+import AIChatBubble, { SystemEventLine } from "@/components/AIChatBubble";
 import type { Plan } from "@/types";
 
 /**
@@ -138,16 +138,20 @@ export default function PlanDetailPage() {
                 {state.plan.messages.length === 0 && (
                   <p className="text-body text-sub">남아 있는 대화가 없어요.</p>
                 )}
-                {state.plan.messages.map((m, i) => (
-                  <AIChatBubble
-                    key={i}
-                    role={m.role}
-                    text={m.text}
-                    showAvatar={
-                      m.role === "assistant" && state.plan.messages[i - 1]?.role !== "assistant"
-                    }
-                  />
-                ))}
+                {state.plan.messages.map((m, i) =>
+                  m.role === "system" ? (
+                    <SystemEventLine key={i} text={m.text} />
+                  ) : (
+                    <AIChatBubble
+                      key={i}
+                      role={m.role}
+                      text={m.text}
+                      showAvatar={
+                        m.role === "assistant" && state.plan.messages[i - 1]?.role !== "assistant"
+                      }
+                    />
+                  ),
+                )}
               </div>
             </>
           )}

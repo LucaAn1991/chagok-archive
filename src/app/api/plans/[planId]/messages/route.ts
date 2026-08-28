@@ -4,6 +4,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { getPlanningAI } from "@/lib/ai";
 import type { PlanningContext } from "@/lib/ai";
 import { verifyRequest } from "@/lib/server/request-auth";
+import { suffix로 } from "@/lib/josa";
 
 /**
  * POST /api/plans/[planId]/messages — 대화 1턴 (PLAN §6 · F2 · IA 2.1).
@@ -48,9 +49,16 @@ function parseUpdate(raw: unknown): PlanUpdate | null {
 /** 수정 내용을 대화 히스토리에 남길 사람 말로 바꾼다 */
 function updateLabel(update: PlanUpdate): string {
   const parts: string[] = [];
-  if (update.topic !== undefined) parts.push(`주제를 「${update.topic}」(으)로`);
-  if (update.audiences !== undefined) parts.push(`대상을 ${update.audiences.join(" · ")}(으)로`);
-  if (update.purposes !== undefined) parts.push(`목적을 ${update.purposes.join(" · ")}(으)로`);
+  if (update.topic !== undefined)
+    parts.push(`주제를 「${update.topic}」${suffix로(update.topic)}`);
+  if (update.audiences !== undefined) {
+    const joined = update.audiences.join(" · ");
+    parts.push(`대상을 ${joined}${suffix로(joined)}`);
+  }
+  if (update.purposes !== undefined) {
+    const joined = update.purposes.join(" · ");
+    parts.push(`목적을 ${joined}${suffix로(joined)}`);
+  }
   if (update.intent !== undefined) parts.push("기획의도를");
   return `${parts.join(", ")} 고쳤어요.`;
 }
@@ -160,14 +168,19 @@ export async function POST(
         update.audiences === undefined && update.purposes === undefined &&
         update.intent === undefined;
 
-      const reply = topicOnly
-        ? prevTopic
-          ? `주제를 「${prevTopic}」에서 「${update.topic}」(으)로 바꿨어요. 대상은 그대로 둘게요.`
-          : `주제를 「${update.topic}」(으)로 정했어요.`
-        : "반영했어요. 기획안을 업데이트했습니다.";
+      /*
+       * 주제 변경은 대화가 아니라 **상태 변경 기록**이다 (08-28) —
+       * 말풍선이 아닌 가운데 시스템 라인으로 그린다. 문구는 새 주제만:
+       * 바꾸기 전 주제는 바로 위 말풍선에 이미 있고, 「대상은 그대로」류의
+       * 부연은 칩이 눈앞에 보이므로 반복하지 않는다.
+       */
+      const systemEvent = topicOnly
+        ? `주제를 「${update.topic}」${suffix로(update.topic ?? "")} 바꿨어요`
+        : null;
+      const reply = topicOnly ? null : "반영했어요. 기획안을 업데이트했습니다.";
 
       const appended = topicOnly
-        ? [{ role: "assistant", text: reply, createdAt: now }]
+        ? [{ role: "system", text: systemEvent, createdAt: now }]
         : [
             { role: "user", text: updateLabel(update), createdAt: now },
             { role: "assistant", text: reply, createdAt: now },
@@ -180,6 +193,7 @@ export async function POST(
       });
       return NextResponse.json({
         reply,
+        systemEvent,
         proposal: null,
         topicSuggestions: null,
         summary: merged,

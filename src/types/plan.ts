@@ -29,7 +29,8 @@ export type PlanType = "series" | "record";
 export type PlanStatus = "draft" | "confirmed";
 
 export type PlanMessage = {
-  role: "user" | "assistant";
+  /** 'system'은 상태 변경 기록(주제 변경 등) — 말풍선이 아니라 가운데 라인으로 그린다 (08-28) */
+  role: "user" | "assistant" | "system";
   text: string;
   createdAt: Timestamp;
 };

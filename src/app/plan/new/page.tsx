@@ -8,7 +8,7 @@ import { ArrowUp, Check, Plus } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
-import AIChatBubble from "@/components/AIChatBubble";
+import AIChatBubble, { SystemEventLine } from "@/components/AIChatBubble";
 import PlanningSummaryPanel, {
   PlanningSummaryInline,
   TopicLine,
@@ -31,7 +31,7 @@ import PlanTabs from "@/components/PlanTabs";
  * 이전 대화는 실패해도 계속 읽을 수 있다.
  */
 
-type Msg = { role: "user" | "assistant"; text: string };
+type Msg = { role: "user" | "assistant" | "system"; text: string };
 type Proposal = { audiences: string[]; purposes: string[] };
 
 /** 서버로 보낼 한 턴 — [다시 보내기]가 그대로 재사용한다 */
@@ -142,6 +142,10 @@ function NewPlanScreen() {
       if (typeof data.reply === "string") {
         setMessages((prev) => [...prev, { role: "assistant", text: data.reply as string }]);
       }
+      if (typeof data.systemEvent === "string") {
+        // 상태 변경 기록 — 말풍선이 아닌 가운데 라인으로 쌓인다
+        setMessages((prev) => [...prev, { role: "system", text: data.systemEvent as string }]);
+      }
       if (data.summary && typeof data.summary === "object") {
         setSummary(data.summary as PlanSummary);
       }
@@ -195,7 +199,7 @@ function NewPlanScreen() {
                 audiences?: string[];
                 purposes?: string[];
                 intent?: string;
-                messages?: { role: "user" | "assistant"; text: string }[];
+                messages?: { role: "user" | "assistant" | "system"; text: string }[];
                 createdAt?: { toMillis: () => number };
               };
               return { id: d.id, ...data };
@@ -349,14 +353,18 @@ function NewPlanScreen() {
             </header>
 
             <div className="flex flex-col gap-4">
-              {messages.map((m, i) => (
-                <AIChatBubble
-                  key={i}
-                  role={m.role}
-                  text={m.text}
-                  showAvatar={m.role === "assistant" && messages[i - 1]?.role !== "assistant"}
-                />
-              ))}
+              {messages.map((m, i) =>
+                m.role === "system" ? (
+                  <SystemEventLine key={i} text={m.text} />
+                ) : (
+                  <AIChatBubble
+                    key={i}
+                    role={m.role}
+                    text={m.text}
+                    showAvatar={m.role === "assistant" && messages[i - 1]?.role !== "assistant"}
+                  />
+                ),
+              )}
 
               {/* ① 주제 후보 4개 — 열린 질문 금지 (IA 2.1-①) */}
               {topicSuggestions && !sending && !failed && (
