@@ -576,6 +576,7 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 | 2026-08-28 | 취향 예시 9 → 11개 — 사용 후기(별점·장단점) · 사진 콜라주(photo dump) 형식 추가. 여기까지가 상한 | 사용자 확정 — 온보딩 예시 문구(«후기를 올리고 싶어요»)를 받아줄 형식과 사진 비중 신호 보강 | §2 · §3 |
 | 2026-08-28 | 취향 예시 11종 폐기 → **visual direction 3종으로 리셋** (Warm Lifestyle · Modern Editorial · Graphic/Typographic). 퀄리티 기준 «실제 인스타에 올려도 어색하지 않은가». 게시물 캔버스 안 색은 브랜드 토큰의 의도적 예외(콘텐츠 세계 영역) | 사용자 확정 스펙 (08-28) — 이전 시안이 UI 컴포넌트·PPT처럼 보이는 문제. 나머지 방향은 3종 검수 후 확장 | §2 · §3 |
 | 2026-08-28 | 취향 예시를 direction 9종으로 확장 — Warm Lifestyle · Modern Editorial · Clean Typography(재작업) · Casual Diary · Soft Editorial · Clean Informational · Bold Photo+Type · Personal Collage · Product Pick. 세련↔편안 · 사진↔타이포 · 미니멀↔표현 · 개인↔정보 축 양쪽 커버 | 사용자 확정 — 선택 조합으로 실제 생성에 쓸 취향 프로필이 나오게 | §2 · §3 |
+| 2026-08-28 | 뷰티 세트 9장 추가 — ①단계 입력 키워드 매칭(뷰티·화장품·스킨케어 등 → beauty, 그 외 → fitness). 렌더러를 id → direction(9개 고정 Visual Frame) 기준으로 리팩터링. V2 동적 개인화 스펙은 PRD §10-15에 기록(사용자 확정 문안) | 사용자 확정 — 온보딩 예시 문구 2종(홈트·뷰티)을 모두 커버. V2의 fallback 세트를 겸한다 | §2 · §3 |
 
 > **코딩 중 이 문서를 수정하게 되면 반드시 이 표에 기록한다.** (`CLAUDE.md` 「우선순위 및 충돌 처리」 3번)
 

@@ -456,11 +456,11 @@ function StyleCarousel({
    @TODO: 실제 시안·사진 확정 시 교체 (DESIGN.md §18)
    ════════════════════════════════════════════════════════════ */
 function PostExample({ example }: { example: StyleExample }) {
-  const { title, note, meta, items, photo, photos } = example;
+  const { title, note, meta, items, photo, photos, kicker } = example;
 
-  switch (example.id) {
+  switch (example.direction) {
     // ── 1. WARM LIFESTYLE — 필름 저널: 사진 75% + 따뜻한 여백 ──
-    case "direction_warm_01":
+    case "warm":
       return (
         <span className="flex h-full flex-col bg-[#F6F0E7] p-3">
           <span className="relative block flex-1 overflow-hidden">
@@ -480,18 +480,20 @@ function PostExample({ example }: { example: StyleExample }) {
       );
 
     // ── 2. MODERN EDITORIAL — 흑백 블리드 + 넉아웃 숫자 + 지그재그 ──
-    case "direction_editorial_01": {
+    case "editorial": {
       const [line1 = "", line2 = "", line3 = ""] = title.split("\n");
       return (
         <span className="relative block h-full overflow-hidden bg-[#EBE7E0]">
           <span className="absolute right-0 top-0 block h-[56%] w-[78%]">
-            {photo && <Image src={photo} alt="" fill sizes="320px" className="object-cover" />}
+            {photo && (
+              <Image src={photo} alt="" fill sizes="320px" className="object-cover grayscale" />
+            )}
           </span>
           <span className="absolute right-3 top-[34%] text-[58px] font-bold leading-none text-[#EBE7E0]">
             02
           </span>
           <span className="absolute left-3 top-5 text-[8px] tracking-[0.35em] text-[#A39889] [writing-mode:vertical-rl]">
-            WORKOUT ESSAY
+            {kicker}
           </span>
           <span className="absolute bottom-12 left-4 right-4 flex flex-col">
             <span className="text-[26px] font-bold leading-[1.18] text-[#232019]">{line1}</span>
@@ -510,7 +512,7 @@ function PostExample({ example }: { example: StyleExample }) {
     }
 
     // ── 3. CLEAN TYPOGRAPHY — 인스타에서 흔한 깔끔한 텍스트 카드 ──
-    case "direction_graphic_01": {
+    case "graphic": {
       const lines = title.split("\n");
       const last = lines[lines.length - 1] ?? "";
       const [highlight, ...restWords] = last.split(" ");
@@ -534,7 +536,7 @@ function PostExample({ example }: { example: StyleExample }) {
     }
 
     // ── 4. CASUAL PHOTO DIARY — 디자인 안 한 듯한 스냅 2장 + 메모 ──
-    case "direction_casual_01":
+    case "casual":
       return (
         <span className="flex h-full flex-col gap-2 bg-[#FBFAF7] p-3">
           <span className="relative block h-[54%] overflow-hidden">
@@ -560,10 +562,10 @@ function PostExample({ example }: { example: StyleExample }) {
       );
 
     // ── 5. SOFT EDITORIAL — 아트 프린트: 밝은 사진 + 여백 + 섬세한 타이포 ──
-    case "direction_soft_01":
+    case "soft":
       return (
         <span className="flex h-full flex-col items-center bg-white px-6 py-7 text-center">
-          <span className="text-[8px] tracking-[0.35em] text-[#B9B2A6]">MORNING FLOW</span>
+          <span className="text-[8px] tracking-[0.35em] text-[#B9B2A6]">{kicker}</span>
           <span className="relative mt-4 block h-[58%] w-full overflow-hidden">
             {photo && <Image src={photo} alt="" fill sizes="320px" className="object-cover" />}
           </span>
@@ -577,7 +579,7 @@ function PostExample({ example }: { example: StyleExample }) {
       );
 
     // ── 6. CLEAN INFORMATIONAL — 사진 스트립 + 번호 + 타이포 (박스 없음) ──
-    case "direction_info_01":
+    case "info":
       return (
         <span className="flex h-full bg-[#FAF8F4]">
           <span className="relative block w-[34%] shrink-0 overflow-hidden">
@@ -603,7 +605,7 @@ function PostExample({ example }: { example: StyleExample }) {
       );
 
     // ── 7. BOLD PHOTO + TYPE — 풀블리드 사진 + 아주 큰 타이포 겹침 ──
-    case "direction_boldphoto_01":
+    case "boldphoto":
       return (
         <span className="relative block h-full overflow-hidden">
           {photo && <Image src={photo} alt="" fill sizes="320px" className="object-cover" />}
@@ -620,7 +622,7 @@ function PostExample({ example }: { example: StyleExample }) {
       );
 
     // ── 8. PERSONAL COLLAGE — contemporary editorial collage ──
-    case "direction_collage_01":
+    case "collage":
       return (
         <span className="relative block h-full overflow-hidden bg-[#F1EDE6]">
           <span className="absolute left-4 top-4 block h-[38%] w-[58%] overflow-hidden">
@@ -646,7 +648,7 @@ function PostExample({ example }: { example: StyleExample }) {
       );
 
     // ── 9. PRODUCT / RECOMMENDATION — 아이템이 주인공, 크리에이터 톤 ──
-    case "direction_product_01":
+    case "product":
       return (
         <span className="flex h-full flex-col bg-[#F2F0EC] p-5">
           <span className="flex items-baseline justify-between">
