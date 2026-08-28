@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { verifyRequest } from "@/lib/server/request-auth";
-import type { LayoutId, ToneKey } from "@/types";
+import type { ToneKey } from "@/types";
+import { STYLE_EXAMPLES, STYLE_EXAMPLE_IDS } from "@/lib/style-examples";
 
 /**
  * PATCH /api/users/me — 온보딩 저장 · 콘텐츠 설정 수정 (PLAN §6 · F1 · 설정).
@@ -19,8 +20,6 @@ import type { LayoutId, ToneKey } from "@/types";
  */
 
 const TONE_KEYS: ToneKey[] = ["friendly", "calm", "energetic", "professional"];
-// 온보딩 취향 선택지로 제공하는 3종 (PLAN §2-3 레이아웃 이름)
-const STYLE_KEYS: LayoutId[] = ["text-only", "image-full", "list"];
 
 export async function PATCH(request: Request) {
   const session = await verifyRequest(request);
@@ -75,11 +74,28 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "주기와 요일 개수가 맞지 않아요." }, { status: 400 });
   }
 
-  if (body.preferredLayout !== undefined) {
-    if (body.preferredLayout !== null && !STYLE_KEYS.includes(body.preferredLayout as LayoutId)) {
-      return NextResponse.json({ error: "템플릿 값을 확인해주세요." }, { status: 400 });
+  if (body.visualPreferences !== undefined) {
+    const vp = body.visualPreferences;
+    if (vp === null) {
+      updates.visualPreferences = null; // «잘 모르겠어요»
+    } else {
+      const sel = (vp as { selectedExamples?: unknown })?.selectedExamples;
+      const valid =
+        Array.isArray(sel) &&
+        sel.length >= 1 &&
+        sel.length <= STYLE_EXAMPLE_IDS.length &&
+        sel.every((v) => typeof v === "string" && STYLE_EXAMPLE_IDS.includes(v)) &&
+        new Set(sel).size === sel.length;
+      if (!valid) {
+        return NextResponse.json({ error: "게시물 취향 값을 확인해주세요." }, { status: 400 });
+      }
+      // 속성은 클라이언트를 믿지 않고 서버가 id로 다시 매핑한다
+      const ids = sel as string[];
+      updates.visualPreferences = {
+        selectedExamples: ids,
+        attributes: ids.map((id) => STYLE_EXAMPLES.find((e) => e.id === id)!.attributes),
+      };
     }
-    updates.preferredLayout = body.preferredLayout;
   }
 
   if (body.tone !== undefined) {
@@ -135,7 +151,7 @@ export async function PATCH(request: Request) {
       if (merged.tone === undefined) updates.tone = null;
       if (merged.avoidExpressions === undefined) updates.avoidExpressions = [];
       if (merged.uploadDays === undefined) updates.uploadDays = [];
-      if (merged.preferredLayout === undefined) updates.preferredLayout = null;
+      if (merged.visualPreferences === undefined) updates.visualPreferences = null;
     }
 
     await ref.set(updates, { merge: true });
