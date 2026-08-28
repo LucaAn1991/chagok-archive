@@ -50,7 +50,7 @@ export default function SignupPage() {
       return;
     }
     if (password !== passwordConfirm) {
-      setError("비밀번호가 서로 달라요.");
+      setError("비밀번호가 일치하지 않습니다.");
       return;
     }
     if (!agreed) {
@@ -90,6 +90,12 @@ export default function SignupPage() {
   const passwordNotice =
     password.length > 0 && !isPasswordValid(password)
       ? "8자 이상 20자 이내로 입력해주세요."
+      : null;
+
+  // 확인칸 실시간 안내 — 일치해지면 자동으로 사라진다
+  const confirmNotice =
+    passwordConfirm.length > 0 && password !== passwordConfirm
+      ? "비밀번호가 일치하지 않습니다."
       : null;
 
   // 에러 시 테두리만 진하게 — 빨간색을 쓰지 않는다 (DESIGN.md §2)
@@ -151,6 +157,7 @@ export default function SignupPage() {
               autoComplete="new-password"
               placeholder="비밀번호를 입력해주세요"
               hasError={error != null}
+              notice={confirmNotice}
             />
 
             {/* 약관 동의 — IA 0.2. 동의 대상 문서로 이동할 수 있어야 한다 */}
