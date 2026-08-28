@@ -38,7 +38,7 @@ export async function PATCH(request: Request) {
 
   if (body.field !== undefined) {
     const field = typeof body.field === "string" ? body.field.trim() : "";
-    if (!field || field.length > 50) {
+    if (!field || field.length > 200) {
       return NextResponse.json({ error: "활동 분야를 확인해주세요." }, { status: 400 });
     }
     updates.field = field;
@@ -50,6 +50,27 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "업로드 빈도를 확인해주세요." }, { status: 400 });
     }
     updates.uploadFrequency = n;
+  }
+
+  if (body.uploadDays !== undefined) {
+    const raw = body.uploadDays;
+    const valid =
+      Array.isArray(raw) &&
+      raw.every((v) => typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 6) &&
+      new Set(raw).size === raw.length;
+    if (!valid) {
+      return NextResponse.json({ error: "요일 값을 확인해주세요." }, { status: 400 });
+    }
+    updates.uploadDays = [...(raw as number[])].sort();
+  }
+
+  // 주기와 요일이 같이 오면 개수가 맞아야 한다 (0=월 … 6=일)
+  if (
+    updates.uploadFrequency !== undefined &&
+    updates.uploadDays !== undefined &&
+    (updates.uploadDays as number[]).length !== updates.uploadFrequency
+  ) {
+    return NextResponse.json({ error: "주기와 요일 개수가 맞지 않아요." }, { status: 400 });
   }
 
   if (body.tone !== undefined) {
@@ -104,6 +125,7 @@ export async function PATCH(request: Request) {
       // 설정에서 채우기 전까지의 기본값 — «안 정함»을 null·빈 배열로 표현
       if (merged.tone === undefined) updates.tone = null;
       if (merged.avoidExpressions === undefined) updates.avoidExpressions = [];
+      if (merged.uploadDays === undefined) updates.uploadDays = [];
     }
 
     await ref.set(updates, { merge: true });

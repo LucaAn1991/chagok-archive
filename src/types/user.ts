@@ -8,6 +8,7 @@ export type User = {
   /** 온보딩 2문항 (F1 — 08-28 축소). 설정-콘텐츠에서 나중에 수정 가능 */
   field: string; // 활동 분야·주로 만드는 콘텐츠 (예: "홈트레이닝")
   uploadFrequency: number; // 주당 업로드 목표 횟수. 캘린더 자동 배치(F4)의 간격 계산에 쓴다
+  uploadDays?: number[]; // 업로드 요일 (0=월 … 6=일). 개수 = uploadFrequency. 08-28 추가 — 이전 문서엔 없을 수 있다
 
   /** 설정-콘텐츠에서 등록 (08-28 온보딩에서 이동). 정하기 전까지 null·빈 배열 */
   tone: ToneKey | null; // 말투. 예시 문장 카드 4종 중 선택 → 캡션 생성(F7)에 반영
