@@ -38,7 +38,6 @@ export default function OnboardingPage() {
   const [frequency, setFrequency] = useState<number | null>(null);
   const [days, setDays] = useState<number[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
-  const carouselRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -154,7 +153,7 @@ export default function OnboardingPage() {
 
   return (
     <main className="flex flex-1 items-center justify-center p-4">
-      <div className="w-full max-w-[560px]">
+      <div className={step === 1 ? "w-full max-w-[560px]" : "w-full max-w-[1200px]"}>
         {step === 1 ? (
           <>
             <h1 className="text-h2 font-bold text-ink">거의 다 됐어요</h1>
@@ -272,48 +271,41 @@ export default function OnboardingPage() {
               여러 개 골라도 괜찮아요.
             </p>
 
-            <StyleCarousel selected={selected} onToggle={toggleExample} trackRef={carouselRef} />
+            <StyleCarousel selected={selected} onToggle={toggleExample} />
 
-            {/* selection feedback — 부담 없이, 개수만 */}
-            <p className="mt-1 text-caption text-sub">
-              {selected.length > 0
-                ? `${selected.length}개 골랐어요.`
-                : "마음에 드는 게시물을 눌러 골라주세요."}
-            </p>
+            {/* 액션 블록 — 캐러셀이 주인공이라 조작부는 가운데로 좁게 모은다 */}
+            <div className="mx-auto mt-2 w-full max-w-[560px]">
+              {/* selection feedback — 부담 없이, 개수만 */}
+              <p className="text-center text-caption text-sub">
+                {selected.length > 0
+                  ? `${selected.length}개 골랐어요.`
+                  : "마음에 드는 게시물을 눌러 골라주세요."}
+              </p>
 
-            {error && <div className="mt-3"><InlineAlert>{error}</InlineAlert></div>}
+              {error && <div className="mt-3"><InlineAlert>{error}</InlineAlert></div>}
 
-            <div className="mt-6 flex flex-col gap-3">
-              {/* PRD §5-2 확정 문구 — 1개 이상 골라야 활성화 (스펙 §8) */}
-              <button
-                type="button"
-                onClick={() => complete(selected)}
-                disabled={submitting || selected.length === 0}
-                className="h-12 rounded-md bg-berry text-[15px] font-semibold text-white
-                           hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
-              >
-                {submitting ? "···" : "첫 콘텐츠를 같이 정해볼까요?"}
-              </button>
-
-              <div className="flex items-center justify-between">
+              <div className="mt-4 flex flex-col gap-3">
+                {/* PRD §5-2 확정 문구 — 1개 이상 골라야 활성화 (스펙 §8) */}
                 <button
                   type="button"
-                  onClick={() => {
-                    setStep(1);
-                    setError(null);
-                  }}
-                  className="text-body text-sub hover:text-ink"
+                  onClick={() => complete(selected)}
+                  disabled={submitting || selected.length === 0}
+                  className="h-12 rounded-md bg-berry text-[15px] font-semibold text-white
+                             hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
                 >
-                  ← 이전으로
+                  {submitting ? "···" : "첫 콘텐츠를 같이 정해볼까요?"}
                 </button>
-                <div className="flex items-center gap-4">
-                  {/* 망설이면 더 둘러보게 — 캐러셀을 다음 장으로 */}
+
+                <div className="flex items-center justify-between">
                   <button
                     type="button"
-                    onClick={() => scrollTrack(carouselRef.current, 1)}
+                    onClick={() => {
+                      setStep(1);
+                      setError(null);
+                    }}
                     className="text-body text-sub hover:text-ink"
                   >
-                    더 보고 싶어요
+                    ← 이전으로
                   </button>
                   {/* 건너뛰기 — 취향 null 저장 후 동일 진행 */}
                   <button
@@ -322,7 +314,7 @@ export default function OnboardingPage() {
                     disabled={submitting}
                     className="text-body text-sub hover:text-ink"
                   >
-                    나중에 정하고 싶어요
+                    잘 모르겠어요
                   </button>
                 </div>
               </div>
@@ -335,223 +327,298 @@ export default function OnboardingPage() {
 }
 
 /* ════════════════════════════════════════════════════════════
-   게시물 취향 캐러셀 — Desktop 3장+다음 장 살짝, Mobile 1장 중심.
-   마우스 드래그·터치 스와이프·Chevron 지원 (스펙 §5)
+   게시물 취향 캐러셀 — 이 화면의 주인공 (08-28 데스크톱 개편).
+   Desktop: 320px 카드 3장 + 다음 장 일부 노출 · 바깥 가장자리 Chevron ·
+   마우스 드래그 · 점 페이지네이션. Mobile: 1장 중심 스와이프.
    ════════════════════════════════════════════════════════════ */
-/** 카드 한 장 폭만큼 가로 스크롤 — Chevron·«더 보고 싶어요»가 같이 쓴다 */
-function scrollTrack(el: HTMLDivElement | null, dir: -1 | 1) {
-  if (!el) return;
-  const card = el.firstElementChild as HTMLElement | null;
-  const width = (card?.offsetWidth ?? 200) + 12; // gap-3
-  el.scrollBy({ left: dir * width, behavior: "smooth" });
-}
+const CARD_GAP = 20; // gap-5
 
 function StyleCarousel({
   selected,
   onToggle,
-  trackRef,
 }: {
   selected: string[];
   onToggle: (id: string) => void;
-  trackRef: React.RefObject<HTMLDivElement | null>;
 }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState(0);
   // 마우스 드래그 스크롤 — 드래그였으면 이어지는 클릭 선택을 무시한다
   const drag = useRef({ down: false, startX: 0, scroll: 0, moved: false });
 
+  function cardWidth() {
+    const card = trackRef.current?.firstElementChild as HTMLElement | null;
+    return (card?.offsetWidth ?? 320) + CARD_GAP;
+  }
+
+  function scrollToCard(i: number) {
+    trackRef.current?.scrollTo({ left: i * cardWidth(), behavior: "smooth" });
+  }
+
   return (
-    <div className="relative mt-6">
-      <div
-        ref={trackRef}
-        onPointerDown={(e) => {
-          if (e.pointerType !== "mouse") return; // 터치는 브라우저 기본 스와이프
-          const el = trackRef.current!;
-          drag.current = { down: true, startX: e.clientX, scroll: el.scrollLeft, moved: false };
-        }}
-        onPointerMove={(e) => {
-          if (!drag.current.down || e.pointerType !== "mouse") return;
-          const dx = e.clientX - drag.current.startX;
-          if (Math.abs(dx) > 5) drag.current.moved = true;
-          trackRef.current!.scrollLeft = drag.current.scroll - dx;
-        }}
-        onPointerUp={() => {
-          drag.current.down = false;
-        }}
-        onPointerLeave={() => {
-          drag.current.down = false;
-        }}
-        className="flex snap-x gap-3 overflow-x-auto pb-2
-                   [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      >
-        {STYLE_EXAMPLES.map(({ id }) => {
-          const isSelected = selected.includes(id);
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => {
-                if (drag.current.moved) {
-                  drag.current.moved = false;
-                  return; // 드래그 끝의 클릭은 선택이 아니다
-                }
-                onToggle(id);
-              }}
-              aria-pressed={isSelected}
-              className={[
-                "relative aspect-[4/5] w-[280px] shrink-0 snap-start overflow-hidden",
-                "rounded-lg border-2 text-left transition-colors duration-200 sm:w-[172px]",
-                isSelected ? "border-berry" : "border-line",
-              ].join(" ")}
-            >
-              <PostExample id={id} />
-              {isSelected && (
-                <>
-                  {/* very subtle berry tint (스펙 §6) */}
-                  <span className="pointer-events-none absolute inset-0 bg-berry/5" />
-                  <span
-                    className="absolute right-1.5 top-1.5 flex size-6 items-center
-                               justify-center rounded-pill bg-berry text-white"
-                  >
-                    <Check size={14} aria-hidden />
-                  </span>
-                </>
-              )}
-            </button>
-          );
-        })}
+    <div className="mt-8">
+      {/* Chevron은 트랙 바깥 가장자리 — 게시물을 가리지 않는다 (스펙 §3) */}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => scrollToCard(Math.max(0, active - 1))}
+          aria-label="이전 게시물 보기"
+          className="hidden size-11 shrink-0 items-center justify-center rounded-pill
+                     border border-line bg-surface text-ink hover:bg-surface-muted sm:flex"
+        >
+          <ChevronLeft size={20} aria-hidden />
+        </button>
+
+        <div
+          ref={trackRef}
+          onScroll={() => {
+            const el = trackRef.current;
+            if (el) setActive(Math.round(el.scrollLeft / cardWidth()));
+          }}
+          onPointerDown={(e) => {
+            if (e.pointerType !== "mouse") return; // 터치는 브라우저 기본 스와이프
+            const el = trackRef.current!;
+            drag.current = { down: true, startX: e.clientX, scroll: el.scrollLeft, moved: false };
+          }}
+          onPointerMove={(e) => {
+            if (!drag.current.down || e.pointerType !== "mouse") return;
+            const dx = e.clientX - drag.current.startX;
+            if (Math.abs(dx) > 5) drag.current.moved = true;
+            trackRef.current!.scrollLeft = drag.current.scroll - dx;
+          }}
+          onPointerUp={() => {
+            drag.current.down = false;
+          }}
+          onPointerLeave={() => {
+            drag.current.down = false;
+          }}
+          className="flex min-w-0 flex-1 snap-x gap-5 overflow-x-auto pb-2
+                     [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {STYLE_EXAMPLES.map(({ id }) => {
+            const isSelected = selected.includes(id);
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  if (drag.current.moved) {
+                    drag.current.moved = false;
+                    return; // 드래그 끝의 클릭은 선택이 아니다
+                  }
+                  onToggle(id);
+                }}
+                aria-pressed={isSelected}
+                className={[
+                  "relative aspect-[4/5] w-[280px] shrink-0 snap-start overflow-hidden",
+                  "rounded-lg border-2 text-left transition-colors duration-200 sm:w-[320px]",
+                  isSelected ? "border-berry" : "border-line",
+                ].join(" ")}
+              >
+                <PostExample id={id} />
+                {isSelected && (
+                  <>
+                    {/* very subtle berry tint (스펙 §6) */}
+                    <span className="pointer-events-none absolute inset-0 bg-berry/5" />
+                    <span
+                      className="absolute right-2 top-2 flex size-7 items-center
+                                 justify-center rounded-pill bg-berry text-white"
+                    >
+                      <Check size={16} aria-hidden />
+                    </span>
+                  </>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => scrollToCard(Math.min(STYLE_EXAMPLES.length - 1, active + 1))}
+          aria-label="다음 게시물 보기"
+          className="hidden size-11 shrink-0 items-center justify-center rounded-pill
+                     border border-line bg-surface text-ink hover:bg-surface-muted sm:flex"
+        >
+          <ChevronRight size={20} aria-hidden />
+        </button>
       </div>
 
-      {/* Chevron — 데스크톱만. 클릭 영역 44px (DESIGN.md §5) */}
-      <button
-        type="button"
-        onClick={() => scrollTrack(trackRef.current, -1)}
-        aria-label="이전 게시물 보기"
-        className="absolute -left-3 top-1/2 hidden size-11 -translate-y-1/2 items-center
-                   justify-center rounded-pill border border-line bg-surface text-ink
-                   hover:bg-surface-muted sm:flex"
-      >
-        <ChevronLeft size={20} aria-hidden />
-      </button>
-      <button
-        type="button"
-        onClick={() => scrollTrack(trackRef.current, 1)}
-        aria-label="다음 게시물 보기"
-        className="absolute -right-3 top-1/2 hidden size-11 -translate-y-1/2 items-center
-                   justify-center rounded-pill border border-line bg-surface text-ink
-                   hover:bg-surface-muted sm:flex"
-      >
-        <ChevronRight size={20} aria-hidden />
-      </button>
+      {/* 페이지네이션 점 — 클릭 영역 넉넉하게 (DESIGN.md §5) */}
+      <div className="mt-1 flex items-center justify-center">
+        {STYLE_EXAMPLES.map(({ id }, i) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => scrollToCard(i)}
+            aria-label={`${i + 1}번째 게시물로 이동`}
+            aria-current={i === active}
+            className="flex size-8 items-center justify-center"
+          >
+            <span
+              className={`size-1.5 rounded-pill ${i === active ? "bg-berry" : "bg-berry/30"}`}
+            />
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
 
 /* ════════════════════════════════════════════════════════════
    게시물 예시 6종 — 같은 주제 «운동을 꾸준히 만드는 3가지 방법»을
-   서로 다른 구성으로. 토큰 색으로만 그린다 (사진 에셋 없음).
+   타이포 크기·정렬·여백·사진 비중·밀도·위계가 다른 구성으로.
+   토큰 색으로만 그린다 (사진 에셋 없음). 안의 짧은 장식 문구는 데모다.
    @TODO: 실제 시안·사진 확정 시 교체 (DESIGN.md §18)
-   본문 잔글씨는 막대로 표현한다 — 이 크기에선 어차피 읽히지 않는다.
    ════════════════════════════════════════════════════════════ */
-const TOPIC = ["운동을 꾸준히", "만드는 3가지 방법"];
 const METHODS = ["작게 시작하기", "같은 시간에 하기", "기록 남기기"]; // 데모 콘텐츠
 
 function PostExample({ id }: { id: string }) {
   switch (id) {
     case "style_minimal_01":
-      // 넓은 여백 · 큰 타이포 · 장식 최소
+      // 여백 최대 · 큰 타이포 · 왼쪽 정렬 · 장식 최소
       return (
-        <span className="flex h-full flex-col justify-center bg-surface p-5">
-          <span className="text-[15px] font-bold leading-[1.45] text-ink">
-            {TOPIC[0]}
-            <br />
-            {TOPIC[1]}
+        <span className="flex h-full flex-col bg-surface p-8">
+          <span className="my-auto">
+            <span className="block text-[24px] font-bold leading-[1.45] text-ink">
+              운동을 꾸준히
+              <br />
+              만드는
+              <br />
+              3가지 방법
+            </span>
+            <span className="mt-6 block h-px w-9 bg-ink/25" />
           </span>
-          <span className="mt-4 h-px w-7 bg-ink/25" />
+          <span className="text-[10px] text-sub">01</span>
         </span>
       );
 
     case "style_editorial_01":
-      // 사진 + 매거진 위계
+      // 사진 상단 절반 + 매거진 위계 (오버라인·헤드라인·본문·페이지 번호)
       return (
         <span className="flex h-full flex-col bg-surface">
-          <span className="h-[44%] shrink-0 bg-purple/30" />
-          <span className="flex flex-1 flex-col p-3">
-            <span className="text-[8px] font-semibold tracking-[0.15em] text-berry-dark">
+          <span className="relative h-[46%] shrink-0 overflow-hidden bg-purple/30">
+            <span className="absolute -right-10 -top-10 size-36 rounded-pill bg-purple/40" />
+            <span className="absolute bottom-0 left-0 h-12 w-full bg-purple/20" />
+          </span>
+          <span className="flex flex-1 flex-col p-5">
+            <span className="text-[9px] font-semibold tracking-[0.25em] text-berry-dark">
               루틴 노트
             </span>
-            <span className="mt-1 text-[11px] font-bold leading-[1.35] text-ink">
-              {TOPIC[0]} {TOPIC[1]}
+            <span className="mt-2 text-[17px] font-bold leading-[1.35] text-ink">
+              운동을 꾸준히 만드는
+              <br />
+              3가지 방법
             </span>
-            <span className="mt-auto flex flex-col gap-1">
-              <span className="h-1 w-full rounded-pill bg-ink/15" />
-              <span className="h-1 w-4/5 rounded-pill bg-ink/15" />
+            <span className="mt-3 h-px w-full bg-line" />
+            <span className="mt-2.5 flex flex-col gap-1.5">
+              <span className="h-1.5 w-full rounded-pill bg-ink/10" />
+              <span className="h-1.5 w-5/6 rounded-pill bg-ink/10" />
+              <span className="h-1.5 w-2/3 rounded-pill bg-ink/10" />
             </span>
+            <span className="mt-auto self-end text-[9px] text-sub">02</span>
           </span>
         </span>
       );
 
     case "style_soft_01":
-      // 파스텔 · 둥근 요소 · 따뜻함 (캐릭터 없이)
+      // 파스텔 · 둥근 요소 · 가운데 정렬 · 따뜻함 (캐릭터 없이)
       return (
-        <span className="relative flex h-full items-center justify-center overflow-hidden bg-berry-light p-4">
-          <span className="absolute -left-4 -top-4 size-16 rounded-pill bg-berry-tint" />
-          <span className="absolute -bottom-5 -right-3 size-20 rounded-pill bg-purple/15" />
-          <span className="relative rounded-xl bg-surface/95 px-4 py-3 text-center">
-            <span className="text-[11px] font-bold leading-[1.5] text-berry-dark">
-              {TOPIC[0]}
+        <span className="relative flex h-full flex-col items-center justify-center overflow-hidden bg-berry-light p-6">
+          <span className="absolute -left-8 -top-8 size-28 rounded-pill bg-berry-tint" />
+          <span className="absolute -right-9 top-20 size-24 rounded-pill bg-purple/15" />
+          <span className="absolute -bottom-10 left-10 size-32 rounded-pill bg-surface/50" />
+          <span className="relative rounded-xl bg-surface/95 px-7 py-6 text-center">
+            <span className="text-[16px] font-bold leading-[1.55] text-berry-dark">
+              운동을 꾸준히
               <br />
-              {TOPIC[1]}
+              만드는 3가지 방법
             </span>
+          </span>
+          <span className="relative mt-5 flex gap-1.5">
+            <span className="h-2 w-8 rounded-pill bg-berry/30" />
+            <span className="h-2 w-5 rounded-pill bg-purple/25" />
+            <span className="h-2 w-6 rounded-pill bg-berry/20" />
           </span>
         </span>
       );
 
     case "style_bold_01":
-      // 큰 헤드라인 · 강한 대비
+      // 아주 큰 헤드라인 · 강한 대비 · 아래 정렬
       return (
-        <span className="flex h-full flex-col justify-between bg-ink p-4">
-          <span className="h-1.5 w-8 bg-berry" />
-          <span className="text-[16px] font-bold leading-[1.2] text-white">
+        <span className="flex h-full flex-col bg-ink p-6">
+          <span className="h-2 w-10 bg-berry" />
+          <span className="mt-auto text-[27px] font-bold leading-[1.2] text-white">
             운동을
             <br />
             꾸준히 만드는
             <br />
             3가지 방법
           </span>
-          <span className="self-end text-[8px] font-semibold text-white/50">01 / 05</span>
+          <span className="mt-6 flex items-center justify-between">
+            <span className="text-[10px] font-semibold text-white/50">01 / 05</span>
+            <span className="flex gap-1">
+              <span className="h-1 w-6 bg-berry" />
+              <span className="h-1 w-3 bg-white/30" />
+            </span>
+          </span>
         </span>
       );
 
     case "style_photo_01":
-      // 사진이 캔버스 대부분 — 텍스트 오버레이 최소
+      // 사진이 캔버스 전부 — 텍스트 오버레이 최소 · 피드 스냅샷 느낌
       return (
-        <span className="relative block h-full overflow-hidden bg-purple/35">
-          <span className="absolute -right-6 top-6 size-24 rounded-pill bg-berry-light/60" />
-          <span className="absolute bottom-0 left-0 h-2/5 w-full bg-ink/30" />
-          <span className="absolute bottom-3 left-3 text-[9px] font-semibold leading-[1.4] text-white">
-            {TOPIC[0]} {TOPIC[1]}
+        <span className="relative block h-full overflow-hidden bg-purple/40">
+          <span className="absolute -left-12 top-12 size-44 rounded-pill bg-berry-light/50" />
+          <span className="absolute right-8 top-28 size-16 rounded-pill bg-surface/30" />
+          <span className="absolute bottom-0 left-0 h-28 w-full bg-ink/15" />
+          <span className="absolute bottom-0 left-0 h-16 w-full bg-ink/25" />
+          <span className="absolute right-3 top-3 rounded-pill bg-ink/35 px-2 py-0.5 text-[10px] font-semibold text-white">
+            1/5
+          </span>
+          <span className="absolute bottom-5 left-5 text-[14px] font-semibold leading-[1.45] text-white">
+            운동을 꾸준히 만드는
+            <br />
+            3가지 방법
           </span>
         </span>
       );
 
     case "style_info_01":
-      // 정보 구조 · 숫자 · 높은 밀도
+      // 정보 구조 · 숫자 · 높은 밀도 · 스캔 가능
       return (
-        <span className="flex h-full flex-col bg-surface p-3">
-          <span className="text-[10px] font-bold leading-[1.35] text-ink">
-            {TOPIC[0]} {TOPIC[1]}
+        <span className="flex h-full flex-col bg-surface p-5">
+          <span className="flex items-center gap-2">
+            <span className="rounded-sm bg-berry-tint px-1.5 py-0.5 text-[10px] font-bold text-berry-dark">
+              가이드
+            </span>
+            <span className="text-[10px] text-sub">운동 습관</span>
           </span>
-          <span className="mt-2 flex flex-1 flex-col justify-evenly gap-1.5">
+          <span className="mt-2.5 text-[16px] font-bold leading-[1.35] text-ink">
+            운동을 꾸준히 만드는
+            <br />
+            3가지 방법
+          </span>
+          <span className="mt-4 flex flex-1 flex-col justify-start gap-2.5">
             {METHODS.map((method, i) => (
-              <span key={method} className="flex items-center gap-1.5 rounded-sm bg-surface-muted p-1.5">
+              <span key={method} className="flex items-start gap-2.5 rounded-md bg-surface-muted p-3">
                 <span
-                  className="flex size-4 shrink-0 items-center justify-center rounded-pill
-                             bg-berry text-[8px] font-bold text-white"
+                  className="flex size-5 shrink-0 items-center justify-center rounded-pill
+                             bg-berry text-[10px] font-bold text-white"
                 >
                   {i + 1}
                 </span>
-                <span className="text-[8px] font-semibold text-ink">{method}</span>
+                <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <span className="text-[12px] font-semibold leading-none text-ink">{method}</span>
+                  <span className="h-1 w-4/5 rounded-pill bg-ink/10" />
+                </span>
               </span>
             ))}
+          </span>
+          <span className="mt-3 flex items-center gap-2">
+            <span className="flex h-1 flex-1 overflow-hidden rounded-pill bg-surface-muted">
+              <span className="w-1/3 rounded-pill bg-berry" />
+            </span>
+            <span className="text-[9px] text-sub">1 / 3</span>
           </span>
         </span>
       );
