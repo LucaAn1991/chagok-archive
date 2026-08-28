@@ -500,7 +500,7 @@ plans  (userId ASC, status ASC, confirmedAt DESC)      지난 기획 목록
 | **프레임워크** | Next.js 16.3 (App Router) |
 | **언어** | TypeScript 5 |
 | **백엔드 / DB / 인증** | Firebase — Auth(이메일·비밀번호) · Firestore |
-| **스토리지** | Firebase Storage — 사용자 사진 업로드용. **Blaze 필요를 08-28 확인(CLI 검증 — Spark에서는 버킷 생성 불가).** 코드·보안 규칙·CORS 설정은 완료, **버킷 생성만 남음.** 버킷이 없는 동안 업로드 API는 503 + `storage_not_configured`로 답하고 화면은 「준비 중」으로 내려앉는다 |
+| **스토리지** | Firebase Storage — 사용자 사진 업로드용. **08-28 구성 완료** — 버킷 `chagok-aa563.firebasestorage.app` (asia-northeast3, Standard, 균일 접근제어) · 규칙 배포 · CORS 설정. Blaze 전환 완료. 버킷이 없는 환경에서는 업로드 API가 503 + `storage_not_configured`로 답하고 화면은 「준비 중」으로 내려앉는다 |
 | **배포** | Firebase App Hosting — GitHub push 자동 배포 · Secret Manager. **TODO: Blaze 업그레이드 필요** |
 | **스타일** | Tailwind CSS 4 + `DESIGN.md` 토큰 (`globals.css`) |
 | **폰트** | Pretendard 단일. **UI는 dynamic-subset CDN, 렌더러는 `.ttf` 파일 직접 포함** — satori는 시스템 폰트를 읽지 못하고 폰트 버퍼를 넘겨받는다 |
@@ -602,6 +602,7 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 | 2026-08-28 | ① 주제 후보를 «형식» 칩 4개 → **«재료» 칩 3개**(이번 주에 있었던 일·요즘 자주 하는 생각·찍어두고 안 올린 사진)로 교체. 온보딩 활동 답변에서 핵심 단어를 뽑아 구체화(예: 운동 기록 → 이번 주에 한 운동), 각 14자(공백 제외) 초과·추출 실패 시 기본형 | 찬영 확정 지시 — 주 페르소나에게는 «이미 안에 있는 재료»를 꺼내게 하는 칩이어야 한다. 외부 트렌드·마케팅 템플릿 주제 금지 | §3-1 |
 | 2026-08-28 | ② 「직접 쓰기」 기본 접힘(입력창 이중 노출 제거) · 커스텀 대상 칩 점선 구분 · 커스텀 대상 전용 생성 지시(`audiencePrompt`) · 커스텀 대상 localStorage 보관(후보 확장 판단 데이터) | 찬영 확정 지시 | §3-1 |
 | 2026-08-28 | 사진 업로드(F13) 구현 — 서명 URL 방식 확정 · Storage 경로·보안 규칙(`storage.rules`)·CORS 설정 신설 | 파일이 앱 서버를 거치지 않게 해 메모리·시간 부담을 없앤다. 버킷 생성에 Blaze가 필요함을 CLI로 확인했으나(§8), 사진은 «있으면 쓰는» 재료라(DESIGN §12) 버킷 없이도 화면이 동작하도록 503 폴백을 넣고 코드를 먼저 완성(승인받음) | §7 · §8 |
+| 2026-08-28 | Blaze 전환 · Storage 버킷 생성(asia-northeast3) · 규칙 배포 · CORS 적용 — **F13 사진 업로드 실동작 확인** | 위 TODO 해소. 업로드→저장→재읽기와 접근 제어(토큰 없이 403·목록 조회 403)를 실측 검증 | §8 · §12 |
 
 > **코딩 중 이 문서를 수정하게 되면 반드시 이 표에 기록한다.** (`CLAUDE.md` 「우선순위 및 충돌 처리」 3번)
 
