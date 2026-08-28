@@ -36,8 +36,8 @@ export default function BrandPanel() {
       className="hidden w-3/5 shrink-0 items-center justify-center border-r
                  border-line bg-berry-tint p-16 desktop:flex"
     >
-      <div className="w-full max-w-[480px]">
-        <p className="text-title font-bold text-ink">차곡</p>
+      <div className="w-full max-w-[560px]">
+        <p className="text-h2 font-bold text-ink">차곡</p>
 
         {/* PRD §5-1 헤드라인 */}
         <p className="mt-6 text-h1 font-bold text-ink">
