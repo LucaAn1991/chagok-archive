@@ -52,6 +52,7 @@ type User = {
   visualPreferences?: {           // 온보딩 게시물 취향 (08-28) — «잘 모르겠어요»면 null
     selectedExamples: string[];   //   예시 6종(src/lib/style-examples.ts) 중 선택한 id들
     attributes: StyleAttributes[]; //  선택 예시의 시각 속성 — AI가 조합할 취향 재료 (특정 템플릿 반복이 아님)
+    contentFormats: string[];     //   선택 예시의 콘텐츠 형식 (thought·editorial·routine·statement·diary·informational)
   } | null;
   tone: ToneKey | null;           // 말투 — 설정에서 선택. 정하기 전 null → 캡션은 기본 말투
   avoidExpressions: string[];     // 피할 표현. 캡션 생성 시 프롬프트의 금지 목록으로 들어간다
@@ -570,6 +571,7 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 | 2026-08-28 | 온보딩 빈도 질문을 주기+요일로 확장 — `User.uploadDays`(0=월…6=일, 개수=주기) 추가. 분야는 서술형 200자로 | 사용자 확정 — 요일까지 받아야 F4 자동 배치가 실제 요일에 놓을 수 있다. F4 로직의 uploadDays 활용은 추후 | §2 · §3 · §6 |
 | 2026-08-28 | 온보딩을 2단계로 재구성 — ②단계 «게시물 취향 템플릿»(text-only·image-full·list 택1, `User.preferredLayout`) 추가. 질문 문구를 «어떤 콘텐츠를 만들고 싶으세요?»로 (업종이 아니라 콘텐츠 방향) | 사용자 확정 — 제작 전에 취향을 파악해 시행착오를 줄인다. 실제 시안은 DESIGN §18 확정 대기(임시 목업), AI 생성 반영은 추후 | §2 · §3 · §4 · §6 |
 | 2026-08-28 | ②단계를 «게시물 취향 수집»으로 확정 — 같은 주제 예시 6종(Minimal·Editorial·Soft·Bold·Photo-led·Informational, 이름 비노출) 캐러셀 복수 선택. `preferredLayout` 폐기 → `visualPreferences{selectedExamples, attributes}`로 대체(속성은 서버가 매핑). 건너뛰기 시 null. **완료 후 홈이 아니라 /plan/new 직행 — PRD §5-2 «홈 상태 A»와 어긋남, PRD 갱신 필요** | 사용자 확정 스펙 (08-28) — 템플릿 선택이 아니라 취향 속성 수집. AI 반영은 추후 | §2 · §3 · §4 · §6 |
+| 2026-08-28 | 취향 예시를 «한 크리에이터의 서로 다른 게시물 6개»로 재구성 — 게시물마다 주제·형식이 다름(생각·에세이·루틴·스테이트먼트·기록·정보). `visualPreferences.contentFormats` 추가, 분야별 샘플 세트 매핑 구조(`SAMPLE_SETS`) 준비. Editorial·Diary는 실사진 임시 에셋(Unsplash, public/onboarding-samples) | 사용자 확정 스펙 (08-28) — 템플릿 고르기가 아니라 게시물 취향 수집로 보이게 | §2 · §3 |
 
 > **코딩 중 이 문서를 수정하게 되면 반드시 이 표에 기록한다.** (`CLAUDE.md` 「우선순위 및 충돌 처리」 3번)
 

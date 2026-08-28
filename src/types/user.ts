@@ -16,7 +16,8 @@ export type User = {
    */
   visualPreferences?: {
     selectedExamples: string[]; // src/lib/style-examples.ts 의 id
-    attributes: StyleAttributes[]; // 선택 예시의 속성 — 서버가 id로 매핑해 저장
+    attributes: StyleAttributes[]; // 선택 예시의 시각 속성 — 서버가 id로 매핑해 저장
+    contentFormats: string[]; // 선택 예시의 콘텐츠 형식 (thought·editorial·routine·statement·diary·informational)
   } | null;
 
   /** 설정-콘텐츠에서 등록 (08-28 온보딩에서 이동). 정하기 전까지 null·빈 배열 */

@@ -7,7 +7,8 @@ import { doc, getDoc } from "firebase/firestore";
 import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import InlineAlert from "@/components/InlineAlert";
-import { STYLE_EXAMPLES } from "@/lib/style-examples";
+import Image from "next/image";
+import { getSampleSet, type StyleExample } from "@/lib/style-examples";
 
 /**
  * 온보딩 — 2단계 (F1 · 08-28 재구성, PLAN 변경 이력).
@@ -271,7 +272,7 @@ export default function OnboardingPage() {
               여러 개 골라도 괜찮아요.
             </p>
 
-            <StyleCarousel selected={selected} onToggle={toggleExample} />
+            <StyleCarousel examples={getSampleSet(field)} selected={selected} onToggle={toggleExample} />
 
             {/* 액션 블록 — 캐러셀이 주인공이라 조작부는 가운데로 좁게 모은다 */}
             <div className="mx-auto mt-2 w-full max-w-[560px]">
@@ -332,9 +333,11 @@ export default function OnboardingPage() {
 const CARD_GAP = 20; // gap-5
 
 function StyleCarousel({
+  examples,
   selected,
   onToggle,
 }: {
+  examples: StyleExample[];
   selected: string[];
   onToggle: (id: string) => void;
 }) {
@@ -383,18 +386,18 @@ function StyleCarousel({
           className="flex w-full snap-x gap-5 overflow-x-auto pb-2
                      [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          {STYLE_EXAMPLES.map(({ id }) => {
-            const isSelected = selected.includes(id);
+          {examples.map((example) => {
+            const isSelected = selected.includes(example.id);
             return (
               <button
-                key={id}
+                key={example.id}
                 type="button"
                 onClick={() => {
                   if (drag.current.moved) {
                     drag.current.moved = false;
                     return; // 드래그 끝의 클릭은 선택이 아니다
                   }
-                  onToggle(id);
+                  onToggle(example.id);
                 }}
                 aria-pressed={isSelected}
                 className={[
@@ -403,7 +406,7 @@ function StyleCarousel({
                   isSelected ? "border-berry" : "border-line",
                 ].join(" ")}
               >
-                <PostExample id={id} />
+                <PostExample example={example} />
                 {isSelected && (
                   <>
                     {/* very subtle berry tint (스펙 §6) */}
@@ -433,7 +436,7 @@ function StyleCarousel({
         </button>
         <button
           type="button"
-          onClick={() => scrollToCard(Math.min(STYLE_EXAMPLES.length - 1, active + 1))}
+          onClick={() => scrollToCard(Math.min(examples.length - 1, active + 1))}
           aria-label="다음 게시물 보기"
           className="absolute -right-14 top-1/2 hidden size-11 -translate-y-1/2 items-center
                      justify-center rounded-pill border border-line bg-surface text-ink
@@ -447,165 +450,118 @@ function StyleCarousel({
 }
 
 /* ════════════════════════════════════════════════════════════
-   게시물 예시 6종 — 같은 주제 «운동을 꾸준히 만드는 3가지 방법»을
-   서로 다른 visual grammar로: Minimal Typography · Editorial Photo ·
-   Soft Graphic · Bold Typography · Photo-led Lifestyle · Informational.
-   색이 아니라 타이포·사진 비중·여백·밀도·정렬·구성으로 구분한다.
-   사진은 풍경 실루엣 플레이스홀더(SVG) — 실제 사진 확정 시 교체.
+   게시물 예시 — 한 크리에이터의 피드에서 볼 법한 서로 다른 게시물들.
+   내용·형식은 src/lib/style-examples.ts 데이터에서 온다 (세트 교체 대비).
+   사진은 임시 에셋(Unsplash — public/onboarding-samples/README.md).
    @TODO: 실제 시안·사진 확정 시 교체 (DESIGN.md §18)
    ════════════════════════════════════════════════════════════ */
-const METHODS = ["작게 시작하기", "같은 시간에 하기", "기록 남기기"]; // 데모 콘텐츠
+function PostExample({ example }: { example: StyleExample }) {
+  const { contentFormat, title, note, meta, items, photo } = example;
 
-/**
- * 사진 자리 플레이스홀더 — 하늘·산·해 실루엣. 한눈에 «사진이 들어갈 자리»로
- * 읽히게 한다. coral은 장식 전용 색이라 해(장식)에만 쓴다 (DESIGN.md §2).
- */
-function PhotoPlaceholder({ horizon }: { horizon: "mid" | "low" }) {
-  const hy = horizon === "mid" ? 55 : 72; // 지평선 높이(%)
-  return (
-    <svg
-      className="h-full w-full"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="xMidYMid slice"
-      aria-hidden
-    >
-      {/* 하늘 */}
-      <rect width="100" height="100" fill="var(--purple)" opacity="0.22" />
-      {/* 해 */}
-      <circle cx="72" cy={hy - 28} r="9" fill="var(--coral)" opacity="0.45" />
-      {/* 뒷산 */}
-      <polygon
-        points={`0,${hy} 34,${hy - 26} 62,${hy} 0,${hy}`}
-        fill="var(--purple)"
-        opacity="0.42"
-      />
-      {/* 앞산 */}
-      <polygon
-        points={`28,${hy} 66,${hy - 18} 100,${hy} 28,${hy}`}
-        fill="var(--ink)"
-        opacity="0.28"
-      />
-      {/* 땅 */}
-      <rect y={hy} width="100" height={100 - hy} fill="var(--ink)" opacity="0.16" />
-    </svg>
-  );
-}
-
-function PostExample({ id }: { id: string }) {
-  switch (id) {
-    case "style_minimal_01":
-      // Minimal Typography — 이미지 없음 · 여백 최대 · 왼쪽 정렬 큰 타이포
+  switch (contentFormat) {
+    case "thought":
+      // 짧은 생각 — 여백 중심 · 타이포 중심 · 장식 최소
       return (
         <span className="flex h-full flex-col bg-surface p-8">
-          <span className="text-[10px] text-sub">01</span>
           <span className="my-auto">
-            <span className="block text-[24px] font-bold leading-[1.45] text-ink">
-              운동을 꾸준히
-              <br />
-              만드는
-              <br />
-              3가지 방법
+            <span className="block whitespace-pre-line text-[23px] font-bold leading-[1.5] text-ink">
+              {title}
             </span>
-            <span className="mt-6 block h-px w-9 bg-ink/25" />
+            <span className="mt-5 block h-px w-9 bg-ink/25" />
+            {note && (
+              <span className="mt-4 block whitespace-pre-line text-[12px] leading-[1.7] text-sub">
+                {note}
+              </span>
+            )}
           </span>
-          <span className="text-[10px] tracking-[0.2em] text-sub">꾸준함의 기록</span>
+          <span className="text-[10px] text-sub">@chagok.daily</span>
         </span>
       );
 
-    case "style_editorial_01":
-      // Editorial Photo — 상단 사진 + 매거진 위계(오버라인·헤드라인·룰·본문·페이지)
+    case "editorial":
+      // 사진 + 에세이 — 매거진 구성
       return (
         <span className="flex h-full flex-col bg-surface">
-          <span className="relative h-[46%] shrink-0 overflow-hidden">
-            <PhotoPlaceholder horizon="mid" />
-            <span className="absolute bottom-2 right-2 text-[8px] text-white/80">ⓒ 차곡</span>
+          <span className="relative block h-[52%] shrink-0 overflow-hidden">
+            {photo && <Image src={photo} alt="" fill sizes="320px" className="object-cover" />}
           </span>
           <span className="flex flex-1 flex-col p-5">
             <span className="text-[9px] font-semibold tracking-[0.25em] text-berry-dark">
-              루틴 노트
+              모닝 에세이
             </span>
-            <span className="mt-2 text-[17px] font-bold leading-[1.35] text-ink">
-              운동을 꾸준히 만드는
-              <br />
-              3가지 방법
+            <span className="mt-2 whitespace-pre-line text-[16px] font-bold leading-[1.4] text-ink">
+              {title}
             </span>
-            <span className="mt-3 h-px w-full bg-line" />
             <span className="mt-2.5 flex flex-col gap-1.5">
               <span className="h-1.5 w-full rounded-pill bg-ink/10" />
-              <span className="h-1.5 w-5/6 rounded-pill bg-ink/10" />
-              <span className="h-1.5 w-2/3 rounded-pill bg-ink/10" />
+              <span className="h-1.5 w-4/5 rounded-pill bg-ink/10" />
             </span>
             <span className="mt-auto self-end text-[9px] text-sub">02</span>
           </span>
         </span>
       );
 
-    case "style_soft_01":
-      // Soft Graphic — 그래픽 도형 언어 · 가운데 정렬 · 둥근 요소
+    case "routine":
+      // 데일리 루틴 — 부드러운 그래픽 + 작은 정보 3개
       return (
-        <span className="relative flex h-full flex-col items-center justify-center overflow-hidden bg-berry-light p-6">
-          <span className="absolute -left-8 -top-8 size-28 rounded-pill bg-berry-tint" />
-          <span className="absolute -right-9 top-20 size-24 rounded-pill bg-purple/15" />
-          <span className="absolute -bottom-10 left-10 size-32 rounded-pill bg-surface/50" />
-          {/* 둥근 그래픽 아치 */}
-          <span className="absolute left-8 top-10 h-10 w-20 rounded-t-[999px] border-4 border-berry/20" />
-          <span className="relative rounded-xl bg-surface/95 px-7 py-6 text-center">
-            <span className="text-[16px] font-bold leading-[1.55] text-berry-dark">
-              운동을 꾸준히
-              <br />
-              만드는 3가지 방법
-            </span>
+        <span className="relative flex h-full flex-col overflow-hidden bg-berry-light p-5">
+          <span className="absolute -right-9 -top-9 size-24 rounded-pill bg-berry-tint" />
+          <span className="absolute -bottom-10 -left-8 size-28 rounded-pill bg-purple/12" />
+          <span className="relative mt-1 text-center text-[16px] font-bold leading-[1.45] text-berry-dark">
+            {title}
           </span>
-          <span className="relative mt-5 flex gap-1.5">
-            <span className="h-2 w-8 rounded-pill bg-berry/30" />
-            <span className="h-2 w-5 rounded-pill bg-purple/25" />
-            <span className="h-2 w-6 rounded-pill bg-berry/20" />
+          <span className="relative mt-5 flex flex-col gap-2.5">
+            {items?.map((item) => (
+              <span
+                key={item}
+                className="flex items-center gap-2.5 rounded-xl bg-surface/95 px-4 py-3"
+              >
+                <span className="size-2 shrink-0 rounded-pill bg-berry/60" />
+                <span className="text-[12px] font-semibold text-ink">{item}</span>
+              </span>
+            ))}
+          </span>
+          <span className="relative mt-auto flex justify-center gap-1.5 pt-3">
+            <span className="h-1.5 w-6 rounded-pill bg-berry/30" />
+            <span className="h-1.5 w-3 rounded-pill bg-purple/25" />
           </span>
         </span>
       );
 
-    case "style_bold_01":
-      // Bold Typography — 어두운 바탕 · 초대형 헤드라인 · 아래 정렬 · 강한 대비
+    case "statement":
+      // 한 문장 스테이트먼트 — 강한 대비 · 큰 타이포
       return (
         <span className="flex h-full flex-col bg-ink p-6">
-          <span className="h-2 w-10 bg-berry" />
-          <span className="mt-auto text-[27px] font-bold leading-[1.2] text-white">
-            운동을
-            <br />
-            꾸준히 만드는
-            <br />
-            3가지 방법
+          <span className="text-[42px] font-bold leading-none text-berry">“</span>
+          <span className="mt-auto whitespace-pre-line text-[25px] font-bold leading-[1.3] text-white">
+            {title}
           </span>
-          <span className="mt-6 flex items-center justify-between">
-            <span className="text-[10px] font-semibold text-white/50">01 / 05</span>
-            <span className="flex gap-1">
-              <span className="h-1 w-6 bg-berry" />
-              <span className="h-1 w-3 bg-white/30" />
-            </span>
-          </span>
+          <span className="mt-5 h-1 w-10 bg-berry" />
+          <span className="mt-3 text-[10px] text-white/50">@chagok.daily</span>
         </span>
       );
 
-    case "style_photo_01":
-      // Photo-led Lifestyle — 사진이 캔버스 전부 · 텍스트 오버레이 최소
+    case "diary":
+      // 사진 중심 기록 — 개인 피드 스냅샷
       return (
         <span className="relative block h-full overflow-hidden">
-          <PhotoPlaceholder horizon="low" />
-          <span className="absolute bottom-0 left-0 h-24 w-full bg-ink/20" />
-          <span className="absolute bottom-0 left-0 h-14 w-full bg-ink/25" />
-          <span className="absolute right-3 top-3 rounded-pill bg-ink/35 px-2 py-0.5 text-[10px] font-semibold text-white">
-            1/5
-          </span>
-          <span className="absolute bottom-5 left-5 text-[14px] font-semibold leading-[1.45] text-white">
-            운동을 꾸준히 만드는
-            <br />
-            3가지 방법
+          {photo && <Image src={photo} alt="" fill sizes="320px" className="object-cover" />}
+          <span className="absolute bottom-0 left-0 h-28 w-full bg-ink/20" />
+          <span className="absolute bottom-0 left-0 h-16 w-full bg-ink/25" />
+          {meta && (
+            <span className="absolute left-3 top-3 rounded-sm bg-surface/90 px-2 py-1 text-[10px] font-bold text-ink">
+              {meta}
+            </span>
+          )}
+          <span className="absolute bottom-4 left-4 flex flex-col gap-1">
+            <span className="text-[14px] font-semibold leading-[1.4] text-white">{title}</span>
+            {note && <span className="text-[11px] text-white/85">{note}</span>}
           </span>
         </span>
       );
 
-    case "style_info_01":
-      // Informational Carousel — 정보 단위 3개가 실제로 보임 · 높은 밀도
+    case "informational":
+      // 정보 카드뉴스 — 정보 단위 3개가 첫 화면에 보인다
       return (
         <span className="flex h-full flex-col bg-surface p-5">
           <span className="flex items-center gap-2">
@@ -614,13 +570,13 @@ function PostExample({ id }: { id: string }) {
             </span>
             <span className="text-[10px] text-sub">운동 습관</span>
           </span>
-          <span className="mt-2.5 text-[15px] font-bold leading-[1.35] text-ink">
-            운동을 꾸준히 만드는 3가지 방법
+          <span className="mt-2.5 whitespace-pre-line text-[15px] font-bold leading-[1.4] text-ink">
+            {title}
           </span>
           <span className="mt-3.5 flex flex-1 flex-col justify-start gap-2">
-            {METHODS.map((method, i) => (
+            {items?.map((item, i) => (
               <span
-                key={method}
+                key={item}
                 className="flex items-start gap-2.5 rounded-md border border-line bg-surface p-2.5"
               >
                 <span
@@ -630,9 +586,8 @@ function PostExample({ id }: { id: string }) {
                   {i + 1}
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-                  <span className="text-[12px] font-semibold leading-none text-ink">{method}</span>
+                  <span className="text-[12px] font-semibold leading-none text-ink">{item}</span>
                   <span className="h-1 w-4/5 rounded-pill bg-ink/10" />
-                  <span className="h-1 w-3/5 rounded-pill bg-ink/10" />
                 </span>
               </span>
             ))}

@@ -89,11 +89,13 @@ export async function PATCH(request: Request) {
       if (!valid) {
         return NextResponse.json({ error: "게시물 취향 값을 확인해주세요." }, { status: 400 });
       }
-      // 속성은 클라이언트를 믿지 않고 서버가 id로 다시 매핑한다
+      // 속성·형식은 클라이언트를 믿지 않고 서버가 id로 다시 매핑한다
       const ids = sel as string[];
+      const picked = ids.map((id) => STYLE_EXAMPLES.find((e) => e.id === id)!);
       updates.visualPreferences = {
         selectedExamples: ids,
-        attributes: ids.map((id) => STYLE_EXAMPLES.find((e) => e.id === id)!.attributes),
+        attributes: picked.map((e) => e.attributes),
+        contentFormats: picked.map((e) => e.contentFormat),
       };
     }
   }
