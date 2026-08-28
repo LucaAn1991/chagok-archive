@@ -1,32 +1,42 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 
 /**
  * 인증 화면(로그인·회원가입·재설정) 왼쪽의 브랜드 패널.
  * Desktop(>=1200)에서만 보인다 — 좁으면 통째로 사라진다 (DESIGN.md ✕22).
  *
- * 슬라이드 3장 = 번호 뱃지 + 미니 목업 + 확정 문구 (08-28 참고 이미지 방향).
- * 문구는 08-28 확정본(COPY.md), 목업 속 예시(운동 루틴 등)는 참고 이미지에서
- * 그대로 — 데모 콘텐츠 전용이다.
+ * 슬라이드 3장 = 차곡의 실제 사용 흐름 한 편 (08-28 재구성 확정):
+ *   ① 아이디어 → 기획   ② 기획 → 캘린더 배치   ③ 오늘의 카드 → 제작
+ * 같은 콘텐츠(«퇴근 후, 요즘의 저녁» · Lifestyle 데모)가 세 장에 걸쳐
+ * 이어진다 — 슬라이드 2 썸네일과 3의 게시물 사진이 같은 이유다.
+ * 자동 업로드·자동 발행처럼 보이는 표현은 쓰지 않는다.
  *
- * 규칙:
- * - 카드 배경 그라데이션 금지 (✕16) — 그라데이션은 «차곡이 정리했어요»
- *   카드 윗줄에만 (허용 4곳 중 «AI가 만든 기획 카드 강조»)
- * - 사진 에셋 없음 → 색 면 목업 · 로고 캐릭터 없음 (§18 미확정)
- * - 연한 브랜드 면 위 보조 글자는 --berry-dark (§15)
+ * 헤드라인·서브는 PRD §5-1 확정 카피. 슬라이드 카피는 08-28 확정본.
+ * 게시물 목업 안 색·문구는 콘텐츠 세계 영역(브랜드 토큰 예외 — 08-28 확정).
+ * 로고 심볼 없음 — DESIGN.md §18 «로고 최종 아트워크» 미확정.
  */
 
+const EVENING_PHOTO = "/onboarding-samples/evening.jpg";
+const CARD_TITLE = "퇴근 후, 요즘의 저녁"; // 슬라이드 2·3을 잇는 같은 카드 제목
+
 const SLIDES = [
-  { mockup: PlanMockup,
-    main: "“뭐 올리지?”에서 멈추는 날,\n생각나는 대로 말만 하세요.",
-    sub: "주제와 대상은 차곡이 정리해드려요." },
-  { mockup: CardsMockup,
-    main: "말 한마디면\n대상이 다른 카드 여러 장 —",
-    sub: "캡션과 해시태그까지 함께요." },
-  { mockup: CalendarMockup,
+  {
+    mockup: PlanMockup,
+    main: "생각나는 대로\n말만 하세요.",
+    sub: "막연한 생각도 차곡이\n콘텐츠 기획으로 정리해요.",
+  },
+  {
+    mockup: CalendarMockup,
     main: "만든 카드는\n캘린더에 차곡차곡.",
-    sub: "오늘은 ‘올릴 것 하나’만 보면 돼요." },
+    sub: "무엇을 언제 올릴지\n한눈에 볼 수 있어요.",
+  },
+  {
+    mockup: CreateMockup,
+    main: "오늘의 카드를 열면\n제작까지 이어져요.",
+    sub: "캡션부터 카드뉴스까지\n차곡과 함께 만들어요.",
+  },
 ];
 
 export default function BrandPanel() {
@@ -88,8 +98,8 @@ function FeatureCarousel() {
         >
           {SLIDES.map(({ mockup: Mockup, main, sub }, i) => (
             <article
-              key={sub}
-              className="flex h-[420px] w-full shrink-0 flex-col rounded-lg bg-berry-light p-6"
+              key={main}
+              className="flex h-[440px] w-full shrink-0 flex-col rounded-lg bg-berry-light p-6"
             >
               <span
                 className="flex size-8 items-center justify-center self-start rounded-pill
@@ -98,14 +108,17 @@ function FeatureCarousel() {
                 {`0${i + 1}`}
               </span>
 
-              <div className="mt-4 flex flex-1 flex-col justify-center" aria-hidden>
+              <div className="mt-3 flex min-h-0 flex-1 flex-col justify-center" aria-hidden>
                 <Mockup />
               </div>
 
-              <p className="mt-4 whitespace-pre-line text-title font-bold leading-[1.45] text-ink">
+              <p className="mt-3 whitespace-pre-line text-title font-bold leading-[1.45] text-ink">
                 {main}
               </p>
-              <p className="mt-2 text-body text-berry-dark">{sub}</p>
+              {/* 연한 브랜드 면 위 보조 글자는 --berry-dark (DESIGN.md §15) */}
+              <p className="mt-2 whitespace-pre-line text-body leading-[1.55] text-berry-dark">
+                {sub}
+              </p>
             </article>
           ))}
         </div>
@@ -115,7 +128,7 @@ function FeatureCarousel() {
       <div className="mt-2 flex items-center">
         {SLIDES.map((slide, i) => (
           <button
-            key={slide.sub}
+            key={slide.main}
             type="button"
             onClick={() => setIndex(i)}
             aria-label={`${i + 1}번째 소개 보기`}
@@ -134,108 +147,113 @@ function FeatureCarousel() {
   );
 }
 
-/* ── 미니 목업들 — 전부 토큰 색으로만 그린다. 사진·캐릭터 없음 ── */
+/* ── 미니 목업 — 한 콘텐츠가 기획 → 일정 → 제작으로 이어진다 ── */
 
-/** ① 말풍선 → 「차곡이 정리했어요」 */
+/** ① 막연한 말 → 차곡이 정리한 기획. 화살표 없이 흐름으로만 */
 function PlanMockup() {
   return (
     <div className="flex flex-col gap-2">
-      <div className="max-w-[80%] self-start rounded-lg rounded-bl-sm bg-surface p-3">
-        <p className="text-body leading-[1.5] text-ink">
-          요즘 운동 시작했는데
+      <div className="max-w-[82%] self-start rounded-lg rounded-bl-sm bg-surface p-3">
+        <p className="text-body leading-[1.55] text-ink">
+          요즘 퇴근하고 나면 시간이 그냥 가는 것 같아요.
           <br />
-          작심삼일 반복 중이에요…
+          평범한 일상도 좀 기록해보고 싶어요.
         </p>
       </div>
 
       {/* AI가 만든 기획 카드 — 그라데이션 강조 허용 지점 (DESIGN.md §2) */}
-      <div className="relative w-[85%] self-end overflow-hidden rounded-lg bg-surface p-3">
+      <div className="relative w-[88%] self-end overflow-hidden rounded-lg bg-surface p-3.5">
         <span className="absolute inset-x-0 top-0 h-[3px]" style={{ background: "var(--grad)" }} />
         <p className="text-caption font-bold text-berry-dark">차곡이 정리했어요 ✦</p>
-        <div className="mt-2 flex items-center gap-2">
-          <span className="rounded-sm bg-berry-tint px-1.5 py-0.5 text-caption text-berry-dark">
-            주제
-          </span>
-          <span className="text-caption text-ink">운동을 꾸준히 하는 방법</span>
-        </div>
-        <div className="mt-1.5 flex items-center gap-2">
-          <span className="rounded-sm bg-berry-tint px-1.5 py-0.5 text-caption text-berry-dark">
-            대상
-          </span>
-          <span className="text-caption text-ink">20~30대 직장인</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** ② 대상이 다른 카드 3장 */
-function CardsMockup() {
-  // 분야를 나눠 보여준다 — 특정 업종 전용으로 보이지 않게 (08-28)
-  const cards = [
-    { photo: "bg-berry-tint", title: "운동 루틴\n꾸준히 만드는 법", tags: "#운동 #루틴" },
-    { photo: "bg-purple/25", title: "홈카페 라떼\n맛있게 내리는 법", tags: "#홈카페 #레시피" },
-    { photo: "bg-surface-muted", title: "가을 데일리룩\n코디 아이디어", tags: "#패션 #데일리룩" },
-  ];
-  return (
-    <div className="flex gap-2">
-      {cards.map((c) => (
-        <div key={c.tags} className="flex-1 rounded-md border border-line bg-surface p-2">
-          <div className={`h-14 rounded-sm ${c.photo}`} />
-          <p className="mt-2 whitespace-pre-line text-caption font-semibold leading-[1.4] text-ink">
-            {c.title}
-          </p>
-          <p className="mt-1 text-caption text-berry-dark">{c.tags}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** ③ 미니 캘린더 + 오늘의 콘텐츠 */
-function CalendarMockup() {
-  // 상태 점은 카드 상태색 계단 (DESIGN.md §2) — 진할수록 완료에 가깝다
-  const week = [
-    { day: "24", dot: "bg-st-published" },
-    { day: "25", dot: "bg-st-crafted" },
-    { day: "26", dot: null },
-    { day: "27", dot: "bg-st-pending", today: true },
-    { day: "28", dot: "bg-st-planned" },
-    { day: "29", dot: "bg-st-planned" },
-    { day: "30", dot: null },
-  ];
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="rounded-lg bg-surface p-3">
-        <p className="text-caption font-semibold text-ink">2026년 8월</p>
-        <div className="mt-2 grid grid-cols-7 gap-1">
-          {week.map(({ day, dot, today }) => (
-            <div key={day} className="flex flex-col items-center gap-1">
-              <span
-                className={
-                  today
-                    ? "flex size-6 items-center justify-center rounded-pill bg-berry text-caption font-bold text-white"
-                    : "flex size-6 items-center justify-center text-caption text-sub"
-                }
-              >
-                {day}
+        <div className="mt-2 flex flex-col gap-1.5">
+          {[
+            ["주제", "퇴근 후 나만의 시간"],
+            ["대상", "일상을 기록하고 싶은 직장인"],
+            ["기획 의도", "공감 + 일상 기록"],
+          ].map(([label, value]) => (
+            <div key={label} className="flex items-center gap-2">
+              <span className="shrink-0 rounded-sm bg-berry-tint px-1.5 py-0.5 text-caption text-berry-dark">
+                {label}
               </span>
-              <span className={`size-1 rounded-pill ${dot ?? "bg-transparent"}`} />
+              <span className="text-caption text-ink">{value}</span>
             </div>
           ))}
         </div>
       </div>
+    </div>
+  );
+}
 
-      <div className="flex items-center gap-2 rounded-lg bg-surface p-2.5">
-        <span className="size-8 shrink-0 rounded-sm bg-berry-tint" />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-caption font-semibold text-ink">
-            운동 루틴 꾸준히 만드는 법
+/** ② 그 기획이 날짜에 배치됐다 — 캘린더보다 «배치된 카드»가 주인공 */
+function CalendarMockup() {
+  const week = ["24", "25", "26", "27", "28", "29", "30"];
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="rounded-lg bg-surface p-3.5">
+        <p className="text-caption font-semibold text-ink">2026년 8월</p>
+        <div className="mt-2 grid grid-cols-7 gap-1">
+          {week.map((day) => (
+            <span
+              key={day}
+              className={
+                day === "27"
+                  ? "flex size-7 items-center justify-center justify-self-center rounded-pill bg-berry text-caption font-bold text-white"
+                  : "flex size-7 items-center justify-center justify-self-center text-caption text-sub"
+              }
+            >
+              {day}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* 27일에 배치된, 슬라이드 ①에서 만든 그 콘텐츠 */}
+      <div className="flex items-center gap-3 rounded-lg bg-surface p-3">
+        <span className="relative block size-12 shrink-0 overflow-hidden rounded-sm">
+          <Image src={EVENING_PHOTO} alt="" fill sizes="48px" className="object-cover" />
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-body font-semibold text-ink">{CARD_TITLE}</span>
+          <span className="mt-0.5 block text-caption text-sub">오늘 올릴 콘텐츠</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** ③ 오늘의 카드를 열어 실제 게시물로 — 결과물이 가장 크게 보인다 */
+function CreateMockup() {
+  return (
+    <div className="relative flex items-start gap-3">
+      {/* 왼쪽 — 열어본 오늘의 카드 + 캡션 미리보기 */}
+      <div className="flex min-w-0 flex-1 flex-col gap-2 pt-2">
+        <div className="rounded-lg bg-surface p-3">
+          <p className="text-caption text-sub">오늘의 카드</p>
+          <p className="mt-1 text-body font-semibold text-ink">{CARD_TITLE}</p>
+          <p className="mt-0.5 text-caption text-sub">일상을 기록하고 싶은 직장인</p>
+        </div>
+        <div className="rounded-lg bg-surface p-3">
+          <p className="text-caption font-semibold text-berry-dark">캡션 초안</p>
+          <p className="mt-1 text-caption leading-[1.6] text-ink">
+            퇴근하면 그냥 누워버리기 바빴는데, 요즘은 30분이라도 나가보려고 한다…
           </p>
-          <p className="flex items-center gap-1 text-caption text-sub">
-            <span className="size-1.5 rounded-pill bg-st-pending" />
-            오늘 올릴 콘텐츠
-          </p>
+        </div>
+      </div>
+
+      {/* 오른쪽 — 완성된 게시물 (온보딩 Warm Lifestyle 문법, 4:5) */}
+      <div className="w-[46%] shrink-0">
+        <div className="flex aspect-[4/5] flex-col overflow-hidden rounded-md bg-[#F6F0E7] p-2">
+          <span className="relative block flex-1 overflow-hidden">
+            <Image src={EVENING_PHOTO} alt="" fill sizes="240px" className="object-cover" />
+          </span>
+          <span className="flex flex-col gap-0.5 px-1 pb-0.5 pt-2">
+            <span className="text-[11px] font-semibold text-[#3F362E]">
+              별거 없지만,
+              <br />
+              요즘의 저녁
+            </span>
+            <span className="text-[8px] tracking-[0.2em] text-[#A08D7C]">퇴근 · 산책 · 기록</span>
+          </span>
         </div>
       </div>
     </div>
