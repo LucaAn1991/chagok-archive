@@ -149,6 +149,7 @@ export default function SignupPage() {
               value={passwordConfirm}
               onChange={setPasswordConfirm}
               autoComplete="new-password"
+              placeholder="비밀번호를 입력해주세요"
               hasError={error != null}
             />
 
