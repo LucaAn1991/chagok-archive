@@ -8,6 +8,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import BrandPanel from "@/components/BrandPanel";
+import PasswordInput from "@/components/PasswordInput";
 
 /**
  * 로그인 — PLAN.md §3-1.
@@ -104,19 +105,14 @@ export default function LoginPage() {
               />
             </div>
 
-            <div className="flex flex-col gap-2">
-              <label htmlFor="password" className="text-label font-semibold text-ink">
-                비밀번호
-              </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className={inputClass}
-              />
-            </div>
+            <PasswordInput
+              id="password"
+              label="비밀번호"
+              value={password}
+              onChange={setPassword}
+              autoComplete="current-password"
+              hasError={error != null}
+            />
 
             {error && (
               <p role="alert" className="text-body text-ink">

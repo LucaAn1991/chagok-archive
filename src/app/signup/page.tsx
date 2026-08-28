@@ -8,6 +8,7 @@ import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import BrandPanel from "@/components/BrandPanel";
+import PasswordInput from "@/components/PasswordInput";
 
 /**
  * 회원가입 — PLAN.md §3-1 · IA 0.2.
@@ -124,34 +125,24 @@ export default function SignupPage() {
               />
             </div>
 
-            <div className="flex flex-col gap-2">
-              <label htmlFor="password" className="text-label font-semibold text-ink">
-                비밀번호
-              </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="new-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="6자 이상"
-                className={inputClass}
-              />
-            </div>
+            <PasswordInput
+              id="password"
+              label="비밀번호"
+              value={password}
+              onChange={setPassword}
+              autoComplete="new-password"
+              placeholder="6자 이상"
+              hasError={error != null}
+            />
 
-            <div className="flex flex-col gap-2">
-              <label htmlFor="password-confirm" className="text-label font-semibold text-ink">
-                비밀번호 확인
-              </label>
-              <input
-                id="password-confirm"
-                type="password"
-                autoComplete="new-password"
-                value={passwordConfirm}
-                onChange={(e) => setPasswordConfirm(e.target.value)}
-                className={inputClass}
-              />
-            </div>
+            <PasswordInput
+              id="password-confirm"
+              label="비밀번호 확인"
+              value={passwordConfirm}
+              onChange={setPasswordConfirm}
+              autoComplete="new-password"
+              hasError={error != null}
+            />
 
             {/* 약관 동의 — IA 0.2. 동의 대상 문서로 이동할 수 있어야 한다 */}
             <label className="mt-1 flex items-start gap-3 text-body text-ink">
