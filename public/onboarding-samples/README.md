@@ -5,5 +5,5 @@ Unsplash 무료 라이선스 (상업적 사용 가능 · 출처 표기 불요).
 
 | 파일 | 용도 | 출처 (unsplash.com) |
 |---|---|---|
-| morning.jpg | Editorial «요즘 내가 아침 운동을 하는 이유» | photo-1506126613408-eca07ce68773 |
-| workout.jpg | Photo-led Diary «이번 주 운동 기록» | photo-1517836357463-d25dfeac3438 |
+| lifestyle.jpg | Direction A — Warm Lifestyle «별거 없지만, 요즘의 루틴» | photo-1544367567-0f2fcb009e0b |
+| editorial-bw.jpg | Direction B — Modern Editorial «요즘 운동이 조금 재밌어진 이유» | photo-1599901860904-17e6ed7083a0 |

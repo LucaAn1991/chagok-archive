@@ -38,162 +38,59 @@ export type StyleExample = {
   attributes: StyleAttributes;
 };
 
-/** 운동·자기관리·루틴 크리에이터 세트 */
+/**
+ * 운동·자기관리 크리에이터 세트 — 3개 visual direction (08-28 재작업).
+ * 이전 11종 시안은 폐기했다. «실제 인스타그램에 올려도 어색하지 않은가»가
+ * 퀄리티 기준이다.
+ *
+ * 게시물 캔버스 안 색은 브랜드 토큰을 따르지 않는다 (08-28 사용자 확정) —
+ * 브랜드 팔레트는 바깥 제품 UI의 정체성이고, 예시 게시물은 사용자의
+ * 콘텐츠 세계를 보여주는 영역이다. 하드코딩 금지 규칙의 의도적 예외.
+ */
 const FITNESS_SET: StyleExample[] = [
+  // A — Warm Lifestyle: 자연광 사진 70%+ · 따뜻한 뉴트럴 · 작은 기록 타이포
   {
-    id: "example_thought_01",
-    contentFormat: "thought",
-    title: "꾸준함에 대하여",
-    note: "잘하는 날보다\n계속하는 날이 많기를",
-    attributes: {
-      imageUsage: "low",
-      typography: "large-clean",
-      density: "low",
-      mood: "calm",
-      decoration: "minimal",
-    },
-  },
-  {
-    id: "example_editorial_01",
-    contentFormat: "editorial",
-    title: "요즘 내가\n아침 운동을 하는 이유",
-    note: "새벽 공기가 주는 차분함,\n하루를 내가 시작한다는 감각.",
-    photo: "/onboarding-samples/morning.jpg",
-    attributes: {
-      imageUsage: "medium-high",
-      typography: "editorial",
-      density: "medium",
-      mood: "sophisticated",
-      decoration: "low",
-    },
-  },
-  {
-    id: "example_routine_01",
-    contentFormat: "routine",
-    title: "오늘의 작은 루틴 3가지",
-    items: ["물 한 잔으로 시작하기", "스트레칭 5분", "한 줄 기록 남기기"],
-    attributes: {
-      imageUsage: "low",
-      typography: "soft",
-      density: "medium",
-      mood: "warm",
-      decoration: "soft",
-    },
-  },
-  {
-    id: "example_statement_01",
-    contentFormat: "statement",
-    title: "의욕보다\n중요한 건\n환경이다",
-    attributes: {
-      imageUsage: "low",
-      typography: "bold",
-      density: "low",
-      mood: "energetic",
-      decoration: "medium",
-    },
-  },
-  {
-    id: "example_comparison_01",
-    contentFormat: "comparison",
-    title: "한 달 전의 나, 지금의 나",
-    meta: "한 달 뒤",
-    // «라벨|문구» 쌍 — 위 패널(전) · 아래 패널(후)
-    items: ["한 달 전|작심삼일 반복", "지금|주 3회 루틴 유지"],
-    attributes: {
-      imageUsage: "low",
-      typography: "clean",
-      density: "medium",
-      mood: "motivational",
-      decoration: "low",
-    },
-  },
-  {
-    id: "example_diary_01",
+    id: "direction_warm_01",
     contentFormat: "diary",
-    title: "이번 주 운동 기록",
-    meta: "WEEK 2",
-    note: "월 · 수 · 금 완료",
-    photo: "/onboarding-samples/workout.jpg",
-    attributes: {
-      imageUsage: "high",
-      typography: "clean",
-      density: "low",
-      mood: "natural",
-      decoration: "minimal",
-    },
-  },
-  {
-    id: "example_collage_01",
-    contentFormat: "collage",
-    title: "8월의\n운동 기록 모음",
-    note: "사진 4장",
-    photos: ["/onboarding-samples/morning.jpg", "/onboarding-samples/workout.jpg"],
+    title: "별거 없지만, 요즘의 루틴",
+    note: "아침 스무 분이면 충분한 날들",
+    meta: "AUG 28",
+    photo: "/onboarding-samples/lifestyle.jpg",
     attributes: {
       imageUsage: "high",
       typography: "minimal",
-      density: "medium",
-      mood: "casual",
-      decoration: "low",
-    },
-  },
-  {
-    id: "example_checklist_01",
-    contentFormat: "checklist",
-    title: "운동 가기 전\n체크리스트",
-    items: ["물통 챙기기", "수건 · 이어폰", "스트레칭 5분", "오늘 할 운동 정하기"],
-    attributes: {
-      imageUsage: "low",
-      typography: "clean",
-      density: "medium-high",
-      mood: "practical",
-      decoration: "functional",
-    },
-  },
-  {
-    id: "example_quote_01",
-    contentFormat: "quote",
-    title: "우리는 반복적으로 행동하는 존재다.\n탁월함은 행동이 아니라 습관이다.",
-    note: "— 아리스토텔레스",
-    attributes: {
-      imageUsage: "low",
-      typography: "literary",
       density: "low",
-      mood: "emotional",
-      decoration: "frame",
+      mood: "warm-natural",
+      decoration: "minimal",
     },
   },
+  // B — Modern Editorial: 흑백 사진 + 표현적 타이포 · 비대칭 · 레이어링
   {
-    id: "example_review_01",
-    contentFormat: "review",
-    title: "폼롤러,\n솔직 후기",
-    meta: "3주 사용",
-    verdict: "별 넷, 아쉬움 하나.",
-    note: "#내돈내산 #폼롤러",
-    // «라벨|문구» — 좋았던 점 / 아쉬운 점
-    items: [
-      "좋았던 점|아침 뻐근함이 줄었어요",
-      "좋았던 점|하루 5분이면 충분해요",
-      "아쉬운 점|첫 주엔 조금 아파요",
-    ],
+    id: "direction_editorial_01",
+    contentFormat: "editorial",
+    title: "요즘 운동이\n조금\n재밌어진 이유",
+    note: "— 기록 셋, 습관 하나",
+    photo: "/onboarding-samples/editorial-bw.jpg",
     attributes: {
-      imageUsage: "low",
-      typography: "clean",
-      density: "medium-high",
-      mood: "candid",
-      decoration: "functional",
+      imageUsage: "high",
+      typography: "expressive",
+      density: "medium",
+      mood: "modern",
+      decoration: "editorial",
     },
   },
+  // C — Graphic/Typographic: 사진 없이 오버사이즈 타이포 · 지그재그 정렬 · 도형
   {
-    id: "example_info_01",
-    contentFormat: "informational",
-    title: "초보자가 놓치기 쉬운\n운동 습관 3가지",
-    items: ["시간을 정한다", "목표를 작게 잡는다", "기록을 남긴다"],
+    id: "direction_graphic_01",
+    contentFormat: "statement",
+    title: "운동 가기\n싫은 날에도\n이것만은\n지킨다.",
+    note: "오늘도, 일단 가기",
     attributes: {
-      imageUsage: "low",
-      typography: "structured",
-      density: "high",
-      mood: "informative",
-      decoration: "functional",
+      imageUsage: "none",
+      typography: "oversized",
+      density: "low",
+      mood: "bold-graphic",
+      decoration: "shape",
     },
   },
 ];
