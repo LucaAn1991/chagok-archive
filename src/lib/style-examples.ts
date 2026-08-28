@@ -17,7 +17,10 @@ export type ContentFormat =
   | "editorial" // 사진 + 에세이·매거진
   | "routine" // 데일리 루틴 정보
   | "statement" // 한 문장 비주얼 스테이트먼트
+  | "comparison" // 비교·변화 (Before → After)
   | "diary" // 사진 중심 기록
+  | "checklist" // 체크리스트 (저장 유도형)
+  | "quote" // 인용·글귀
   | "informational"; // 정보 카드뉴스
 
 export type StyleExample = {
@@ -85,6 +88,21 @@ const FITNESS_SET: StyleExample[] = [
     },
   },
   {
+    id: "example_comparison_01",
+    contentFormat: "comparison",
+    title: "한 달 전의 나, 지금의 나",
+    meta: "한 달 뒤",
+    // «라벨|문구» 쌍 — 위 패널(전) · 아래 패널(후)
+    items: ["한 달 전|작심삼일 반복", "지금|주 3회 루틴 유지"],
+    attributes: {
+      imageUsage: "low",
+      typography: "clean",
+      density: "medium",
+      mood: "motivational",
+      decoration: "low",
+    },
+  },
+  {
     id: "example_diary_01",
     contentFormat: "diary",
     title: "이번 주 운동 기록",
@@ -97,6 +115,32 @@ const FITNESS_SET: StyleExample[] = [
       density: "low",
       mood: "natural",
       decoration: "minimal",
+    },
+  },
+  {
+    id: "example_checklist_01",
+    contentFormat: "checklist",
+    title: "운동 가기 전\n체크리스트",
+    items: ["물통 챙기기", "수건 · 이어폰", "스트레칭 5분", "오늘 할 운동 정하기"],
+    attributes: {
+      imageUsage: "low",
+      typography: "clean",
+      density: "medium-high",
+      mood: "practical",
+      decoration: "functional",
+    },
+  },
+  {
+    id: "example_quote_01",
+    contentFormat: "quote",
+    title: "우리는 반복적으로 행동하는 존재다.\n탁월함은 행동이 아니라 습관이다.",
+    note: "— 아리스토텔레스",
+    attributes: {
+      imageUsage: "low",
+      typography: "literary",
+      density: "low",
+      mood: "emotional",
+      decoration: "frame",
     },
   },
   {

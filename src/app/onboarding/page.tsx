@@ -601,6 +601,89 @@ function PostExample({ example }: { example: StyleExample }) {
         </span>
       );
 
+    case "comparison": {
+      // 비교·변화 — 위(전)/아래(후) 분할 + 가운데 칩
+      const [before = "", after = ""] = items ?? [];
+      const [beforeLabel, beforeText] = before.split("|");
+      const [afterLabel, afterText] = after.split("|");
+      return (
+        <span className="relative flex h-full flex-col">
+          <span className="flex flex-1 flex-col justify-center gap-1.5 bg-surface-muted p-6">
+            <span className="text-[10px] font-semibold tracking-[0.15em] text-sub">
+              {beforeLabel}
+            </span>
+            <span className="text-[17px] font-bold leading-[1.35] text-ink">{beforeText}</span>
+          </span>
+          <span className="flex flex-1 flex-col justify-center gap-1.5 bg-berry-light p-6">
+            <span className="text-[10px] font-semibold tracking-[0.15em] text-berry-dark">
+              {afterLabel}
+            </span>
+            <span className="text-[17px] font-bold leading-[1.35] text-berry-dark">
+              {afterText}
+            </span>
+          </span>
+          {meta && (
+            <span
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
+                         rounded-pill bg-ink px-3 py-1 text-[10px] font-bold text-white"
+            >
+              {meta}
+            </span>
+          )}
+        </span>
+      );
+    }
+
+    case "checklist":
+      // 체크리스트 — 저장 유도형. 앞 2개는 완료 상태로 그린다 (데모)
+      return (
+        <span className="flex h-full flex-col bg-surface p-5">
+          <span className="whitespace-pre-line text-[16px] font-bold leading-[1.4] text-ink">
+            {title}
+          </span>
+          <span className="mt-4 flex flex-1 flex-col justify-start gap-3">
+            {items?.map((item, i) => {
+              const done = i < 2;
+              return (
+                <span key={item} className="flex items-center gap-2.5">
+                  <span
+                    className={
+                      done
+                        ? "flex size-5 shrink-0 items-center justify-center rounded-sm bg-berry text-white"
+                        : "size-5 shrink-0 rounded-sm border-2 border-line"
+                    }
+                  >
+                    {done && <Check size={12} aria-hidden />}
+                  </span>
+                  <span
+                    className={`text-[12px] font-semibold ${
+                      done ? "text-sub line-through" : "text-ink"
+                    }`}
+                  >
+                    {item}
+                  </span>
+                </span>
+              );
+            })}
+          </span>
+          <span className="text-[10px] text-sub">저장해두고 체크해요</span>
+        </span>
+      );
+
+    case "quote":
+      // 인용·글귀 — 얇은 프레임 · 가운데 정렬 · 문학적
+      return (
+        <span className="flex h-full bg-surface p-3">
+          <span className="flex flex-1 flex-col items-center justify-center rounded-sm border border-ink/20 px-5 text-center">
+            <span className="text-[28px] font-bold leading-none text-berry/70">“</span>
+            <span className="mt-2 whitespace-pre-line text-[13px] font-semibold leading-[1.9] text-ink">
+              {title}
+            </span>
+            {note && <span className="mt-4 text-[11px] text-sub">{note}</span>}
+          </span>
+        </span>
+      );
+
     default:
       return null;
   }
