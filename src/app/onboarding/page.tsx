@@ -38,6 +38,7 @@ export default function OnboardingPage() {
   const [frequency, setFrequency] = useState<number | null>(null);
   const [days, setDays] = useState<number[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
+  const carouselRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -207,11 +208,17 @@ export default function OnboardingPage() {
                   })}
                 </div>
 
-                {/* 요일 — 주기를 고르면 나타난다. 매일은 고를 게 없으니 아예 숨긴다 */}
+                {/* 요일 — 주기를 고르면 나타난다. 매일은 확인 문구만 (칩 없음) */}
+                {daily && (
+                  <p className="mt-4 flex items-center gap-1.5 text-body text-ink">
+                    <Check size={16} className="shrink-0 text-berry" aria-hidden />
+                    매일 업로드하도록 설정했어요.
+                  </p>
+                )}
                 {frequency != null && !daily && (
                   <>
                     <p className="mt-4 text-body font-semibold text-ink">
-                      업로드 요일도 정해볼게요.
+                      어떤 요일이 편하세요? {frequency}개를 골라주세요.
                     </p>
                     <div className="flex gap-1.5">
                       {DAY_LABELS.map((label, d) => {
@@ -265,7 +272,7 @@ export default function OnboardingPage() {
               여러 개 골라도 괜찮아요.
             </p>
 
-            <StyleCarousel selected={selected} onToggle={toggleExample} />
+            <StyleCarousel selected={selected} onToggle={toggleExample} trackRef={carouselRef} />
 
             {/* selection feedback — 부담 없이, 개수만 */}
             <p className="mt-1 text-caption text-sub">
@@ -299,14 +306,25 @@ export default function OnboardingPage() {
                 >
                   ← 이전으로
                 </button>
-                <button
-                  type="button"
-                  onClick={() => complete(null)}
-                  disabled={submitting}
-                  className="text-body text-sub hover:text-ink"
-                >
-                  잘 모르겠어요
-                </button>
+                <div className="flex items-center gap-4">
+                  {/* 망설이면 더 둘러보게 — 캐러셀을 다음 장으로 */}
+                  <button
+                    type="button"
+                    onClick={() => scrollTrack(carouselRef.current, 1)}
+                    className="text-body text-sub hover:text-ink"
+                  >
+                    더 보고 싶어요
+                  </button>
+                  {/* 건너뛰기 — 취향 null 저장 후 동일 진행 */}
+                  <button
+                    type="button"
+                    onClick={() => complete(null)}
+                    disabled={submitting}
+                    className="text-body text-sub hover:text-ink"
+                  >
+                    나중에 정하고 싶어요
+                  </button>
+                </div>
               </div>
             </div>
           </>
@@ -320,24 +338,25 @@ export default function OnboardingPage() {
    게시물 취향 캐러셀 — Desktop 3장+다음 장 살짝, Mobile 1장 중심.
    마우스 드래그·터치 스와이프·Chevron 지원 (스펙 §5)
    ════════════════════════════════════════════════════════════ */
+/** 카드 한 장 폭만큼 가로 스크롤 — Chevron·«더 보고 싶어요»가 같이 쓴다 */
+function scrollTrack(el: HTMLDivElement | null, dir: -1 | 1) {
+  if (!el) return;
+  const card = el.firstElementChild as HTMLElement | null;
+  const width = (card?.offsetWidth ?? 200) + 12; // gap-3
+  el.scrollBy({ left: dir * width, behavior: "smooth" });
+}
+
 function StyleCarousel({
   selected,
   onToggle,
+  trackRef,
 }: {
   selected: string[];
   onToggle: (id: string) => void;
+  trackRef: React.RefObject<HTMLDivElement | null>;
 }) {
-  const trackRef = useRef<HTMLDivElement>(null);
   // 마우스 드래그 스크롤 — 드래그였으면 이어지는 클릭 선택을 무시한다
   const drag = useRef({ down: false, startX: 0, scroll: 0, moved: false });
-
-  function scrollByCard(dir: -1 | 1) {
-    const el = trackRef.current;
-    if (!el) return;
-    const card = el.firstElementChild as HTMLElement | null;
-    const width = (card?.offsetWidth ?? 200) + 12; // gap-3
-    el.scrollBy({ left: dir * width, behavior: "smooth" });
-  }
 
   return (
     <div className="relative mt-6">
@@ -404,7 +423,7 @@ function StyleCarousel({
       {/* Chevron — 데스크톱만. 클릭 영역 44px (DESIGN.md §5) */}
       <button
         type="button"
-        onClick={() => scrollByCard(-1)}
+        onClick={() => scrollTrack(trackRef.current, -1)}
         aria-label="이전 게시물 보기"
         className="absolute -left-3 top-1/2 hidden size-11 -translate-y-1/2 items-center
                    justify-center rounded-pill border border-line bg-surface text-ink
@@ -414,7 +433,7 @@ function StyleCarousel({
       </button>
       <button
         type="button"
-        onClick={() => scrollByCard(1)}
+        onClick={() => scrollTrack(trackRef.current, 1)}
         aria-label="다음 게시물 보기"
         className="absolute -right-3 top-1/2 hidden size-11 -translate-y-1/2 items-center
                    justify-center rounded-pill border border-line bg-surface text-ink
