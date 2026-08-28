@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarDays, ImagePlus, Sparkles } from "lucide-react";
 
 /**
  * 인증 화면(로그인·회원가입·재설정) 왼쪽의 브랜드 패널.
@@ -19,13 +18,13 @@ import { CalendarDays, ImagePlus, Sparkles } from "lucide-react";
  */
 
 const SLIDES = [
-  { icon: Sparkles, mockup: PlanMockup,
+  { mockup: PlanMockup,
     main: "“뭐 올리지?”에서 멈추는 날,\n생각나는 대로 말만 하세요.",
     sub: "주제와 대상은 차곡이 정리해드려요." },
-  { icon: ImagePlus, mockup: CardsMockup,
+  { mockup: CardsMockup,
     main: "말 한마디면\n대상이 다른 카드 여러 장 —",
     sub: "캡션과 해시태그까지 함께요." },
-  { icon: CalendarDays, mockup: CalendarMockup,
+  { mockup: CalendarMockup,
     main: "만든 카드는\n캘린더에 차곡차곡.",
     sub: "오늘은 ‘올릴 것 하나’만 보면 돼요." },
 ];
@@ -87,22 +86,17 @@ function FeatureCarousel() {
           className="flex transition-transform duration-200 ease-out"
           style={{ transform: `translateX(-${index * 100}%)` }}
         >
-          {SLIDES.map(({ icon: Icon, mockup: Mockup, main, sub }, i) => (
+          {SLIDES.map(({ mockup: Mockup, main, sub }, i) => (
             <article
               key={sub}
               className="flex h-[420px] w-full shrink-0 flex-col rounded-lg bg-berry-light p-6"
             >
-              <div className="flex items-center gap-3">
-                <span
-                  className="flex size-8 items-center justify-center rounded-pill
-                             bg-berry text-caption font-bold text-white"
-                >
-                  {`0${i + 1}`}
-                </span>
-                <span className="flex size-8 items-center justify-center rounded-md bg-surface">
-                  <Icon size={18} className="text-berry" aria-hidden />
-                </span>
-              </div>
+              <span
+                className="flex size-8 items-center justify-center self-start rounded-pill
+                           bg-berry text-caption font-bold text-white"
+              >
+                {`0${i + 1}`}
+              </span>
 
               <div className="mt-4 flex flex-1 flex-col justify-center" aria-hidden>
                 <Mockup />
@@ -177,10 +171,11 @@ function PlanMockup() {
 
 /** ② 대상이 다른 카드 3장 */
 function CardsMockup() {
+  // 분야를 나눠 보여준다 — 특정 업종 전용으로 보이지 않게 (08-28)
   const cards = [
     { photo: "bg-berry-tint", title: "운동 루틴\n꾸준히 만드는 법", tags: "#운동 #루틴" },
-    { photo: "bg-purple/25", title: "운동 초보가\n꼭 알아야 할 것", tags: "#초보운동 #습관" },
-    { photo: "bg-surface-muted", title: "운동할 때\n먹으면 좋은 음식", tags: "#식단 #건강" },
+    { photo: "bg-purple/25", title: "홈카페 라떼\n맛있게 내리는 법", tags: "#홈카페 #레시피" },
+    { photo: "bg-surface-muted", title: "가을 데일리룩\n코디 아이디어", tags: "#패션 #데일리룩" },
   ];
   return (
     <div className="flex gap-2">
