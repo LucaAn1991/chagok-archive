@@ -662,16 +662,15 @@ function ProposalPicker({
         </button>
       </div>
 
+      {/* 라벨이 곧 안내다 — 0개면 AI가 정한다는 뜻, 고르면 몇 장이 나올지 약속 (08-28).
+          N = 선택 대상 수 × 주제 수 — 현 흐름은 대화당 주제 1개라 대상 수와 같다 */}
       <button
         type="button"
         onClick={() => onSubmit(audiences)}
         className="mt-5 flex h-11 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
       >
-        이대로 진행하기
+        {audiences.length === 0 ? "차곡이 정해줄게요" : `카드 ${audiences.length}장 만들기`}
       </button>
-      <p className="mt-2 text-center text-caption text-sub">
-        안 고르셔도 돼요 — 차곡이 알아서 정할게요.
-      </p>
     </div>
   );
 }

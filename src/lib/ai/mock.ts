@@ -1,5 +1,6 @@
 import "server-only";
 
+import { AUDIENCES, AUDIENCE_DEFAULT, MAX_CARDS_PER_RUN } from "@/lib/audiences";
 import type { CardDraft, PlanningAI, PlanProposal, PlanTurnResult } from "./types";
 
 /**
@@ -23,12 +24,11 @@ function toTopic(idea: string): string {
   return trimmed.length > 40 ? `${trimmed.slice(0, 40)}…` : trimmed;
 }
 
-/**
- * ② 단계 후보 — 짧은 라벨만 (08-28 확정 — 긴 문구는 선택 피로를 만든다).
+/*
+ * ② 단계 후보의 단일 출처는 lib/audiences.ts다 (08-28 확정).
  * 목적은 화면에서 고르지 않는다 — 대상에 딸려오므로 AI가 정하고,
  * 기획안 카드에서 수정할 수 있다.
  */
-const AUDIENCE_LABELS = ["나를 아는 사람", "나를 모르는 사람", "이 주제를 찾는 사람"];
 
 /** 대상별 기본 목적 — 직접 입력한 대상은 공감 얻기로 둔다 */
 const PURPOSE_BY_AUDIENCE: Record<string, string> = {
@@ -43,8 +43,11 @@ function purposesFor(audiences: string[]): string[] {
 }
 
 function candidates(): PlanProposal {
-  return { audiences: AUDIENCE_LABELS, purposes: [] };
+  return { audiences: AUDIENCES.map((a) => a.label), purposes: [] };
 }
+
+const DEFAULT_AUDIENCE_LABEL =
+  AUDIENCES.find((a) => a.id === AUDIENCE_DEFAULT)?.label ?? AUDIENCES[0].label;
 
 export const mockPlanningAI: PlanningAI = {
   async greeting(): Promise<PlanTurnResult> {
@@ -72,9 +75,7 @@ export const mockPlanningAI: PlanningAI = {
   async selectionTurn(topic: string, selected: PlanProposal): Promise<PlanTurnResult> {
     // 빈 선택이면 AI가 알아서 정하고 넘어간다 (IA 2.1-②)
     const audiences =
-      selected.audiences.length > 0
-        ? selected.audiences
-        : ["나를 모르는 사람", "이 주제를 찾는 사람"];
+      selected.audiences.length > 0 ? selected.audiences : [DEFAULT_AUDIENCE_LABEL];
     // 목적은 대상에 딸려온다 (08-28 확정) — 기획안 카드에서 수정 가능
     const purposes = purposesFor(audiences);
     const picked = selected.audiences.length === 0;
@@ -98,16 +99,14 @@ export const mockPlanningAI: PlanningAI = {
   },
 
   async generateCards({ topic, audiences, purposes, intent }): Promise<CardDraft[]> {
-    // 주제 × 대상 — 대상마다 2장씩. 진짜 AI는 주제를 이해하고 장수·각도를 스스로 정한다
-    const angles = ["첫 이야기", "한 걸음 더"];
+    // 주제 × 대상 = 대상당 정확히 1장 — ② 버튼이 약속한 「카드 N장」과 맞춘다 (08-28).
+    // 한 번에 만드는 상한은 MAX_CARDS_PER_RUN. 진짜 AI도 이 두 규칙을 따른다
     const short = topic.length > 9 ? `${topic.slice(0, 9)}…` : topic;
-    return audiences.flatMap((audience, ai_) =>
-      angles.map((angle, i) => ({
-        title: `${topic} — ${audience}${particle(audience, "을", "를")} 위한 ${angle}`,
-        shortTitle: `${short} ${ai_ * angles.length + i + 1}`,
-        audience,
-        intent: intent || `「${topic}」${particle(topic, "을", "를")} ${audience}의 눈높이에서 ${purposes[0] ?? "공감 얻기"} 중심으로 풀어낸다`,
-      })),
-    );
+    return audiences.slice(0, MAX_CARDS_PER_RUN).map((audience, i) => ({
+      title: `${topic} — ${audience}${particle(audience, "을", "를")} 위한 이야기`,
+      shortTitle: `${short} ${i + 1}`,
+      audience,
+      intent: intent || `「${topic}」${particle(topic, "을", "를")} ${audience}의 눈높이에서 ${purposes[0] ?? "공감 얻기"} 중심으로 풀어낸다`,
+    }));
   },
 };

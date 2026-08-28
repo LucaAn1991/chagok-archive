@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { getPlanningAI } from "@/lib/ai";
+import { MAX_CARDS_PER_RUN } from "@/lib/audiences";
 import { verifyRequest } from "@/lib/server/request-auth";
 
 /**
@@ -46,12 +47,15 @@ export async function POST(
     }
 
     const { ai } = getPlanningAI();
-    const drafts = await ai.generateCards({
-      topic,
-      audiences,
-      purposes: planSnap.get("purposes") ?? [],
-      intent: planSnap.get("intent") ?? "",
-    });
+    // 한 번에 만드는 상한 — AI 구현이 무엇이든 서버가 최종으로 지킨다
+    const drafts = (
+      await ai.generateCards({
+        topic,
+        audiences,
+        purposes: planSnap.get("purposes") ?? [],
+        intent: planSnap.get("intent") ?? "",
+      })
+    ).slice(0, MAX_CARDS_PER_RUN);
     if (drafts.length < 1) {
       return NextResponse.json(
         { error: "카드를 만들지 못했어요. 잠시 후 다시 시도해주세요." },
