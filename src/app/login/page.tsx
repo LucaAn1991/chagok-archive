@@ -170,7 +170,7 @@ function loginErrorMessage(err: unknown): string {
   if (err instanceof FirebaseError) {
     switch (err.code) {
       case "auth/user-not-found":
-        return "가입되지 않은 이메일이에요. 아래에서 회원가입할 수 있어요.";
+        return "가입되지 않은 이메일이에요.";
       case "auth/wrong-password":
         return "비밀번호가 맞지 않아요.";
       case "auth/invalid-credential":
