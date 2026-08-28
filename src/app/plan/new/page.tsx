@@ -3,9 +3,9 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import { collection, getDocs, query, where } from "firebase/firestore";
 import { ArrowUp, Check, Plus } from "lucide-react";
-import { auth, db } from "@/lib/firebase/client";
+import { auth } from "@/lib/firebase/client";
+import { clearDraft, loadDraft, saveDraft } from "@/lib/draft";
 import AppSidebar from "@/components/AppSidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import AIChatBubble, { SystemEventLine } from "@/components/AIChatBubble";
@@ -41,9 +41,6 @@ type TurnPayload =
   | { kind: "text"; text: string }
   | { kind: "selection"; audiences: string[]; purposes: string[] }
   | { kind: "update"; patch: PlanSummaryPatch };
-
-/** 복원 후보 — Firestore에서 읽어온 미완료 draft */
-type ResumeCandidate = { id: string; topic: string; messages: Msg[]; summary: PlanSummary };
 
 async function postJson(path: string, body: unknown): Promise<Record<string, unknown>> {
   const user = auth.currentUser;
@@ -99,7 +96,10 @@ function NewPlanScreen() {
   const [ready, setReady] = useState(false); // ③으로 넘어갈 수 있는 상태
   const [isMock, setIsMock] = useState(false);
 
-  const [resumeCandidate, setResumeCandidate] = useState<ResumeCandidate | null>(null);
+  // ② 대상 선택 — 초안 저장·복구를 위해 카드가 아니라 페이지가 들고 있는다 (08-28)
+  const [picked, setPicked] = useState<string[]>([]);
+  const [extraOptions, setExtraOptions] = useState<string[]>([]); // 직접 입력으로 추가한 후보
+  const [restored, setRestored] = useState(false); // 초안 자동 복구됨 — 상단 배너 표시
   const [confirming, setConfirming] = useState(false); // ③ 카드 생성 진행 중
   const [confirmedLock, setConfirmedLock] = useState(false); // 카드 생성 후 — 주제 읽기 전용
   const [confirmError, setConfirmError] = useState(false);
@@ -153,11 +153,27 @@ function NewPlanScreen() {
         // 주제 등 부분 수정 턴에서는 후보·선택 상태를 건드리지 않는다 (08-28 — 선택 유지)
         setTopicSuggestions((data.topicSuggestions as string[] | null) ?? null);
         setProposal((data.proposal as Proposal | null) ?? null);
+        if (payload.kind === "init" || payload.kind === "text") {
+          // 새 후보 세트가 왔다 — 이전 선택은 의미가 없다 (복구 turn은 선택을 유지)
+          setPicked([]);
+          setExtraOptions([]);
+        }
       }
       setReady(Boolean(data.readyToConfirm));
       setIsMock(Boolean(data.isMock));
       setChatMode(false); // 응답이 오면 액션 바로 되돌린다
     } catch {
+      if (payload.kind === "resume") {
+        // 초안이 더 이상 유효하지 않다(확정됨·삭제됨) — 조용히 비우고 새로 시작
+        clearDraft();
+        setRestored(false);
+        setMessages([]);
+        setSummary({ topic: "", audiences: [], purposes: [], intent: "" });
+        setPicked([]);
+        setPlanId(null);
+        void runTurn({ kind: "init", idea: "", from: null });
+        return;
+      }
       setFailed(payload);
     } finally {
       setSending(false);
@@ -181,62 +197,20 @@ function NewPlanScreen() {
         return;
       }
 
-      // 하다 만 기획이 있는지 본다 — 대화는 매 턴 서버에 저장되므로 복원할 수 있다 (08-28)
-      void (async () => {
-        setSending(true);
-        try {
-          const snap = await getDocs(
-            query(
-              collection(db, "plans"),
-              where("userId", "==", user.uid),
-              where("status", "==", "draft"),
-            ),
-          );
-          const drafts = snap.docs
-            .map((d) => {
-              const data = d.data() as {
-                topic?: string;
-                audiences?: string[];
-                purposes?: string[];
-                intent?: string;
-                messages?: { role: "user" | "assistant" | "system"; text: string }[];
-                createdAt?: { toMillis: () => number };
-              };
-              return { id: d.id, ...data };
-            })
-            .sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+      // 하다 만 대화가 있으면 **묻지 않고 그대로 복구**한다 (08-28 — 팝업 금지).
+      // localStorage는 클라이언트 전용 — 이 콜백은 브라우저에서만 돈다
+      const draft = loadDraft();
+      if (draft) {
+        setPlanId(draft.planId);
+        setMessages(draft.messages as Msg[]);
+        setSummary((prev) => ({ ...prev, topic: draft.topic }));
+        setPicked(draft.audiences ?? []);
+        setRestored(true); // 상단 얇은 배너 한 줄
+        void runTurn({ kind: "resume", id: draft.planId }); // 진행 단계(후보 등)만 서버에서 재계산
+        return;
+      }
 
-          const latest = drafts[0];
-          if (!latest) {
-            void runTurn({ kind: "init", idea: "", from: null });
-            return;
-          }
-
-          const msgs: Msg[] = (latest.messages ?? []).map((m) => ({ role: m.role, text: m.text }));
-          const summaryData: PlanSummary = {
-            topic: latest.topic ?? "",
-            audiences: latest.audiences ?? [],
-            purposes: latest.purposes ?? [],
-            intent: latest.intent ?? "",
-          };
-          const meaningful = Boolean(latest.topic) || msgs.some((m) => m.role === "user");
-
-          if (meaningful) {
-            // 진행하던 내용이 있다 — 이어서 할지 물어본다
-            setSending(false);
-            setResumeCandidate({ id: latest.id, topic: latest.topic ?? "", messages: msgs, summary: summaryData });
-          } else {
-            // 인사만 남은 빈 draft — 팝업 없이 조용히 재사용 (빈 세션이 쌓이지 않게)
-            setPlanId(latest.id);
-            setMessages(msgs);
-            setSummary(summaryData);
-            void runTurn({ kind: "resume", id: latest.id });
-          }
-        } catch {
-          setSending(false);
-          setFailed({ kind: "init", idea: "", from: null });
-        }
-      })();
+      void runTurn({ kind: "init", idea: "", from: null });
     });
     return unsubscribe;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -248,28 +222,51 @@ function NewPlanScreen() {
   }, [messages, sending, failed, proposal, topicSuggestions]);
 
   function sendText(text: string) {
+    dismissBanner();
     setMessages((prev) => [...prev, { role: "user", text }]);
     void runTurn({ kind: "text", text });
   }
 
-  /** 「이어서 진행할까요?」 팝업 — 수락 시 저장된 대화·기획안·진행 단계를 복원한다 */
-  function acceptResume() {
-    const c = resumeCandidate;
-    if (!c) return;
-    setResumeCandidate(null);
-    setPlanId(c.id);
-    setMessages(c.messages);
-    setSummary(c.summary);
-    void runTurn({ kind: "resume", id: c.id });
-  }
-
-  function declineResume() {
-    setResumeCandidate(null);
+  /** 초안 배너의 「새로 시작」 — 초안을 지우고 빈 상태에서 시작한다 */
+  function startFresh() {
+    clearDraft();
+    setRestored(false);
+    setMessages([]);
+    setSummary({ topic: "", audiences: [], purposes: [], intent: "" });
+    setPicked([]);
+    setExtraOptions([]);
+    setProposal(null);
+    setTopicSuggestions(null);
+    setReady(false);
+    setPlanId(null);
     void runTurn({ kind: "init", idea: "", from: null });
   }
 
+  /** 사용자가 무언가 하면 복구 배너는 역할이 끝난다 */
+  function dismissBanner() {
+    setRestored(false);
+  }
+
+  // 초안 자동 저장 — 상태가 바뀔 때마다, 500ms 디바운스 (매 키 입력마다 쓰지 않는다)
+  useEffect(() => {
+    if (!planId || confirmedLock) return;
+    const meaningful = summary.topic !== "" || messages.some((m) => m.role === "user");
+    if (!meaningful) return;
+    const timer = setTimeout(() => {
+      saveDraft({
+        planId,
+        topic: summary.topic,
+        audiences: picked,
+        messages,
+        step: ready ? "ready" : proposal ? "proposal" : "topic",
+      });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [planId, summary.topic, picked, messages, ready, proposal, confirmedLock]);
+
   /** ② 대상 선택 제출 — 빈 선택이면 AI가 알아서 정한다. 목적은 대상에 딸려온다 (08-28) */
   function sendSelection(audiences: string[]) {
+    dismissBanner();
     const label = audiences.length > 0 ? audiences.join(" · ") : "차곡이 알아서 정해주세요.";
     setMessages((prev) => [...prev, { role: "user", text: label }]);
     setProposal(null);
@@ -287,6 +284,7 @@ function NewPlanScreen() {
     try {
       const res = await postWithRetry(`/api/plans/${planId}/confirm`, {});
       setConfirmedLock(true); // 카드가 만들어졌다 — 이후 주제 수정은 「이어서 기획하기」로
+      clearDraft(); // 초안의 역할 종료 — 다음 진입은 빈 상태여야 한다
       await postWithRetry(`/api/plans/${planId}/schedule`, {});
       // 상한을 넘겨 8장까지만 만든 경우 — 결과 화면이 한 줄 안내를 띄운다
       router.push(`/plan/${planId}/result${res.capped ? "?capped=1" : ""}`);
@@ -329,13 +327,6 @@ function NewPlanScreen() {
 
   return (
     <div className="flex flex-1">
-      {resumeCandidate && (
-        <ResumeModal
-          topic={resumeCandidate.topic}
-          onAccept={acceptResume}
-          onDecline={declineResume}
-        />
-      )}
       <AppSidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -353,6 +344,8 @@ function NewPlanScreen() {
             </header>
 
             <div className="flex flex-col gap-4">
+              {restored && <RestoreBanner onFresh={startFresh} />}
+
               {messages.map((m, i) =>
                 m.role === "system" ? (
                   <SystemEventLine key={i} text={m.text} />
@@ -374,10 +367,28 @@ function NewPlanScreen() {
               {/* ② 대상 후보 — sending 중에도 유지한다: 주제 저장 중 선택이 사라지면 안 된다 (08-28) */}
               {proposal && !failed && (
                 <ProposalPicker
-                  proposal={proposal}
+                  options={[
+                    ...proposal.audiences,
+                    ...extraOptions.filter((o) => !proposal.audiences.includes(o)),
+                  ]}
+                  picked={picked}
                   topic={summary.topic}
-                  onSaveTopic={(next) => saveSummaryPatch({ topic: next })}
-                  onSubmit={sendSelection}
+                  onSaveTopic={(next) => {
+                    dismissBanner();
+                    saveSummaryPatch({ topic: next });
+                  }}
+                  onToggle={(a) => {
+                    dismissBanner();
+                    setPicked((prev) =>
+                      prev.includes(a) ? prev.filter((v) => v !== a) : [...prev, a],
+                    );
+                  }}
+                  onAddOption={(a) => {
+                    dismissBanner();
+                    setExtraOptions((prev) => (prev.includes(a) ? prev : [...prev, a]));
+                    setPicked((prev) => (prev.includes(a) ? prev : [...prev, a]));
+                  }}
+                  onSubmit={() => sendSelection(picked)}
                 />
               )}
 
@@ -515,49 +526,24 @@ function ReadyActionBar({
 }
 
 /* ============================================================
-   복원 팝업 — 이탈 후 재진입 (모바일은 bottom sheet 우선, DESIGN §13)
+   초안 복구 배너 — 얇은 한 줄, 말풍선 아님 (08-28).
+   F11 「이어서 기획하기」와 다른 기능 — 그 라벨을 쓰지 않는다
    ============================================================ */
 
-function ResumeModal({
-  topic,
-  onAccept,
-  onDecline,
-}: {
-  topic: string;
-  onAccept: () => void;
-  onDecline: () => void;
-}) {
+function RestoreBanner({ onFresh }: { onFresh: () => void }) {
   return (
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="하던 기획 이어서 진행"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/30 md:items-center md:p-4"
+      role="status"
+      className="flex items-center justify-between rounded-md bg-surface-muted px-3 py-2"
     >
-      {/* 모달·floating layer에만 약한 그림자 허용 (DESIGN §4) */}
-      <div className="w-full max-w-[400px] rounded-t-xl bg-surface p-6 shadow-lg md:rounded-xl">
-        <h2 className="text-title font-bold text-ink">하던 기획이 있어요</h2>
-        <p className="mt-2 text-body text-sub">
-          {topic ? `「${topic}」 기획을 하다 말았어요. ` : "마치지 않은 기획 대화가 있어요. "}
-          이어서 진행할까요?
-        </p>
-        <div className="mt-6 flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={onAccept}
-            className="flex h-12 w-full items-center justify-center rounded-md bg-berry text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
-          >
-            이어서 진행할게요
-          </button>
-          <button
-            type="button"
-            onClick={onDecline}
-            className="flex h-11 w-full items-center justify-center rounded-md text-body font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
-          >
-            새로 시작할게요
-          </button>
-        </div>
-      </div>
+      <span className="text-[13px] text-sub">하던 기획을 이어서 열었어요</span>
+      <button
+        type="button"
+        onClick={onFresh}
+        className="shrink-0 px-1 text-[13px] font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
+      >
+        새로 시작
+      </button>
     </div>
   );
 }
@@ -622,29 +608,28 @@ function Chip({
 }
 
 function ProposalPicker({
-  proposal,
+  options,
+  picked,
   topic,
   onSaveTopic,
+  onToggle,
+  onAddOption,
   onSubmit,
 }: {
-  proposal: Proposal;
+  options: string[];
+  picked: string[];
   topic: string;
   onSaveTopic: (next: string) => void;
-  onSubmit: (audiences: string[]) => void;
+  onToggle: (audience: string) => void;
+  onAddOption: (audience: string) => void;
+  onSubmit: () => void;
 }) {
-  const [audienceOptions, setAudienceOptions] = useState(proposal.audiences);
-  const [audiences, setAudiences] = useState<string[]>([]);
   const [custom, setCustom] = useState("");
-
-  function toggle(list: string[], set: (v: string[]) => void, value: string) {
-    set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
-  }
 
   function addCustom() {
     const value = custom.trim();
     if (!value) return;
-    if (!audienceOptions.includes(value)) setAudienceOptions([...audienceOptions, value]);
-    if (!audiences.includes(value)) setAudiences([...audiences, value]);
+    onAddOption(value);
     setCustom("");
   }
 
@@ -657,13 +642,8 @@ function ProposalPicker({
 
       <h2 className="text-body font-bold text-ink">누구에게 말할까요?</h2>
       <div className="mt-3 flex flex-wrap gap-2">
-        {audienceOptions.map((a) => (
-          <Chip
-            key={a}
-            label={a}
-            selected={audiences.includes(a)}
-            onToggle={() => toggle(audiences, setAudiences, a)}
-          />
+        {options.map((a) => (
+          <Chip key={a} label={a} selected={picked.includes(a)} onToggle={() => onToggle(a)} />
         ))}
       </div>
       <div className="mt-3 flex gap-2">
@@ -697,10 +677,10 @@ function ProposalPicker({
           N = 선택 대상 수 × 주제 수 — 현 흐름은 대화당 주제 1개라 대상 수와 같다 */}
       <button
         type="button"
-        onClick={() => onSubmit(audiences)}
+        onClick={onSubmit}
         className="mt-5 flex h-11 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
       >
-        {audiences.length === 0 ? "차곡이 정해줄게요" : `카드 ${audiences.length}장 만들기`}
+        {picked.length === 0 ? "차곡이 정해줄게요" : `카드 ${picked.length}장 만들기`}
       </button>
     </div>
   );
