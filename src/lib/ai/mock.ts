@@ -1,6 +1,6 @@
 import "server-only";
 
-import { AUDIENCES, AUDIENCE_DEFAULT, MAX_CARDS_PER_RUN } from "@/lib/audiences";
+import { AUDIENCES, AUDIENCE_DEFAULT, MAX_CARDS_PER_RUN, audiencePrompt } from "@/lib/audiences";
 import { suffix을 } from "@/lib/josa";
 import type { CardDraft, PlanningAI, PlanProposal, PlanTurnResult } from "./types";
 
@@ -122,7 +122,7 @@ export const mockPlanningAI: PlanningAI = {
     };
   },
 
-  async generateCard({ topic, audience, purposes }): Promise<CardDraft> {
+  async generateCard({ topic, audience }): Promise<CardDraft> {
     // 대상 하나당 카드 하나 — 대상별로 독립 생성된다 (08-28).
     // 진짜 AI는 AUDIENCES의 prompt를 지시문으로 받아 말투·도입부를 대상에 맞춘다
     const short = topic.length > 7 ? `${topic.slice(0, 7)}…` : topic;
@@ -137,9 +137,8 @@ export const mockPlanningAI: PlanningAI = {
       title: `${topic} — ${audience}에게`,
       shortTitle: `${short}·${meta ? suffix[meta.id] : "이야기"}`,
       audience,
-      intent: meta
-        ? `「${topic}」${suffix을(topic)} ${audience}에게. ${meta.prompt}`
-        : `「${topic}」${suffix을(topic)} ${audience}의 눈높이에서 ${purposes[0] ?? "공감 얻기"} 중심으로 풀어낸다`,
+      // 기본 3종·커스텀 대상 모두 audiencePrompt 한 경로 — 커스텀도 지시 없이 만들지 않는다 (08-28)
+      intent: `「${topic}」${suffix을(topic)} ${audience}에게. ${audiencePrompt(audience)}`,
     };
   },
 };

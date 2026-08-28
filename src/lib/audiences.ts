@@ -29,3 +29,14 @@ export type AudienceId = (typeof AUDIENCES)[number]["id"];
 
 export const AUDIENCE_DEFAULT = "stranger";
 export const MAX_CARDS_PER_RUN = 8;
+
+/**
+ * 대상 label → 생성 지시. 기본 3종은 각자의 prompt를,
+ * 사용자가 직접 쓴 대상은 아래 최소 지시를 쓴다 (08-28 확정).
+ * 실AI·모의 양쪽이 이 함수 하나를 거친다.
+ */
+export function audiencePrompt(label: string): string {
+  const meta = AUDIENCES.find((a) => a.label === label);
+  if (meta) return meta.prompt;
+  return `이 게시물은 "${label}"에게 하는 이야기다. 그 사람이 지금 처한 상황을 짐작해서, 그 사람만 알아들을 수 있는 구체적인 이야기로 쓸 것.`;
+}

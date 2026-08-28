@@ -6,6 +6,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { ArrowUp, Check, Plus } from "lucide-react";
 import { auth } from "@/lib/firebase/client";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/draft";
+import { addCustomAudience, loadCustomAudiences } from "@/lib/custom-audiences";
 import AppSidebar from "@/components/AppSidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import AIChatBubble, { SystemEventLine } from "@/components/AIChatBubble";
@@ -98,7 +99,8 @@ function NewPlanScreen() {
 
   // ② 대상 선택 — 초안 저장·복구를 위해 카드가 아니라 페이지가 들고 있는다 (08-28)
   const [picked, setPicked] = useState<string[]>([]);
-  const [extraOptions, setExtraOptions] = useState<string[]>([]); // 직접 입력으로 추가한 후보
+  // 직접 입력으로 추가한 후보 — localStorage에 남겨 다음에도 칩으로 보인다 (08-28)
+  const [extraOptions, setExtraOptions] = useState<string[]>(() => loadCustomAudiences());
   const [restored, setRestored] = useState(false); // 초안 자동 복구됨 — 상단 배너 표시
   const [confirming, setConfirming] = useState(false); // ③ 카드 생성 진행 중
   const [confirmedLock, setConfirmedLock] = useState(false); // 카드 생성 후 — 주제 읽기 전용
@@ -162,9 +164,8 @@ function NewPlanScreen() {
         }
         setProposal((data.proposal as Proposal | null) ?? null);
         if (payload.kind === "init" || payload.kind === "text") {
-          // 새 후보 세트가 왔다 — 이전 선택은 의미가 없다 (복구 turn은 선택을 유지)
+          // 새 후보 세트가 왔다 — 이전 «선택»만 비운다. 커스텀 후보는 세션을 넘어 유지 (08-28)
           setPicked([]);
-          setExtraOptions([]);
         }
       }
       setReady(Boolean(data.readyToConfirm));
@@ -242,7 +243,6 @@ function NewPlanScreen() {
     setMessages([]);
     setSummary({ topic: "", audiences: [], purposes: [], intent: "" });
     setPicked([]);
-    setExtraOptions([]);
     setProposal(null);
     setTopicSuggestions(null);
     setReady(false);
@@ -383,10 +383,8 @@ function NewPlanScreen() {
               {/* ② 대상 후보 — sending 중에도 유지한다: 주제 저장 중 선택이 사라지면 안 된다 (08-28) */}
               {proposal && !failed && (
                 <ProposalPicker
-                  options={[
-                    ...proposal.audiences,
-                    ...extraOptions.filter((o) => !proposal.audiences.includes(o)),
-                  ]}
+                  base={proposal.audiences}
+                  extras={extraOptions.filter((o) => !proposal.audiences.includes(o))}
                   picked={picked}
                   topic={summary.topic}
                   onSaveTopic={(next) => {
@@ -401,7 +399,7 @@ function NewPlanScreen() {
                   }}
                   onAddOption={(a) => {
                     dismissBanner();
-                    setExtraOptions((prev) => (prev.includes(a) ? prev : [...prev, a]));
+                    setExtraOptions(addCustomAudience(a)); // localStorage에도 남긴다
                     setPicked((prev) => (prev.includes(a) ? prev : [...prev, a]));
                   }}
                   onSubmit={() => sendSelection(picked)}
@@ -603,10 +601,12 @@ function TopicSuggestionPicker({
 function Chip({
   label,
   selected,
+  custom,
   onToggle,
 }: {
   label: string;
   selected: boolean;
+  custom?: boolean; // 사용자가 직접 쓴 대상 — 점선으로 시스템 정의와 구분 (08-28)
   onToggle: () => void;
 }) {
   // 선택 칩: 배경 --berry-light · 테두리 2px --berry · 글자 --berry-dark + Check (DESIGN §6)
@@ -617,6 +617,7 @@ function Chip({
       aria-pressed={selected}
       className={[
         "flex min-h-11 items-center gap-1.5 rounded-pill px-4 text-body transition-colors duration-200",
+        custom ? "border-dashed" : "",
         selected
           ? "border-2 border-berry bg-berry-light font-semibold text-berry-dark"
           : "border border-line bg-surface text-ink hover:bg-surface-muted",
@@ -629,7 +630,8 @@ function Chip({
 }
 
 function ProposalPicker({
-  options,
+  base,
+  extras,
   picked,
   topic,
   onSaveTopic,
@@ -637,7 +639,8 @@ function ProposalPicker({
   onAddOption,
   onSubmit,
 }: {
-  options: string[];
+  base: string[];
+  extras: string[]; // 직접 입력으로 추가된 후보 — 점선으로 구분
   picked: string[];
   topic: string;
   onSaveTopic: (next: string) => void;
@@ -646,12 +649,20 @@ function ProposalPicker({
   onSubmit: () => void;
 }) {
   const [custom, setCustom] = useState("");
+  // 「직접 쓰기」는 기본 접힘 — 하단 채팅창과 입력창이 두 개로 보이지 않게 (08-28)
+  const [customOpen, setCustomOpen] = useState(false);
+  const customInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (customOpen) customInputRef.current?.focus();
+  }, [customOpen]);
 
   function addCustom() {
     const value = custom.trim();
     if (!value) return;
     onAddOption(value);
     setCustom("");
+    setCustomOpen(false); // 추가하고 나면 다시 접는다
   }
 
   return (
@@ -662,36 +673,58 @@ function ProposalPicker({
       <div className="my-3 border-t border-line" />
 
       <h2 className="text-body font-bold text-ink">누구에게 말할까요?</h2>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {options.map((a) => (
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {base.map((a) => (
           <Chip key={a} label={a} selected={picked.includes(a)} onToggle={() => onToggle(a)} />
         ))}
-      </div>
-      <div className="mt-3 flex gap-2">
-        <label htmlFor="custom-audience" className="sr-only">
-          대상 직접 입력
-        </label>
-        <input
-          id="custom-audience"
-          value={custom}
-          onChange={(e) => setCustom(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              addCustom();
-            }
-          }}
-          placeholder="직접 입력할 수도 있어요"
-          className="h-11 min-w-0 flex-1 rounded-md border border-line bg-surface px-4 text-body text-ink placeholder:text-sub/60"
-        />
-        <button
-          type="button"
-          onClick={addCustom}
-          aria-label="대상 추가"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-line text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
-        >
-          <Plus size={18} aria-hidden />
-        </button>
+        {extras.map((a) => (
+          <Chip
+            key={a}
+            label={a}
+            custom
+            selected={picked.includes(a)}
+            onToggle={() => onToggle(a)}
+          />
+        ))}
+
+        {customOpen ? (
+          <span className="flex min-w-0 items-center gap-1.5">
+            <label htmlFor="custom-audience" className="sr-only">
+              대상 직접 입력
+            </label>
+            <input
+              id="custom-audience"
+              ref={customInputRef}
+              value={custom}
+              onChange={(e) => setCustom(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  addCustom();
+                }
+                if (e.key === "Escape") setCustomOpen(false);
+              }}
+              placeholder="누구에게 말할까요?"
+              className="h-11 w-44 min-w-0 rounded-pill border border-dashed border-line bg-surface px-4 text-body text-ink placeholder:text-sub/60"
+            />
+            <button
+              type="button"
+              onClick={addCustom}
+              aria-label="대상 추가"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-line text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
+            >
+              <Plus size={18} aria-hidden />
+            </button>
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setCustomOpen(true)}
+            className="flex min-h-11 items-center px-2 text-caption font-semibold text-sub transition-colors duration-200 hover:text-ink"
+          >
+            + 직접 쓰기
+          </button>
+        )}
       </div>
 
       {/* 라벨이 곧 안내다 — 0개면 AI가 정한다는 뜻, 고르면 몇 장이 나올지 약속 (08-28).
