@@ -158,13 +158,22 @@ export default function LoginPage() {
   );
 }
 
-/** Firebase 에러 코드 → 한국어 안내. 계정 존재 여부는 노출하지 않는다 */
+/**
+ * Firebase 에러 코드 → 한국어 안내.
+ *
+ * 미가입 이메일은 구분해서 알려준다 (08-28 확정 — 구글·인스타그램식 표준 UX).
+ * 단, user-not-found·wrong-password는 Firebase 콘솔에서 «이메일 열거 보호»를
+ * 꺼야 내려온다. 켜져 있으면 둘 다 invalid-credential로 와서 일반 문구가 나온다.
+ * 비밀번호 재설정 화면은 계속 비노출 유지 («메일을 보냈어요» 동일 응답).
+ */
 function loginErrorMessage(err: unknown): string {
   if (err instanceof FirebaseError) {
     switch (err.code) {
-      case "auth/invalid-credential":
       case "auth/user-not-found":
+        return "가입되지 않은 이메일이에요. 아래에서 회원가입할 수 있어요.";
       case "auth/wrong-password":
+        return "비밀번호가 맞지 않아요.";
+      case "auth/invalid-credential":
         return "이메일 또는 비밀번호가 맞지 않아요.";
       case "auth/invalid-email":
         return "이메일 형식을 확인해주세요.";
