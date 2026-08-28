@@ -34,8 +34,8 @@ const SLIDES = [
   },
   {
     mockup: CreateMockup,
-    main: "오늘의 카드를 열면\n제작까지 이어져요.",
-    sub: "캡션부터 카드뉴스까지\n차곡과 함께 만들어요.",
+    main: "캡션부터 카드뉴스까지,\n초안은 차곡이 만들어요.",
+    sub: "오늘의 카드를 열고\n다듬기만 하면 돼요.",
   },
 ];
 
@@ -99,7 +99,7 @@ function FeatureCarousel() {
           {SLIDES.map(({ mockup: Mockup, main, sub }, i) => (
             <article
               key={main}
-              className="flex h-[440px] w-full shrink-0 flex-col rounded-lg bg-berry-light p-6"
+              className="flex h-[480px] w-full shrink-0 flex-col rounded-lg bg-berry-light p-6"
             >
               <span
                 className="flex size-8 items-center justify-center self-start rounded-pill
@@ -241,7 +241,7 @@ function CreateMockup() {
       </div>
 
       {/* 오른쪽 — 완성된 게시물 (온보딩 Warm Lifestyle 문법, 4:5) */}
-      <div className="w-[46%] shrink-0">
+      <div className="w-[40%] shrink-0">
         <div className="flex aspect-[4/5] flex-col overflow-hidden rounded-md bg-[#F6F0E7] p-2">
           <span className="relative block flex-1 overflow-hidden">
             <Image src={EVENING_PHOTO} alt="" fill sizes="240px" className="object-cover" />
