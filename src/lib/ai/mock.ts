@@ -10,6 +10,13 @@ import type { CardDraft, PlanningAI, PlanProposal, PlanTurnResult } from "./type
  * 실구현이 붙으면 후보·기획의도는 주제를 이해하고 실시간으로 만들어진다.
  */
 
+/** 받침 유무로 조사를 고른다 — 한글이 아니면 뒤 조사를 쓴다 (예: 을/를 → 를) */
+function particle(word: string, withBatchim: string, without: string): string {
+  const last = word.charCodeAt(word.length - 1);
+  if (last < 0xac00 || last > 0xd7a3) return without;
+  return (last - 0xac00) % 28 > 0 ? withBatchim : without;
+}
+
 /** 사용자가 쓴 아이디어 문장을 주제로 다듬는 흉내 — 앞뒤 공백 제거 + 길이 제한 */
 function toTopic(idea: string): string {
   const trimmed = idea.trim().replace(/\s+/g, " ");
@@ -59,7 +66,7 @@ export const mockPlanningAI: PlanningAI = {
       selected.audiences.length > 0 ? selected.audiences : pool.audiences.slice(0, 2);
     const purposes = selected.purposes.length > 0 ? selected.purposes : ["공감 얻기"];
     const picked = selected.audiences.length === 0 && selected.purposes.length === 0;
-    const intent = `「${topic}」을(를) ${audiences[0]}의 눈높이에서 ${purposes[0]} 중심으로 풀어내는 시리즈`;
+    const intent = `「${topic}」${particle(topic, "을", "를")} ${audiences[0]}의 눈높이에서 ${purposes[0]} 중심으로 풀어내는 시리즈`;
 
     return {
       reply: [
@@ -84,10 +91,10 @@ export const mockPlanningAI: PlanningAI = {
     const short = topic.length > 9 ? `${topic.slice(0, 9)}…` : topic;
     return audiences.flatMap((audience, ai_) =>
       angles.map((angle, i) => ({
-        title: `${topic} — ${audience}를 위한 ${angle}`,
+        title: `${topic} — ${audience}${particle(audience, "을", "를")} 위한 ${angle}`,
         shortTitle: `${short} ${ai_ * angles.length + i + 1}`,
         audience,
-        intent: intent || `「${topic}」을(를) ${audience}의 눈높이에서 ${purposes[0] ?? "공감 얻기"} 중심으로 풀어낸다`,
+        intent: intent || `「${topic}」${particle(topic, "을", "를")} ${audience}의 눈높이에서 ${purposes[0] ?? "공감 얻기"} 중심으로 풀어낸다`,
       })),
     );
   },
