@@ -456,7 +456,7 @@ function StyleCarousel({
    @TODO: 실제 시안·사진 확정 시 교체 (DESIGN.md §18)
    ════════════════════════════════════════════════════════════ */
 function PostExample({ example }: { example: StyleExample }) {
-  const { contentFormat, title, note, meta, items, photo } = example;
+  const { contentFormat, title, note, meta, items, verdict, photo } = example;
 
   switch (contentFormat) {
     case "thought":
@@ -479,7 +479,7 @@ function PostExample({ example }: { example: StyleExample }) {
       );
 
     case "editorial":
-      // 사진 + 에세이 — 매거진 구성
+      // 사진 + 에세이 — 매거진 구성. 본문은 실제 문장
       return (
         <span className="flex h-full flex-col bg-surface">
           <span className="relative block h-[52%] shrink-0 overflow-hidden">
@@ -492,38 +492,35 @@ function PostExample({ example }: { example: StyleExample }) {
             <span className="mt-2 whitespace-pre-line text-[16px] font-bold leading-[1.4] text-ink">
               {title}
             </span>
-            <span className="mt-2.5 flex flex-col gap-1.5">
-              <span className="h-1.5 w-full rounded-pill bg-ink/10" />
-              <span className="h-1.5 w-4/5 rounded-pill bg-ink/10" />
-            </span>
+            {note && (
+              <span className="mt-2.5 whitespace-pre-line text-[10px] leading-[1.8] text-sub">
+                {note}
+              </span>
+            )}
             <span className="mt-auto self-end text-[9px] text-sub">02</span>
           </span>
         </span>
       );
 
     case "routine":
-      // 데일리 루틴 — 부드러운 그래픽 + 작은 정보 3개
+      // 데일리 루틴 — 부드러운 배경 + 타이포 리스트 (컴포넌트 없음)
       return (
-        <span className="relative flex h-full flex-col overflow-hidden bg-berry-light p-5">
+        <span className="relative flex h-full flex-col items-center justify-center overflow-hidden bg-berry-light p-6 text-center">
           <span className="absolute -right-9 -top-9 size-24 rounded-pill bg-berry-tint" />
           <span className="absolute -bottom-10 -left-8 size-28 rounded-pill bg-purple/12" />
-          <span className="relative mt-1 text-center text-[16px] font-bold leading-[1.45] text-berry-dark">
+          <span className="relative text-[10px] font-semibold tracking-[0.25em] text-berry-dark/70">
+            데일리 루틴
+          </span>
+          <span className="relative mt-2 text-[17px] font-bold leading-[1.45] text-berry-dark">
             {title}
           </span>
-          <span className="relative mt-5 flex flex-col gap-2.5">
-            {items?.map((item) => (
-              <span
-                key={item}
-                className="flex items-center gap-2.5 rounded-xl bg-surface/95 px-4 py-3"
-              >
-                <span className="size-2 shrink-0 rounded-pill bg-berry/60" />
-                <span className="text-[12px] font-semibold text-ink">{item}</span>
+          <span className="relative mt-6 flex flex-col items-center gap-3">
+            {items?.map((item, i) => (
+              <span key={item} className="flex flex-col items-center gap-3">
+                {i > 0 && <span className="size-1 rounded-pill bg-berry/30" />}
+                <span className="text-[13px] font-semibold text-ink">{item}</span>
               </span>
             ))}
-          </span>
-          <span className="relative mt-auto flex justify-center gap-1.5 pt-3">
-            <span className="h-1.5 w-6 rounded-pill bg-berry/30" />
-            <span className="h-1.5 w-3 rounded-pill bg-purple/25" />
           </span>
         </span>
       );
@@ -541,15 +538,45 @@ function PostExample({ example }: { example: StyleExample }) {
         </span>
       );
 
+    case "comparison": {
+      // 비교·변화 — 위(전)/아래(후) 분할. 경계는 타이포로만 표시
+      const [before = "", after = ""] = items ?? [];
+      const [beforeLabel, beforeText] = before.split("|");
+      const [afterLabel, afterText] = after.split("|");
+      return (
+        <span className="flex h-full flex-col">
+          <span className="flex flex-1 flex-col justify-center gap-1.5 bg-surface-muted p-6">
+            <span className="text-[10px] font-semibold tracking-[0.2em] text-sub">
+              {beforeLabel}
+            </span>
+            <span className="text-[17px] font-bold leading-[1.35] text-ink">{beforeText}</span>
+          </span>
+          <span className="flex flex-1 flex-col justify-center gap-1.5 bg-berry-light p-6">
+            {meta && (
+              <span className="text-[9px] tracking-[0.3em] text-berry-dark/60">
+                {meta} —
+              </span>
+            )}
+            <span className="mt-1 text-[10px] font-semibold tracking-[0.2em] text-berry-dark">
+              {afterLabel}
+            </span>
+            <span className="text-[17px] font-bold leading-[1.35] text-berry-dark">
+              {afterText}
+            </span>
+          </span>
+        </span>
+      );
+    }
+
     case "diary":
-      // 사진 중심 기록 — 개인 피드 스냅샷
+      // 사진 중심 기록 — WEEK 표시도 타이포로만
       return (
         <span className="relative block h-full overflow-hidden">
           {photo && <Image src={photo} alt="" fill sizes="320px" className="object-cover" />}
           <span className="absolute bottom-0 left-0 h-28 w-full bg-ink/20" />
           <span className="absolute bottom-0 left-0 h-16 w-full bg-ink/25" />
           {meta && (
-            <span className="absolute left-3 top-3 rounded-sm bg-surface/90 px-2 py-1 text-[10px] font-bold text-ink">
+            <span className="absolute left-4 top-4 text-[11px] font-bold tracking-[0.3em] text-white">
               {meta}
             </span>
           )}
@@ -560,132 +587,8 @@ function PostExample({ example }: { example: StyleExample }) {
         </span>
       );
 
-    case "informational":
-      // 정보 카드뉴스 — 정보 단위 3개가 첫 화면에 보인다
-      return (
-        <span className="flex h-full flex-col bg-surface p-5">
-          <span className="flex items-center gap-2">
-            <span className="rounded-sm bg-berry-tint px-1.5 py-0.5 text-[10px] font-bold text-berry-dark">
-              가이드
-            </span>
-            <span className="text-[10px] text-sub">운동 습관</span>
-          </span>
-          <span className="mt-2.5 whitespace-pre-line text-[15px] font-bold leading-[1.4] text-ink">
-            {title}
-          </span>
-          <span className="mt-3.5 flex flex-1 flex-col justify-start gap-2">
-            {items?.map((item, i) => (
-              <span
-                key={item}
-                className="flex items-start gap-2.5 rounded-md border border-line bg-surface p-2.5"
-              >
-                <span
-                  className="flex size-5 shrink-0 items-center justify-center rounded-pill
-                             bg-berry text-[10px] font-bold text-white"
-                >
-                  {i + 1}
-                </span>
-                <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-                  <span className="text-[12px] font-semibold leading-none text-ink">{item}</span>
-                  <span className="h-1 w-4/5 rounded-pill bg-ink/10" />
-                </span>
-              </span>
-            ))}
-          </span>
-          <span className="mt-2.5 flex items-center gap-2">
-            <span className="flex h-1 flex-1 overflow-hidden rounded-pill bg-surface-muted">
-              <span className="w-1/3 rounded-pill bg-berry" />
-            </span>
-            <span className="text-[9px] text-sub">1 / 3</span>
-          </span>
-        </span>
-      );
-
-    case "comparison": {
-      // 비교·변화 — 위(전)/아래(후) 분할 + 가운데 칩
-      const [before = "", after = ""] = items ?? [];
-      const [beforeLabel, beforeText] = before.split("|");
-      const [afterLabel, afterText] = after.split("|");
-      return (
-        <span className="relative flex h-full flex-col">
-          <span className="flex flex-1 flex-col justify-center gap-1.5 bg-surface-muted p-6">
-            <span className="text-[10px] font-semibold tracking-[0.15em] text-sub">
-              {beforeLabel}
-            </span>
-            <span className="text-[17px] font-bold leading-[1.35] text-ink">{beforeText}</span>
-          </span>
-          <span className="flex flex-1 flex-col justify-center gap-1.5 bg-berry-light p-6">
-            <span className="text-[10px] font-semibold tracking-[0.15em] text-berry-dark">
-              {afterLabel}
-            </span>
-            <span className="text-[17px] font-bold leading-[1.35] text-berry-dark">
-              {afterText}
-            </span>
-          </span>
-          {meta && (
-            <span
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
-                         rounded-pill bg-ink px-3 py-1 text-[10px] font-bold text-white"
-            >
-              {meta}
-            </span>
-          )}
-        </span>
-      );
-    }
-
-    case "checklist":
-      // 체크리스트 — 저장 유도형. 앞 2개는 완료 상태로 그린다 (데모)
-      return (
-        <span className="flex h-full flex-col bg-surface p-5">
-          <span className="whitespace-pre-line text-[16px] font-bold leading-[1.4] text-ink">
-            {title}
-          </span>
-          <span className="mt-4 flex flex-1 flex-col justify-start gap-3">
-            {items?.map((item, i) => {
-              const done = i < 2;
-              return (
-                <span key={item} className="flex items-center gap-2.5">
-                  <span
-                    className={
-                      done
-                        ? "flex size-5 shrink-0 items-center justify-center rounded-sm bg-berry text-white"
-                        : "size-5 shrink-0 rounded-sm border-2 border-line"
-                    }
-                  >
-                    {done && <Check size={12} aria-hidden />}
-                  </span>
-                  <span
-                    className={`text-[12px] font-semibold ${
-                      done ? "text-sub line-through" : "text-ink"
-                    }`}
-                  >
-                    {item}
-                  </span>
-                </span>
-              );
-            })}
-          </span>
-          <span className="text-[10px] text-sub">저장해두고 체크해요</span>
-        </span>
-      );
-
-    case "quote":
-      // 인용·글귀 — 얇은 프레임 · 가운데 정렬 · 문학적
-      return (
-        <span className="flex h-full bg-surface p-3">
-          <span className="flex flex-1 flex-col items-center justify-center rounded-sm border border-ink/20 px-5 text-center">
-            <span className="text-[28px] font-bold leading-none text-berry/70">“</span>
-            <span className="mt-2 whitespace-pre-line text-[13px] font-semibold leading-[1.9] text-ink">
-              {title}
-            </span>
-            {note && <span className="mt-4 text-[11px] text-sub">{note}</span>}
-          </span>
-        </span>
-      );
-
     case "collage":
-      // 사진 콜라주 — photo dump. 사진 2장 + 색면 + 제목 셀 그리드
+      // 사진 콜라주 — photo dump
       return (
         <span className="flex h-full flex-col bg-surface p-3">
           <span className="grid flex-1 grid-cols-2 grid-rows-2 gap-2">
@@ -713,45 +616,112 @@ function PostExample({ example }: { example: StyleExample }) {
         </span>
       );
 
-    case "review":
-      // 사용 후기 — 별점 + 좋았던 점/아쉬운 점
+    case "checklist":
+      // 체크리스트 — 체크박스 없이 타이포로. 끝낸 일은 취소선
       return (
-        <span className="flex h-full flex-col bg-surface p-5">
-          <span className="flex items-center gap-2">
-            <span className="rounded-sm bg-berry-tint px-1.5 py-0.5 text-[10px] font-bold text-berry-dark">
-              리뷰
-            </span>
-            {meta && <span className="text-[10px] text-sub">{meta}</span>}
-          </span>
-          <span className="mt-2.5 whitespace-pre-line text-[16px] font-bold leading-[1.4] text-ink">
+        <span className="flex h-full flex-col bg-surface p-7">
+          <span className="whitespace-pre-line text-[19px] font-bold leading-[1.4] text-ink">
             {title}
           </span>
-          <span className="mt-2 flex items-center gap-1.5">
-            <span className="text-[13px] tracking-[0.12em] text-berry">
-              ★★★★<span className="text-line">★</span>
-            </span>
-            <span className="text-[11px] font-semibold text-ink">4.0</span>
-          </span>
-          <span className="mt-3.5 flex flex-1 flex-col justify-start gap-2">
-            {items?.map((item) => {
-              const [label, text] = item.split("|");
-              const good = label.startsWith("좋");
+          <span className="mt-2 block h-px w-9 bg-ink/25" />
+          <span className="mt-6 flex flex-1 flex-col justify-start gap-4">
+            {items?.map((item, i) => {
+              const done = i < 2;
               return (
-                <span key={item} className="flex items-center gap-2">
-                  <span
-                    className={[
-                      "shrink-0 rounded-sm px-1.5 py-0.5 text-[9px] font-bold",
-                      good ? "bg-berry-light text-berry-dark" : "bg-surface-muted text-sub",
-                    ].join(" ")}
-                  >
-                    {label}
-                  </span>
-                  <span className="text-[11px] font-medium text-ink">{text}</span>
+                <span
+                  key={item}
+                  className={
+                    done
+                      ? "text-[13px] font-semibold text-sub/70 line-through decoration-berry/50"
+                      : "text-[13px] font-semibold text-ink"
+                  }
+                >
+                  {item}
                 </span>
               );
             })}
           </span>
+          <span className="text-[10px] text-sub">저장해두고 하나씩</span>
+        </span>
+      );
+
+    case "quote":
+      // 인용·글귀 — 얇은 프레임 · 가운데 정렬 · 문학적
+      return (
+        <span className="flex h-full bg-surface p-3">
+          <span className="flex flex-1 flex-col items-center justify-center rounded-sm border border-ink/20 px-5 text-center">
+            <span className="text-[28px] font-bold leading-none text-berry/70">“</span>
+            <span className="mt-2 whitespace-pre-line text-[13px] font-semibold leading-[1.9] text-ink">
+              {title}
+            </span>
+            {note && <span className="mt-4 text-[11px] text-sub">{note}</span>}
+          </span>
+        </span>
+      );
+
+    case "review":
+      // 사용 후기 — 매거진 리뷰. 별점 위젯 대신 총평 한 줄
+      return (
+        <span className="flex h-full flex-col bg-surface p-6">
+          <span className="text-[9px] font-semibold tracking-[0.25em] text-berry-dark">
+            리뷰{meta ? ` · ${meta}` : ""}
+          </span>
+          <span className="mt-2 whitespace-pre-line text-[19px] font-bold leading-[1.35] text-ink">
+            {title}
+          </span>
+          {verdict && (
+            <span className="mt-4 text-[14px] font-semibold leading-[1.5] text-berry-dark">
+              {verdict}
+            </span>
+          )}
+          <span className="mt-4 flex flex-1 flex-col justify-start gap-3">
+            {(() => {
+              const good = (items ?? [])
+                .filter((v) => v.startsWith("좋"))
+                .map((v) => v.split("|")[1]);
+              const bad = (items ?? [])
+                .filter((v) => !v.startsWith("좋"))
+                .map((v) => v.split("|")[1]);
+              return (
+                <>
+                  <span className="text-[11px] leading-[1.8] text-ink">
+                    좋았던 것 — {good.join(", ")}.
+                  </span>
+                  <span className="text-[11px] leading-[1.8] text-sub">
+                    아쉬운 것 — {bad.join(", ")}.
+                  </span>
+                </>
+              );
+            })()}
+          </span>
           {note && <span className="text-[10px] text-berry-dark">{note}</span>}
+        </span>
+      );
+
+    case "informational":
+      // 정보 콘텐츠 — 큰 숫자 타이포 + 헤어라인. 칩·진행바 없음
+      return (
+        <span className="flex h-full flex-col bg-surface p-6">
+          <span className="text-[9px] font-semibold tracking-[0.25em] text-berry-dark">
+            가이드
+          </span>
+          <span className="mt-2 whitespace-pre-line text-[16px] font-bold leading-[1.4] text-ink">
+            {title}
+          </span>
+          <span className="mt-5 flex flex-1 flex-col justify-start">
+            {items?.map((item, i) => (
+              <span key={item} className="flex flex-col">
+                {i > 0 && <span className="my-3 h-px w-full bg-line" />}
+                <span className="flex items-baseline gap-3">
+                  <span className="text-[20px] font-bold leading-none text-berry/35">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <span className="text-[13px] font-semibold text-ink">{item}</span>
+                </span>
+              </span>
+            ))}
+          </span>
+          <span className="self-end text-[9px] text-sub">@chagok.daily</span>
         </span>
       );
 

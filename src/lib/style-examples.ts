@@ -31,6 +31,7 @@ export type StyleExample = {
   title: string; // 줄바꿈은 \n
   note?: string; // 보조 문구 (thought 본문 · diary 기록 줄)
   meta?: string; // diary WEEK 표시 등
+  verdict?: string; // review 총평 한 줄 — 별점 위젯 대신 타이포로 표현
   items?: string[]; // routine · informational 의 정보 단위
   photo?: string; // /public 경로 — 사진 중심 포맷만
   photos?: string[]; // 콜라주용 여러 장
@@ -56,6 +57,7 @@ const FITNESS_SET: StyleExample[] = [
     id: "example_editorial_01",
     contentFormat: "editorial",
     title: "요즘 내가\n아침 운동을 하는 이유",
+    note: "새벽 공기가 주는 차분함,\n하루를 내가 시작한다는 감각.",
     photo: "/onboarding-samples/morning.jpg",
     attributes: {
       imageUsage: "medium-high",
@@ -165,6 +167,7 @@ const FITNESS_SET: StyleExample[] = [
     contentFormat: "review",
     title: "폼롤러,\n솔직 후기",
     meta: "3주 사용",
+    verdict: "별 넷, 아쉬움 하나.",
     note: "#내돈내산 #폼롤러",
     // «라벨|문구» — 좋았던 점 / 아쉬운 점
     items: [
