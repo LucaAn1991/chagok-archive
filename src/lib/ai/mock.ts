@@ -43,17 +43,47 @@ function candidates(): PlanProposal {
 const DEFAULT_AUDIENCE_LABEL =
   AUDIENCES.find((a) => a.id === AUDIENCE_DEFAULT)?.label ?? AUDIENCES[0].label;
 
+/*
+ * ① 주제 후보 — 「이미 사용자 안에 있는 재료」만 가리킨다 (08-28 확정).
+ * 겪은 것 / 느낀 것 / 찍어둔 것. 제품 정체성은 머릿속에 있는 걸 꺼내는 것이므로
+ * 없는 걸 만들게 하는 칩("공유"·"해결법"·"공개" 류)은 넣지 않는다.
+ * 외부 트렌드·뉴스·콘텐츠 마케팅 템플릿에서 가져온 주제 금지.
+ * 3개인 이유 — 칩은 보조, 입력창이 주인공. 4개가 2줄로 접히면 무게가 커진다.
+ */
+const TOPIC_DEFAULTS = ["이번 주에 있었던 일", "요즘 자주 하는 생각", "찍어두고 안 올린 사진"];
+
+/** 온보딩 활동/콘텐츠 답변에서 핵심 단어를 뽑는다 — 못 뽑으면 null */
+function coreWord(field: string): string | null {
+  const generic = new Set(["기록", "일기", "공유", "리뷰", "콘텐츠", "계정", "이야기", "브이로그", "관련"]);
+  const token = field
+    .trim()
+    .split(/\s+/)
+    .find((t) => t && !generic.has(t));
+  return token ?? null;
+}
+
+/**
+ * 칩은 항상 3개 · 각 14자 이내(공백 제외 — 확정 예시 «찍어두고 안 올린 운동 사진»이
+ * 성립하는 기준). 하나라도 넘치면 «못 뽑은 것»으로 보고 기본형 전체를 쓴다
+ */
+function topicSuggestionsFor(field: string): string[] {
+  const w = coreWord(field);
+  if (!w) return TOPIC_DEFAULTS;
+  const specialized = [
+    `이번 주에 한 ${w}`,
+    `요즘 ${w}하면서 드는 생각`,
+    `찍어두고 안 올린 ${w} 사진`,
+  ];
+  const fits = (t: string) => t.replace(/\s/g, "").length <= 14;
+  return specialized.every(fits) ? specialized : TOPIC_DEFAULTS;
+}
+
 export const mockPlanningAI: PlanningAI = {
-  async greeting(): Promise<PlanTurnResult> {
-    // ① 열린 질문 금지 — 후보 4개를 제시한다 (IA 2.1-①)
+  async greeting(ctx): Promise<PlanTurnResult> {
+    // ① 열린 질문 금지 — 후보 3개를 제시한다 (IA 2.1-① · 08-28 3개로 축소)
     return {
       reply: "오늘은 어떤 이야기를 해볼까요? 아래에서 골라도 되고, 직접 적어도 돼요.",
-      topicSuggestions: [
-        "요즘 자주 받는 질문에 답하기",
-        "최근에 새로 알게 된 것 공유",
-        "자주 하는 실수와 해결법",
-        "나만의 루틴 공개",
-      ],
+      topicSuggestions: topicSuggestionsFor(ctx.field),
     };
   },
 
