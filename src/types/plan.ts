@@ -8,8 +8,8 @@ export type Plan = {
   type: PlanType; // 'series' 일반 기획 | 'record' 기록형(F12)
 
   topic: string; // 주제. ① 단계에서 확정
-  audiences: string[]; // 대상. ② 단계 멀티 선택 (후보 4~5개 + 기타 직접 입력)
-  purposes: string[]; // 목적. ② 단계 멀티 선택
+  audiences: string[]; // 대상. ② 단계 멀티 선택 (라벨 후보 3개 + 기타 직접 입력)
+  purposes: string[]; // 목적. 선택하지 않는다 — AI가 대상에 맞춰 정함, 기획안 카드에서 수정
   intent: string; // 기획의도. AI가 생성. 카드 상세에서만 노출 (DESIGN.md §6)
   seriesTitle: string; // 시리즈 제목. 놓친 카드 화면에서 묶는 기준
 

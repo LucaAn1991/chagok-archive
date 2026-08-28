@@ -23,17 +23,27 @@ function toTopic(idea: string): string {
   return trimmed.length > 40 ? `${trimmed.slice(0, 40)}…` : trimmed;
 }
 
-/** ② 단계 후보 — 어떤 주제에도 어색하지 않은 일반 문구만 */
+/**
+ * ② 단계 후보 — 짧은 라벨만 (08-28 확정 — 긴 문구는 선택 피로를 만든다).
+ * 목적은 화면에서 고르지 않는다 — 대상에 딸려오므로 AI가 정하고,
+ * 기획안 카드에서 수정할 수 있다.
+ */
+const AUDIENCE_LABELS = ["나를 아는 사람", "나를 모르는 사람", "이 주제를 찾는 사람"];
+
+/** 대상별 기본 목적 — 직접 입력한 대상은 공감 얻기로 둔다 */
+const PURPOSE_BY_AUDIENCE: Record<string, string> = {
+  "나를 아는 사람": "공감 얻기",
+  "나를 모르는 사람": "팔로우 유도",
+  "이 주제를 찾는 사람": "정보 전달",
+};
+
+function purposesFor(audiences: string[]): string[] {
+  const picked = audiences.map((a) => PURPOSE_BY_AUDIENCE[a] ?? "공감 얻기");
+  return [...new Set(picked)];
+}
+
 function candidates(): PlanProposal {
-  return {
-    audiences: [
-      "이 주제가 처음인 사람",
-      "자주 접해본 사람",
-      "혼자서는 방법을 모르겠는 사람",
-      "이미 익숙하지만 새 자극이 필요한 사람",
-    ],
-    purposes: ["정보 전달", "공감 얻기", "팔로우 유도", "저장 유도"],
-  };
+  return { audiences: AUDIENCE_LABELS, purposes: [] };
 }
 
 export const mockPlanningAI: PlanningAI = {
@@ -53,7 +63,7 @@ export const mockPlanningAI: PlanningAI = {
   async ideaTurn(idea: string): Promise<PlanTurnResult> {
     const topic = toTopic(idea);
     return {
-      reply: `「${topic}」 좋은데요! 누구에게 어떤 목적으로 전할지만 정하면 바로 카드로 만들 수 있어요.\n\n아래에서 골라주세요. 안 고르셔도 제가 알아서 정할게요.`,
+      reply: `「${topic}」 좋은데요! 누구에게 말할지만 정하면 바로 카드로 만들 수 있어요.\n\n아래에서 골라주세요. 안 고르셔도 제가 알아서 정할게요.`,
       topic,
       proposal: candidates(),
     };
@@ -61,11 +71,13 @@ export const mockPlanningAI: PlanningAI = {
 
   async selectionTurn(topic: string, selected: PlanProposal): Promise<PlanTurnResult> {
     // 빈 선택이면 AI가 알아서 정하고 넘어간다 (IA 2.1-②)
-    const pool = candidates();
     const audiences =
-      selected.audiences.length > 0 ? selected.audiences : pool.audiences.slice(0, 2);
-    const purposes = selected.purposes.length > 0 ? selected.purposes : ["공감 얻기"];
-    const picked = selected.audiences.length === 0 && selected.purposes.length === 0;
+      selected.audiences.length > 0
+        ? selected.audiences
+        : ["나를 모르는 사람", "이 주제를 찾는 사람"];
+    // 목적은 대상에 딸려온다 (08-28 확정) — 기획안 카드에서 수정 가능
+    const purposes = purposesFor(audiences);
+    const picked = selected.audiences.length === 0;
     const intent = `「${topic}」${particle(topic, "을", "를")} ${audiences[0]}의 눈높이에서 ${purposes[0]} 중심으로 풀어내는 시리즈`;
 
     return {

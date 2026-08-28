@@ -259,15 +259,12 @@ function NewPlanScreen() {
     void runTurn({ kind: "init", idea: "", from: null });
   }
 
-  /** ② 대상·목적 선택 제출 — 빈 선택이면 AI가 알아서 정한다 (IA 2.1-②) */
-  function sendSelection(audiences: string[], purposes: string[]) {
-    const label =
-      audiences.length > 0 || purposes.length > 0
-        ? [...audiences, ...purposes].join(" · ")
-        : "차곡이 알아서 정해주세요.";
+  /** ② 대상 선택 제출 — 빈 선택이면 AI가 알아서 정한다. 목적은 대상에 딸려온다 (08-28) */
+  function sendSelection(audiences: string[]) {
+    const label = audiences.length > 0 ? audiences.join(" · ") : "차곡이 알아서 정해주세요.";
     setMessages((prev) => [...prev, { role: "user", text: label }]);
     setProposal(null);
-    void runTurn({ kind: "selection", audiences, purposes });
+    void runTurn({ kind: "selection", audiences, purposes: [] });
   }
 
   /**
@@ -607,11 +604,10 @@ function ProposalPicker({
   onSubmit,
 }: {
   proposal: Proposal;
-  onSubmit: (audiences: string[], purposes: string[]) => void;
+  onSubmit: (audiences: string[]) => void;
 }) {
   const [audienceOptions, setAudienceOptions] = useState(proposal.audiences);
   const [audiences, setAudiences] = useState<string[]>([]);
-  const [purposes, setPurposes] = useState<string[]>([]);
   const [custom, setCustom] = useState("");
 
   function toggle(list: string[], set: (v: string[]) => void, value: string) {
@@ -666,21 +662,9 @@ function ProposalPicker({
         </button>
       </div>
 
-      <h2 className="mt-5 text-body font-bold text-ink">어떤 목적인가요?</h2>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {proposal.purposes.map((pu) => (
-          <Chip
-            key={pu}
-            label={pu}
-            selected={purposes.includes(pu)}
-            onToggle={() => toggle(purposes, setPurposes, pu)}
-          />
-        ))}
-      </div>
-
       <button
         type="button"
-        onClick={() => onSubmit(audiences, purposes)}
+        onClick={() => onSubmit(audiences)}
         className="mt-5 flex h-11 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
       >
         이대로 진행하기
