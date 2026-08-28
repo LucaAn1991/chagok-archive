@@ -111,6 +111,10 @@ function NewPlanScreen() {
   );
   const [userPhotos, setUserPhotos] = useState<string[]>([]);
 
+  // 입력창이 주인공 — 칩은 입력창을 채울 뿐, 전송은 사용자가 한다 (08-28)
+  const [chatText, setChatText] = useState("");
+  const [focusToken, setFocusToken] = useState(0); // 올리면 입력창에 포커스
+
   // 기획안 완성 후에는 입력창을 숨기고 [말로 수정하기]를 눌렀을 때만 연다 —
   // CTA와 입력창이 동시에 보이면 다음 행동이 흐려진다 (DESIGN §16, 08-27 피드백)
   const [chatMode, setChatMode] = useState(false);
@@ -152,6 +156,10 @@ function NewPlanScreen() {
       if (payload.kind !== "update") {
         // 주제 등 부분 수정 턴에서는 후보·선택 상태를 건드리지 않는다 (08-28 — 선택 유지)
         setTopicSuggestions((data.topicSuggestions as string[] | null) ?? null);
+        if (data.topicSuggestions && window.matchMedia("(min-width: 768px)").matches) {
+          // ① 단계 — 입력창이 주인공이므로 커서를 먼저 준다 (모바일은 키보드가 화면을 덮어 제외)
+          setFocusToken((k) => k + 1);
+        }
         setProposal((data.proposal as Proposal | null) ?? null);
         if (payload.kind === "init" || payload.kind === "text") {
           // 새 후보 세트가 왔다 — 이전 선택은 의미가 없다 (복구 turn은 선택을 유지)
@@ -359,9 +367,17 @@ function NewPlanScreen() {
                 ),
               )}
 
-              {/* ① 주제 후보 4개 — 열린 질문 금지 (IA 2.1-①) */}
+              {/* ① 주제 후보 — 열린 질문 금지 (IA 2.1-①).
+                  칩은 바로 전송하지 않고 입력창을 채운다 — 다듬어 보내는 건 사용자 몫 */}
               {topicSuggestions && !sending && !failed && (
-                <TopicSuggestionPicker suggestions={topicSuggestions} onPick={sendText} />
+                <TopicSuggestionPicker
+                  suggestions={topicSuggestions}
+                  onPick={(t) => {
+                    dismissBanner();
+                    setChatText(t);
+                    setFocusToken((k) => k + 1);
+                  }}
+                />
               )}
 
               {/* ② 대상 후보 — sending 중에도 유지한다: 주제 저장 중 선택이 사라지면 안 된다 (08-28) */}
@@ -423,12 +439,17 @@ function NewPlanScreen() {
             onConfirm={() => void confirmPlan()}
             confirming={confirming}
             error={confirmError}
-            onEditByChat={() => setChatMode(true)}
+            onEditByChat={() => {
+              setChatMode(true);
+              setFocusToken((k) => k + 1);
+            }}
           />
         ) : (
           <ChatInputBar
             disabled={sending || !planId}
-            autoFocus={chatMode}
+            value={chatText}
+            onChange={setChatText}
+            focusToken={focusToken}
             placeholder={
               ready ? "바꾸고 싶은 부분을 알려주세요 (예: 대상을 직장인으로)" : undefined
             }
@@ -692,27 +713,38 @@ function ProposalPicker({
 
 function ChatInputBar({
   disabled,
-  autoFocus,
+  value,
+  onChange,
+  focusToken,
   placeholder,
   onSend,
 }: {
   disabled: boolean;
-  autoFocus?: boolean;
+  value: string;
+  onChange: (next: string) => void;
+  focusToken: number;
   placeholder?: string;
   onSend: (text: string) => void;
 }) {
-  const [text, setText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // [말로 수정하기]로 열렸을 때 바로 입력할 수 있게 포커스를 준다
+  // 칩 선택·[말로 수정하기]·① 단계 진입 시 입력창에 커서를 준다
   useEffect(() => {
-    if (autoFocus) textareaRef.current?.focus();
-  }, [autoFocus]);
+    if (focusToken > 0) {
+      const el = textareaRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length); // 커서를 끝으로
+        el.style.height = "auto";
+        el.style.height = `${el.scrollHeight}px`;
+      }
+    }
+  }, [focusToken]);
 
   function submit() {
-    const trimmed = text.trim();
+    const trimmed = value.trim();
     if (!trimmed || disabled) return;
-    setText("");
+    onChange("");
     const el = textareaRef.current;
     if (el) el.style.height = "auto";
     onSend(trimmed);
@@ -734,9 +766,9 @@ function ChatInputBar({
           id="chat-input"
           ref={textareaRef}
           rows={1}
-          value={text}
+          value={value}
           onChange={(e) => {
-            setText(e.target.value);
+            onChange(e.target.value);
             const el = textareaRef.current;
             if (el) {
               el.style.height = "auto";

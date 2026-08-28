@@ -63,8 +63,8 @@ function coreWord(field: string): string | null {
 }
 
 /**
- * 칩은 항상 3개 · 각 14자 이내(공백 제외 — 확정 예시 «찍어두고 안 올린 운동 사진»이
- * 성립하는 기준). 하나라도 넘치면 «못 뽑은 것»으로 보고 기본형 전체를 쓴다
+ * 칩은 항상 3개 · 각 **띄어쓰기 포함 16자** 이내 (08-28 확정 — 중요한 건 글자 수가
+ * 아니라 칩이 한 줄에 들어가느냐다). 하나라도 넘치면 기본형 전체를 쓴다
  */
 function topicSuggestionsFor(field: string): string[] {
   const w = coreWord(field);
@@ -74,7 +74,7 @@ function topicSuggestionsFor(field: string): string[] {
     `요즘 ${w}하면서 드는 생각`,
     `찍어두고 안 올린 ${w} 사진`,
   ];
-  const fits = (t: string) => t.replace(/\s/g, "").length <= 14;
+  const fits = (t: string) => t.length <= 16;
   return specialized.every(fits) ? specialized : TOPIC_DEFAULTS;
 }
 
