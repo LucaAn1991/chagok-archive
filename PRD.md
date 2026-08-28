@@ -775,6 +775,7 @@ App Hosting(Node 런타임) 안에서 돌아가므로 **배포 대상이 하나�
 | 날짜 | 내용 |
 |---|---|
 | 2026-08-26 | PRD v1 최초 작성 |
+| 2026-08-28 | **§10-15 신설 — `[v2]` Onboarding Visual Preference Personalization** — 9개 Visual Frame 고정 + 사용자 입력 기반 카피·이미지 동적 생성(한 묶음), 실패·지연 시 사전 제작 Sample Set fallback. threshold는 실측 후. 선행 조건: LLM API 연결·스톡 provider 확정·이미지 선정 품질 검증. v1은 fitness·beauty 프리셋 세트 + 키워드 매칭으로 감 |
 | 2026-08-27 | **AI 제공사·모델 확정** — Anthropic Claude `claude-opus-5`. 서버 API route에서만 호출. 사고가 기본 활성이라 «5초 이내»와 부딪힐 수 있어 노력 수준·스트리밍을 위험 3 측정 항목에 포함 |
 | 2026-08-27 | **카드뉴스 렌더링을 Node(satori+sharp)로 확정** (§10-11 해소) — Python/Pillow 폐기, App Hosting 단일 배포 유지. 스파이크의 «5장 0.05초»는 언어가 바뀌어 [미검증]으로 환원 |
 | 2026-08-27 | **실패 경로 확정** (§10-9 해소) — §5-7 신설. 자동 1회 재시도 / 부분 수정 우선 / 카드 생성 원자성 / v1 재시도 제한 없음 |
