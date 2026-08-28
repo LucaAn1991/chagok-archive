@@ -120,7 +120,7 @@ export default function SignupPage() {
       <BrandPanel />
 
       {/* 오른쪽 — 회원가입 폼 */}
-      <div className="flex flex-1 items-center justify-center p-4 desktop:w-1/2">
+      <div className="flex flex-1 items-center justify-center p-4 desktop:w-2/5">
         <div className="w-full max-w-[400px]">
           {/*
             좌측 패널이 없는 폭에서는 여기가 유일한 브랜드 표시다.

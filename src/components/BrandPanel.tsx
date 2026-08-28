@@ -33,7 +33,7 @@ export default function BrandPanel() {
   return (
     <section
       aria-label="차곡 소개"
-      className="hidden w-1/2 shrink-0 items-center justify-center border-r
+      className="hidden w-3/5 shrink-0 items-center justify-center border-r
                  border-line bg-berry-tint p-16 desktop:flex"
     >
       <div className="w-full max-w-[480px]">
