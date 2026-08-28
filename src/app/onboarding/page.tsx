@@ -275,11 +275,9 @@ export default function OnboardingPage() {
 
             {/* 액션 블록 — 캐러셀이 주인공이라 조작부는 가운데로 좁게 모은다 */}
             <div className="mx-auto mt-2 w-full max-w-[560px]">
-              {/* selection feedback — 부담 없이, 개수만 */}
-              <p className="text-center text-caption text-sub">
-                {selected.length > 0
-                  ? `${selected.length}개 골랐어요.`
-                  : "마음에 드는 게시물을 눌러 골라주세요."}
+              {/* selection feedback — 선택 전엔 비워둔다 (헤더가 이미 설명함). 높이는 유지해 버튼이 안 튀게 */}
+              <p className="h-5 text-center text-caption text-sub">
+                {selected.length > 0 ? `${selected.length}개 선택했어요` : ""}
               </p>
 
               {error && <div className="mt-3"><InlineAlert>{error}</InlineAlert></div>}
@@ -443,23 +441,6 @@ function StyleCarousel({
         </button>
       </div>
 
-      {/* 페이지네이션 점 — 클릭 영역 넉넉하게 (DESIGN.md §5) */}
-      <div className="mt-1 flex items-center justify-center">
-        {STYLE_EXAMPLES.map(({ id }, i) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => scrollToCard(i)}
-            aria-label={`${i + 1}번째 게시물로 이동`}
-            aria-current={i === active}
-            className="flex size-8 items-center justify-center"
-          >
-            <span
-              className={`size-1.5 rounded-pill ${i === active ? "bg-berry" : "bg-berry/30"}`}
-            />
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
