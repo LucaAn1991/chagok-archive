@@ -48,7 +48,7 @@ export type StyleExample = {
  * 콘텐츠 세계를 보여주는 영역이다. 하드코딩 금지 규칙의 의도적 예외.
  */
 const FITNESS_SET: StyleExample[] = [
-  // A — Warm Lifestyle: 자연광 사진 70%+ · 따뜻한 뉴트럴 · 작은 기록 타이포
+  // 1. Warm Lifestyle — 사진 중심 · 개인적 · 편안 (유지)
   {
     id: "direction_warm_01",
     contentFormat: "diary",
@@ -64,7 +64,7 @@ const FITNESS_SET: StyleExample[] = [
       decoration: "minimal",
     },
   },
-  // B — Modern Editorial: 흑백 사진 + 표현적 타이포 · 비대칭 · 레이어링
+  // 2. Modern Editorial — 사진+타이포 · 세련 · 표현적 (유지)
   {
     id: "direction_editorial_01",
     contentFormat: "editorial",
@@ -79,18 +79,114 @@ const FITNESS_SET: StyleExample[] = [
       decoration: "editorial",
     },
   },
-  // C — Graphic/Typographic: 사진 없이 오버사이즈 타이포 · 지그재그 정렬 · 도형
+  // 3. Clean Typography — 인스타에서 흔한 깔끔한 텍스트 카드 (08-28 재작업)
   {
     id: "direction_graphic_01",
     contentFormat: "statement",
-    title: "운동 가기\n싫은 날에도\n이것만은\n지킨다.",
-    note: "오늘도, 일단 가기",
+    title: "운동 가기\n싫은 날에도\n이것만은 지킨다.",
+    meta: "오늘의 다짐",
     attributes: {
       imageUsage: "none",
+      typography: "clean-type",
+      density: "low",
+      mood: "sincere",
+      decoration: "minimal",
+    },
+  },
+  // 4. Casual Photo Diary — 디자인 안 한 듯 자연스러운 피드
+  {
+    id: "direction_casual_01",
+    contentFormat: "diary",
+    title: "일요일 아침 러닝",
+    note: "뛰고 나서 마시는 커피가 제일 맛있다",
+    meta: "10.12 SUN",
+    photos: ["/onboarding-samples/stairs.jpg", "/onboarding-samples/gym.jpg"],
+    attributes: {
+      imageUsage: "high",
+      typography: "minimal",
+      density: "low",
+      mood: "candid",
+      decoration: "none",
+    },
+  },
+  // 5. Soft Editorial — 밝고 부드러운 사진 + 여백 + 섬세한 타이포
+  {
+    id: "direction_soft_01",
+    contentFormat: "editorial",
+    title: "가볍게, 그러나 꾸준하게",
+    note: "바닷가 모닝 요가",
+    photo: "/onboarding-samples/beach.jpg",
+    attributes: {
+      imageUsage: "high",
+      typography: "delicate",
+      density: "low",
+      mood: "soft-bright",
+      decoration: "minimal",
+    },
+  },
+  // 6. Clean Informational — 정보형이지만 UI 박스 없이 사진+번호+타이포
+  {
+    id: "direction_info_01",
+    contentFormat: "informational",
+    title: "운동하면서\n알게 된 것 3가지",
+    items: ["몸은 거짓말을 하지 않는다", "쉬는 것도 운동이다", "기록이 꾸준함을 만든다"],
+    photo: "/onboarding-samples/gym.jpg",
+    attributes: {
+      imageUsage: "medium",
+      typography: "structured-clean",
+      density: "medium",
+      mood: "informative",
+      decoration: "minimal",
+    },
+  },
+  // 7. Bold Photo + Type — 큰 사진 크롭 + 아주 큰 타이포 겹침
+  {
+    id: "direction_boldphoto_01",
+    contentFormat: "statement",
+    title: "오늘도\n어김없이",
+    meta: "DAY 47",
+    photo: "/onboarding-samples/track.jpg",
+    attributes: {
+      imageUsage: "high",
       typography: "oversized",
       density: "low",
-      mood: "bold-graphic",
-      decoration: "shape",
+      mood: "energetic",
+      decoration: "high-contrast",
+    },
+  },
+  // 8. Personal Collage — contemporary editorial collage (스크랩북 아님)
+  {
+    id: "direction_collage_01",
+    contentFormat: "collage",
+    title: "시월의 운동들",
+    meta: "10.01 — 10.28",
+    photos: [
+      "/onboarding-samples/studio.jpg",
+      "/onboarding-samples/stairs.jpg",
+      "/onboarding-samples/beach.jpg",
+    ],
+    attributes: {
+      imageUsage: "high",
+      typography: "minimal",
+      density: "medium",
+      mood: "personal-modern",
+      decoration: "collage",
+    },
+  },
+  // 9. Product / Recommendation — 크리에이터의 «요즘 잘 쓰는 것»
+  {
+    id: "direction_product_01",
+    contentFormat: "review",
+    title: "1kg 아령, 3개월째",
+    note: "손목에 무리 없이, 딱 좋은 무게",
+    meta: "PICK 01",
+    photo: "/onboarding-samples/gear.jpg",
+    attributes: {
+      imageUsage: "high",
+      typography: "clean",
+      density: "low",
+      mood: "curated",
+      decoration: "minimal",
     },
   },
 ];

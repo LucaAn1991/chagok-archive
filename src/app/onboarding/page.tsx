@@ -456,10 +456,10 @@ function StyleCarousel({
    @TODO: 실제 시안·사진 확정 시 교체 (DESIGN.md §18)
    ════════════════════════════════════════════════════════════ */
 function PostExample({ example }: { example: StyleExample }) {
-  const { title, note, meta, photo } = example;
+  const { title, note, meta, items, photo, photos } = example;
 
   switch (example.id) {
-    // ── A. WARM LIFESTYLE — 필름 저널: 사진 75% + 따뜻한 여백 + 작은 기록 ──
+    // ── 1. WARM LIFESTYLE — 필름 저널: 사진 75% + 따뜻한 여백 ──
     case "direction_warm_01":
       return (
         <span className="flex h-full flex-col bg-[#F6F0E7] p-3">
@@ -479,7 +479,7 @@ function PostExample({ example }: { example: StyleExample }) {
         </span>
       );
 
-    // ── B. MODERN EDITORIAL — 흑백 사진 블리드 + 넉아웃 숫자 + 지그재그 타이포 ──
+    // ── 2. MODERN EDITORIAL — 흑백 블리드 + 넉아웃 숫자 + 지그재그 ──
     case "direction_editorial_01": {
       const [line1 = "", line2 = "", line3 = ""] = title.split("\n");
       return (
@@ -487,15 +487,12 @@ function PostExample({ example }: { example: StyleExample }) {
           <span className="absolute right-0 top-0 block h-[56%] w-[78%]">
             {photo && <Image src={photo} alt="" fill sizes="320px" className="object-cover" />}
           </span>
-          {/* 종이색 넉아웃 숫자 — 사진 위 레이어링 */}
           <span className="absolute right-3 top-[34%] text-[58px] font-bold leading-none text-[#EBE7E0]">
             02
           </span>
-          {/* 왼쪽 세로 캡션 */}
           <span className="absolute left-3 top-5 text-[8px] tracking-[0.35em] text-[#A39889] [writing-mode:vertical-rl]">
             WORKOUT ESSAY
           </span>
-          {/* 지그재그 헤드라인 */}
           <span className="absolute bottom-12 left-4 right-4 flex flex-col">
             <span className="text-[26px] font-bold leading-[1.18] text-[#232019]">{line1}</span>
             <span className="self-end text-[26px] font-bold leading-[1.18] text-[#232019]">
@@ -512,37 +509,163 @@ function PostExample({ example }: { example: StyleExample }) {
       );
     }
 
-    // ── C. GRAPHIC/TYPOGRAPHIC — 딥그린 포스터 · 오버사이즈 지그재그 · 도형 ──
+    // ── 3. CLEAN TYPOGRAPHY — 인스타에서 흔한 깔끔한 텍스트 카드 ──
     case "direction_graphic_01": {
       const lines = title.split("\n");
+      const last = lines[lines.length - 1] ?? "";
+      const [highlight, ...restWords] = last.split(" ");
       return (
-        <span className="relative flex h-full flex-col overflow-hidden bg-[#1C3129] p-5">
-          <span className="absolute -right-16 top-24 size-48 rounded-pill border-2 border-[#E8613C]/70" />
-          <span className="absolute right-7 top-[55%] size-2.5 rounded-pill bg-[#E8613C]" />
-          <span className="flex items-center justify-between text-[8px] tracking-[0.3em] text-[#F2EBDC]/50">
-            <span>NO EXCUSE</span>
-            <span>08 / 28</span>
-          </span>
-          <span className="relative mt-auto flex flex-col pb-3">
-            {lines.map((line, i) => (
-              <span
-                key={line}
-                className={[
-                  "text-[33px] font-bold leading-[1.16]",
-                  i % 2 === 1 ? "self-end" : "",
-                  i === 2 ? "text-[#E8613C]" : "text-[#F2EBDC]",
-                ].join(" ")}
-              >
+        <span className="flex h-full flex-col bg-[#F5F1EA] p-7">
+          <span className="text-[9px] font-semibold tracking-[0.3em] text-[#B5A38E]">{meta}</span>
+          <span className="my-auto flex flex-col gap-1.5">
+            {lines.slice(0, -1).map((line) => (
+              <span key={line} className="text-[22px] font-bold leading-[1.45] text-[#3B342B]">
                 {line}
               </span>
             ))}
+            <span className="text-[22px] font-bold leading-[1.45] text-[#3B342B]">
+              <span className="border-b-[6px] border-[#E5B79A]/70 pb-0.5">{highlight}</span>{" "}
+              {restWords.join(" ")}
+            </span>
           </span>
-          {note && (
-            <span className="relative text-[9px] tracking-[0.15em] text-[#F2EBDC]/60">{note}</span>
-          )}
+          <span className="text-[9px] text-[#A2937F]">@chagok.daily</span>
         </span>
       );
     }
+
+    // ── 4. CASUAL PHOTO DIARY — 디자인 안 한 듯한 스냅 2장 + 메모 ──
+    case "direction_casual_01":
+      return (
+        <span className="flex h-full flex-col gap-2 bg-[#FBFAF7] p-3">
+          <span className="relative block h-[54%] overflow-hidden">
+            {photos?.[0] && (
+              <Image src={photos[0]} alt="" fill sizes="320px" className="object-cover" />
+            )}
+          </span>
+          <span className="flex min-h-0 flex-1 gap-2">
+            <span className="relative block w-[55%] overflow-hidden">
+              {photos?.[1] && (
+                <Image src={photos[1]} alt="" fill sizes="180px" className="object-cover" />
+              )}
+            </span>
+            <span className="flex flex-1 flex-col justify-end pb-1">
+              <span className="text-[9px] tracking-[0.15em] text-[#9A948A]">{meta}</span>
+              <span className="mt-1 text-[12px] font-semibold text-[#37332C]">{title}</span>
+              {note && (
+                <span className="mt-1 text-[9px] leading-[1.6] text-[#8B857A]">{note}</span>
+              )}
+            </span>
+          </span>
+        </span>
+      );
+
+    // ── 5. SOFT EDITORIAL — 아트 프린트: 밝은 사진 + 여백 + 섬세한 타이포 ──
+    case "direction_soft_01":
+      return (
+        <span className="flex h-full flex-col items-center bg-white px-6 py-7 text-center">
+          <span className="text-[8px] tracking-[0.35em] text-[#B9B2A6]">MORNING FLOW</span>
+          <span className="relative mt-4 block h-[58%] w-full overflow-hidden">
+            {photo && <Image src={photo} alt="" fill sizes="320px" className="object-cover" />}
+          </span>
+          <span className="mt-5 text-[14px] font-medium tracking-[0.02em] text-[#4A443B]">
+            {title}
+          </span>
+          {note && (
+            <span className="mt-1.5 text-[9px] tracking-[0.12em] text-[#ABA396]">{note}</span>
+          )}
+        </span>
+      );
+
+    // ── 6. CLEAN INFORMATIONAL — 사진 스트립 + 번호 + 타이포 (박스 없음) ──
+    case "direction_info_01":
+      return (
+        <span className="flex h-full bg-[#FAF8F4]">
+          <span className="relative block w-[34%] shrink-0 overflow-hidden">
+            {photo && <Image src={photo} alt="" fill sizes="120px" className="object-cover" />}
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col p-4">
+            <span className="whitespace-pre-line text-[15px] font-bold leading-[1.4] text-[#332F28]">
+              {title}
+            </span>
+            <span className="mt-5 flex flex-1 flex-col justify-start gap-5">
+              {items?.map((item, i) => (
+                <span key={item} className="flex flex-col gap-1">
+                  <span className="text-[10px] font-semibold text-[#B99C7B]">0{i + 1}</span>
+                  <span className="text-[11px] font-semibold leading-[1.5] text-[#443E35]">
+                    {item}
+                  </span>
+                </span>
+              ))}
+            </span>
+            <span className="text-[8px] text-[#A79F92]">@chagok.daily</span>
+          </span>
+        </span>
+      );
+
+    // ── 7. BOLD PHOTO + TYPE — 풀블리드 사진 + 아주 큰 타이포 겹침 ──
+    case "direction_boldphoto_01":
+      return (
+        <span className="relative block h-full overflow-hidden">
+          {photo && <Image src={photo} alt="" fill sizes="320px" className="object-cover" />}
+          <span className="absolute inset-0 bg-[#1A1512]/25" />
+          <span className="absolute left-4 top-7 whitespace-pre-line text-[46px] font-bold leading-[1.05] text-white">
+            {title}
+          </span>
+          {meta && (
+            <span className="absolute bottom-5 left-4 text-[10px] font-semibold tracking-[0.3em] text-white/80">
+              {meta}
+            </span>
+          )}
+        </span>
+      );
+
+    // ── 8. PERSONAL COLLAGE — contemporary editorial collage ──
+    case "direction_collage_01":
+      return (
+        <span className="relative block h-full overflow-hidden bg-[#F1EDE6]">
+          <span className="absolute left-4 top-4 block h-[38%] w-[58%] overflow-hidden">
+            {photos?.[0] && (
+              <Image src={photos[0]} alt="" fill sizes="200px" className="object-cover" />
+            )}
+          </span>
+          <span className="absolute right-4 top-[27%] block h-[34%] w-[44%] overflow-hidden">
+            {photos?.[1] && (
+              <Image src={photos[1]} alt="" fill sizes="160px" className="object-cover" />
+            )}
+          </span>
+          <span className="absolute bottom-16 left-8 block h-[26%] w-[42%] overflow-hidden">
+            {photos?.[2] && (
+              <Image src={photos[2]} alt="" fill sizes="160px" className="object-cover" />
+            )}
+          </span>
+          <span className="absolute bottom-5 right-4 flex flex-col items-end">
+            <span className="text-[13px] font-semibold text-[#37322A]">{title}</span>
+            <span className="mt-0.5 text-[9px] tracking-[0.15em] text-[#9C9384]">{meta}</span>
+          </span>
+        </span>
+      );
+
+    // ── 9. PRODUCT / RECOMMENDATION — 아이템이 주인공, 크리에이터 톤 ──
+    case "direction_product_01":
+      return (
+        <span className="flex h-full flex-col bg-[#F2F0EC] p-5">
+          <span className="flex items-baseline justify-between">
+            <span className="text-[9px] font-semibold tracking-[0.25em] text-[#8E8678]">
+              요즘 잘 쓰는 것
+            </span>
+            <span className="text-[8px] tracking-[0.2em] text-[#B4ACA0]">{meta}</span>
+          </span>
+          <span className="relative mt-3 block flex-1 overflow-hidden rounded-sm">
+            {photo && <Image src={photo} alt="" fill sizes="320px" className="object-cover" />}
+          </span>
+          <span className="mt-3">
+            <span className="text-[13px] font-semibold text-[#38332B]">{title}</span>
+            {note && (
+              <span className="mt-1 block text-[10px] leading-[1.6] text-[#8B8375]">{note}</span>
+            )}
+          </span>
+        </span>
+      );
 
     default:
       return null;
