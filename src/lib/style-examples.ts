@@ -19,8 +19,10 @@ export type ContentFormat =
   | "statement" // 한 문장 비주얼 스테이트먼트
   | "comparison" // 비교·변화 (Before → After)
   | "diary" // 사진 중심 기록
+  | "collage" // 사진 콜라주 (photo dump)
   | "checklist" // 체크리스트 (저장 유도형)
   | "quote" // 인용·글귀
+  | "review" // 사용 후기 (별점·장단점)
   | "informational"; // 정보 카드뉴스
 
 export type StyleExample = {
@@ -31,6 +33,7 @@ export type StyleExample = {
   meta?: string; // diary WEEK 표시 등
   items?: string[]; // routine · informational 의 정보 단위
   photo?: string; // /public 경로 — 사진 중심 포맷만
+  photos?: string[]; // 콜라주용 여러 장
   attributes: StyleAttributes;
 };
 
@@ -118,6 +121,20 @@ const FITNESS_SET: StyleExample[] = [
     },
   },
   {
+    id: "example_collage_01",
+    contentFormat: "collage",
+    title: "8월의\n운동 기록 모음",
+    note: "사진 4장",
+    photos: ["/onboarding-samples/morning.jpg", "/onboarding-samples/workout.jpg"],
+    attributes: {
+      imageUsage: "high",
+      typography: "minimal",
+      density: "medium",
+      mood: "casual",
+      decoration: "low",
+    },
+  },
+  {
     id: "example_checklist_01",
     contentFormat: "checklist",
     title: "운동 가기 전\n체크리스트",
@@ -141,6 +158,26 @@ const FITNESS_SET: StyleExample[] = [
       density: "low",
       mood: "emotional",
       decoration: "frame",
+    },
+  },
+  {
+    id: "example_review_01",
+    contentFormat: "review",
+    title: "폼롤러,\n솔직 후기",
+    meta: "3주 사용",
+    note: "#내돈내산 #폼롤러",
+    // «라벨|문구» — 좋았던 점 / 아쉬운 점
+    items: [
+      "좋았던 점|아침 뻐근함이 줄었어요",
+      "좋았던 점|하루 5분이면 충분해요",
+      "아쉬운 점|첫 주엔 조금 아파요",
+    ],
+    attributes: {
+      imageUsage: "low",
+      typography: "clean",
+      density: "medium-high",
+      mood: "candid",
+      decoration: "functional",
     },
   },
   {

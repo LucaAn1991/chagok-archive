@@ -684,6 +684,77 @@ function PostExample({ example }: { example: StyleExample }) {
         </span>
       );
 
+    case "collage":
+      // 사진 콜라주 — photo dump. 사진 2장 + 색면 + 제목 셀 그리드
+      return (
+        <span className="flex h-full flex-col bg-surface p-3">
+          <span className="grid flex-1 grid-cols-2 grid-rows-2 gap-2">
+            <span className="relative block overflow-hidden rounded-sm">
+              {example.photos?.[0] && (
+                <Image src={example.photos[0]} alt="" fill sizes="160px" className="object-cover" />
+              )}
+            </span>
+            <span className="relative block overflow-hidden rounded-sm">
+              {example.photos?.[1] && (
+                <Image src={example.photos[1]} alt="" fill sizes="160px" className="object-cover" />
+              )}
+            </span>
+            <span className="flex items-center justify-center rounded-sm bg-berry-light">
+              <span className="whitespace-pre-line text-center text-[12px] font-bold leading-[1.5] text-berry-dark">
+                {title}
+              </span>
+            </span>
+            <span className="rounded-sm bg-purple/15" />
+          </span>
+          <span className="mt-2 flex items-center justify-between">
+            <span className="text-[10px] text-sub">@chagok.daily</span>
+            {note && <span className="text-[10px] text-sub">{note}</span>}
+          </span>
+        </span>
+      );
+
+    case "review":
+      // 사용 후기 — 별점 + 좋았던 점/아쉬운 점
+      return (
+        <span className="flex h-full flex-col bg-surface p-5">
+          <span className="flex items-center gap-2">
+            <span className="rounded-sm bg-berry-tint px-1.5 py-0.5 text-[10px] font-bold text-berry-dark">
+              리뷰
+            </span>
+            {meta && <span className="text-[10px] text-sub">{meta}</span>}
+          </span>
+          <span className="mt-2.5 whitespace-pre-line text-[16px] font-bold leading-[1.4] text-ink">
+            {title}
+          </span>
+          <span className="mt-2 flex items-center gap-1.5">
+            <span className="text-[13px] tracking-[0.12em] text-berry">
+              ★★★★<span className="text-line">★</span>
+            </span>
+            <span className="text-[11px] font-semibold text-ink">4.0</span>
+          </span>
+          <span className="mt-3.5 flex flex-1 flex-col justify-start gap-2">
+            {items?.map((item) => {
+              const [label, text] = item.split("|");
+              const good = label.startsWith("좋");
+              return (
+                <span key={item} className="flex items-center gap-2">
+                  <span
+                    className={[
+                      "shrink-0 rounded-sm px-1.5 py-0.5 text-[9px] font-bold",
+                      good ? "bg-berry-light text-berry-dark" : "bg-surface-muted text-sub",
+                    ].join(" ")}
+                  >
+                    {label}
+                  </span>
+                  <span className="text-[11px] font-medium text-ink">{text}</span>
+                </span>
+              );
+            })}
+          </span>
+          {note && <span className="text-[10px] text-berry-dark">{note}</span>}
+        </span>
+      );
+
     default:
       return null;
   }
