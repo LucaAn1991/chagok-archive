@@ -58,11 +58,16 @@ export type PlanningAI = {
     ctx: PlanningContext,
   ): Promise<PlanTurnResult>;
 
-  /** ③ 카드 생성 — 주제 × 대상 조합으로 카드 초안을 만든다 (F3) */
-  generateCards(input: {
+  /**
+   * ③ 카드 생성 — **대상 하나당 독립 호출** (08-28 확정).
+   * «나를 아는 사람»(자기소개 금지)과 «나를 모르는 사람»(자기소개 필수)은 지시가
+   * 정반대라, 여러 대상을 한 프롬프트에 섞으면 어중간한 글 하나가 나온다.
+   * 호출 측(confirm API)이 Promise.all로 대상별로 부른다.
+   */
+  generateCard(input: {
     topic: string;
-    audiences: string[];
+    audience: string;
     purposes: string[];
-    intent: string;
-  }): Promise<CardDraft[]>;
+    intent: string; // plan 수준 기획의도 — 참고 맥락. 카드의 기획의도는 대상별로 만든다
+  }): Promise<CardDraft>;
 };

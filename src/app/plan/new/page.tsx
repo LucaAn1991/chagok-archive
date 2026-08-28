@@ -276,9 +276,10 @@ function NewPlanScreen() {
     setConfirming(true);
     setConfirmError(false);
     try {
-      await postWithRetry(`/api/plans/${planId}/confirm`, {});
+      const res = await postWithRetry(`/api/plans/${planId}/confirm`, {});
       await postWithRetry(`/api/plans/${planId}/schedule`, {});
-      router.push(`/plan/${planId}/result`);
+      // 상한을 넘겨 8장까지만 만든 경우 — 결과 화면이 한 줄 안내를 띄운다
+      router.push(`/plan/${planId}/result${res.capped ? "?capped=1" : ""}`);
     } catch {
       setConfirmError(true);
       setConfirming(false);

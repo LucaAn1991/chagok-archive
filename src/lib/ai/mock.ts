@@ -98,15 +98,24 @@ export const mockPlanningAI: PlanningAI = {
     };
   },
 
-  async generateCards({ topic, audiences, purposes, intent }): Promise<CardDraft[]> {
-    // 주제 × 대상 = 대상당 정확히 1장 — ② 버튼이 약속한 「카드 N장」과 맞춘다 (08-28).
-    // 한 번에 만드는 상한은 MAX_CARDS_PER_RUN. 진짜 AI도 이 두 규칙을 따른다
-    const short = topic.length > 9 ? `${topic.slice(0, 9)}…` : topic;
-    return audiences.slice(0, MAX_CARDS_PER_RUN).map((audience, i) => ({
-      title: `${topic} — ${audience}${particle(audience, "을", "를")} 위한 이야기`,
-      shortTitle: `${short} ${i + 1}`,
+  async generateCard({ topic, audience, purposes }): Promise<CardDraft> {
+    // 대상 하나당 카드 하나 — 대상별로 독립 생성된다 (08-28).
+    // 진짜 AI는 AUDIENCES의 prompt를 지시문으로 받아 말투·도입부를 대상에 맞춘다
+    const short = topic.length > 7 ? `${topic.slice(0, 7)}…` : topic;
+    const meta = AUDIENCES.find((a) => a.label === audience);
+    const suffix: Record<string, string> = {
+      knows_me: "근황",
+      stranger: "소개",
+      seeker: "정보",
+    };
+    return {
+      // 표기 규칙 — label을 변형하지 않고 조사는 「에게」 하나만 (08-28)
+      title: `${topic} — ${audience}에게`,
+      shortTitle: `${short}·${meta ? suffix[meta.id] : "이야기"}`,
       audience,
-      intent: intent || `「${topic}」${particle(topic, "을", "를")} ${audience}의 눈높이에서 ${purposes[0] ?? "공감 얻기"} 중심으로 풀어낸다`,
-    }));
+      intent: meta
+        ? `「${topic}」${particle(topic, "을", "를")} ${audience}에게. ${meta.prompt}`
+        : `「${topic}」${particle(topic, "을", "를")} ${audience}의 눈높이에서 ${purposes[0] ?? "공감 얻기"} 중심으로 풀어낸다`,
+    };
   },
 };

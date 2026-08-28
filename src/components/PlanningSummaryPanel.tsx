@@ -149,12 +149,7 @@ function SummaryBody({
         editValue={summary.audiences.join(", ")}
         onSave={(raw) => onSave({ audiences: splitList(raw) })}
       />
-      <EditableRow
-        label="목적"
-        display={summary.purposes.join(" · ")}
-        editValue={summary.purposes.join(", ")}
-        onSave={(raw) => onSave({ purposes: splitList(raw) })}
-      />
+      {/* «목적»은 화면에 노출하지 않는다 (08-28 — 용어 금지). 값은 대상에 딸려 AI가 정한다 */}
       <EditableRow
         label="기획의도"
         display={summary.intent}

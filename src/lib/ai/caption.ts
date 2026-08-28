@@ -1,5 +1,6 @@
 import "server-only";
 
+import { AUDIENCES } from "../audiences";
 import type { Caption } from "../../types/card";
 import type { ToneKey } from "../../types/user";
 
@@ -41,10 +42,32 @@ export async function generateCaption(input: CaptionInput): Promise<Caption> {
   return mockCaption(input);
 }
 
+/**
+ * 대상별 도입부 — lib/audiences.ts의 prompt 지시를 목에서도 흉내 낸다 (08-28).
+ * knows_me는 자기소개 없이 근황처럼, stranger는 자기소개 한 줄 필수, seeker는 정보 밀도.
+ * 실AI 프롬프트에도 같은 지시(AUDIENCES[].prompt)가 들어간다.
+ */
+function mockHook(input: CaptionInput): string {
+  const meta = AUDIENCES.find((a) => a.label === input.audience);
+  switch (meta?.id) {
+    case "knows_me":
+      // 자기소개 금지 — 이미 아는 사이, 근황을 나누듯
+      return `(개발용 샘플) 다들 잘 지내죠? 요즘 「${input.title}」 근황이에요.`;
+    case "stranger":
+      // 자기소개 필수 — 화자가 누구인지 한 줄로
+      return `(개발용 샘플) 처음 뵙는 분들께 — 저는 「${input.title}」 이야기를 하는 사람이에요.`;
+    case "seeker":
+      // 정보 밀도 최우선 — 검색될 단어를 앞세운다
+      return `(개발용 샘플) ${input.title}, 핵심만 정리했어요.`;
+    default:
+      return `(개발용 샘플) ${input.title}`;
+  }
+}
+
 /** 개발용 샘플 캡션 — 입력값을 반영해 화면에서 흐름을 확인할 수 있게 한다 */
 function mockCaption(input: CaptionInput): Caption {
   return {
-    hook: `(개발용 샘플) ${input.title}`,
+    hook: mockHook(input),
     body: [
       `${input.audience}에게 전하는 이야기예요.`,
       input.intent ? `기획의도: ${input.intent}` : null,

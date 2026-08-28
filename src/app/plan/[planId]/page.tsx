@@ -112,12 +112,6 @@ export default function PlanDetailPage() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-label font-semibold text-sub">목적</dt>
-                  <dd className="mt-0.5 text-body text-ink">
-                    {state.plan.purposes.join(" · ") || "—"}
-                  </dd>
-                </div>
-                <div>
                   <dt className="text-label font-semibold text-sub">기획의도</dt>
                   <dd className="mt-0.5 text-body text-ink">{state.plan.intent || "—"}</dd>
                 </div>
