@@ -14,6 +14,8 @@ import { verifyRequest } from "@/lib/server/request-auth";
  *                          — ② 멀티 선택. 빈 배열이면 AI가 알아서 정하고 넘어간다
  *   { update: { topic?, audiences?, purposes?, intent? } }
  *                          — 기획안 카드 부분 수정 (PRD §5-7 ② — 부분 수정이 기본)
+ *   { resume: true }       — 이탈 후 복원. 아무것도 쓰지 않고 현재 진행 단계
+ *                            (주제 후보·대상 후보·확정 가능)만 계산해 돌려준다 (08-28)
  */
 
 type PlanUpdate = {
@@ -67,9 +69,11 @@ export async function POST(
   let text = "";
   let selection: { audiences: string[]; purposes: string[] } | null = null;
   let update: PlanUpdate | null = null;
+  let resume = false;
   try {
     const body = await request.json();
     if (typeof body?.text === "string") text = body.text.trim();
+    resume = body?.resume === true;
     if (body?.selection && typeof body.selection === "object") {
       selection = {
         audiences: parseStringArray(body.selection.audiences),
@@ -80,7 +84,7 @@ export async function POST(
   } catch {
     return NextResponse.json({ error: "요청 형식이 올바르지 않습니다." }, { status: 400 });
   }
-  if (!text && !selection && !update) {
+  if (!text && !selection && !update && !resume) {
     return NextResponse.json({ error: "보낼 내용이 없습니다." }, { status: 400 });
   }
 
@@ -107,6 +111,37 @@ export async function POST(
       field: String(userSnap.get("field") ?? ""),
       tone: String(userSnap.get("tone") ?? ""),
     };
+
+    // ── 복원(resume) — 문서를 건드리지 않고 진행 단계만 다시 계산한다 ──
+    if (resume) {
+      const audiences: string[] = planSnap.get("audiences") ?? [];
+      const summary = {
+        topic,
+        audiences,
+        purposes: planSnap.get("purposes") ?? [],
+        intent: planSnap.get("intent") ?? "",
+      };
+      if (audiences.length > 0) {
+        return NextResponse.json({
+          reply: null, proposal: null, topicSuggestions: null,
+          summary, readyToConfirm: true, isMock,
+        });
+      }
+      if (topic) {
+        // ② 단계에서 멈춤 — 후보를 다시 계산해 준다 (저장된 대화는 그대로)
+        const turn = await ai.ideaTurn(topic, ctx);
+        return NextResponse.json({
+          reply: null, proposal: turn.proposal ?? null, topicSuggestions: null,
+          summary, readyToConfirm: false, isMock,
+        });
+      }
+      // ① 단계에서 멈춤 — 주제 후보를 다시 계산
+      const turn = await ai.greeting(ctx);
+      return NextResponse.json({
+        reply: null, proposal: null, topicSuggestions: turn.topicSuggestions ?? null,
+        summary, readyToConfirm: false, isMock,
+      });
+    }
 
     // ── 기획안 카드 부분 수정 — AI 호출 없이 반영하고 짧게 답한다 ──
     if (update) {

@@ -3,8 +3,9 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { ArrowUp, Check, Plus } from "lucide-react";
-import { auth } from "@/lib/firebase/client";
+import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import AIChatBubble from "@/components/AIChatBubble";
@@ -35,9 +36,13 @@ type Proposal = { audiences: string[]; purposes: string[] };
 /** 서버로 보낼 한 턴 — [다시 보내기]가 그대로 재사용한다 */
 type TurnPayload =
   | { kind: "init"; idea: string; from: string | null }
+  | { kind: "resume"; id: string } // 이탈 후 복원 — 진행 단계만 다시 받는다
   | { kind: "text"; text: string }
   | { kind: "selection"; audiences: string[]; purposes: string[] }
   | { kind: "update"; patch: PlanSummaryPatch };
+
+/** 복원 후보 — Firestore에서 읽어온 미완료 draft */
+type ResumeCandidate = { id: string; topic: string; messages: Msg[]; summary: PlanSummary };
 
 async function postJson(path: string, body: unknown): Promise<Record<string, unknown>> {
   const user = auth.currentUser;
@@ -93,6 +98,7 @@ function NewPlanScreen() {
   const [ready, setReady] = useState(false); // ③으로 넘어갈 수 있는 상태
   const [isMock, setIsMock] = useState(false);
 
+  const [resumeCandidate, setResumeCandidate] = useState<ResumeCandidate | null>(null);
   const [confirming, setConfirming] = useState(false); // ③ 카드 생성 진행 중
   const [confirmError, setConfirmError] = useState(false);
 
@@ -119,7 +125,9 @@ function NewPlanScreen() {
           ? payload.from
             ? await postWithRetry(`/api/plans/${payload.from}/continue`, {})
             : await postWithRetry("/api/plans", { idea: payload.idea })
-          : await postWithRetry(
+          : payload.kind === "resume"
+            ? await postWithRetry(`/api/plans/${payload.id}/messages`, { resume: true })
+            : await postWithRetry(
               `/api/plans/${planId}/messages`,
               payload.kind === "text"
                 ? { text: payload.text }
@@ -156,8 +164,70 @@ function NewPlanScreen() {
       }
       if (didInit.current) return;
       didInit.current = true;
-      if (idea && !from) setMessages([{ role: "user", text: idea }]);
-      void runTurn({ kind: "init", idea, from });
+
+      // 홈에서 아이디어를 들고 왔거나 「이어서 기획하기」로 온 경우 — 의도가 명확하니 바로 새 세션
+      if (idea || from) {
+        if (idea && !from) setMessages([{ role: "user", text: idea }]);
+        void runTurn({ kind: "init", idea, from });
+        return;
+      }
+
+      // 하다 만 기획이 있는지 본다 — 대화는 매 턴 서버에 저장되므로 복원할 수 있다 (08-28)
+      void (async () => {
+        setSending(true);
+        try {
+          const snap = await getDocs(
+            query(
+              collection(db, "plans"),
+              where("userId", "==", user.uid),
+              where("status", "==", "draft"),
+            ),
+          );
+          const drafts = snap.docs
+            .map((d) => {
+              const data = d.data() as {
+                topic?: string;
+                audiences?: string[];
+                purposes?: string[];
+                intent?: string;
+                messages?: { role: "user" | "assistant"; text: string }[];
+                createdAt?: { toMillis: () => number };
+              };
+              return { id: d.id, ...data };
+            })
+            .sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+
+          const latest = drafts[0];
+          if (!latest) {
+            void runTurn({ kind: "init", idea: "", from: null });
+            return;
+          }
+
+          const msgs: Msg[] = (latest.messages ?? []).map((m) => ({ role: m.role, text: m.text }));
+          const summaryData: PlanSummary = {
+            topic: latest.topic ?? "",
+            audiences: latest.audiences ?? [],
+            purposes: latest.purposes ?? [],
+            intent: latest.intent ?? "",
+          };
+          const meaningful = Boolean(latest.topic) || msgs.some((m) => m.role === "user");
+
+          if (meaningful) {
+            // 진행하던 내용이 있다 — 이어서 할지 물어본다
+            setSending(false);
+            setResumeCandidate({ id: latest.id, topic: latest.topic ?? "", messages: msgs, summary: summaryData });
+          } else {
+            // 인사만 남은 빈 draft — 팝업 없이 조용히 재사용 (빈 세션이 쌓이지 않게)
+            setPlanId(latest.id);
+            setMessages(msgs);
+            setSummary(summaryData);
+            void runTurn({ kind: "resume", id: latest.id });
+          }
+        } catch {
+          setSending(false);
+          setFailed({ kind: "init", idea: "", from: null });
+        }
+      })();
     });
     return unsubscribe;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -171,6 +241,22 @@ function NewPlanScreen() {
   function sendText(text: string) {
     setMessages((prev) => [...prev, { role: "user", text }]);
     void runTurn({ kind: "text", text });
+  }
+
+  /** 「이어서 진행할까요?」 팝업 — 수락 시 저장된 대화·기획안·진행 단계를 복원한다 */
+  function acceptResume() {
+    const c = resumeCandidate;
+    if (!c) return;
+    setResumeCandidate(null);
+    setPlanId(c.id);
+    setMessages(c.messages);
+    setSummary(c.summary);
+    void runTurn({ kind: "resume", id: c.id });
+  }
+
+  function declineResume() {
+    setResumeCandidate(null);
+    void runTurn({ kind: "init", idea: "", from: null });
   }
 
   /** ② 대상·목적 선택 제출 — 빈 선택이면 AI가 알아서 정한다 (IA 2.1-②) */
@@ -233,6 +319,13 @@ function NewPlanScreen() {
 
   return (
     <div className="flex flex-1">
+      {resumeCandidate && (
+        <ResumeModal
+          topic={resumeCandidate.topic}
+          onAccept={acceptResume}
+          onDecline={declineResume}
+        />
+      )}
       <AppSidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -397,6 +490,54 @@ function ReadyActionBar({
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   복원 팝업 — 이탈 후 재진입 (모바일은 bottom sheet 우선, DESIGN §13)
+   ============================================================ */
+
+function ResumeModal({
+  topic,
+  onAccept,
+  onDecline,
+}: {
+  topic: string;
+  onAccept: () => void;
+  onDecline: () => void;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="하던 기획 이어서 진행"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/30 md:items-center md:p-4"
+    >
+      {/* 모달·floating layer에만 약한 그림자 허용 (DESIGN §4) */}
+      <div className="w-full max-w-[400px] rounded-t-xl bg-surface p-6 shadow-lg md:rounded-xl">
+        <h2 className="text-title font-bold text-ink">하던 기획이 있어요</h2>
+        <p className="mt-2 text-body text-sub">
+          {topic ? `「${topic}」 기획을 하다 말았어요. ` : "마치지 않은 기획 대화가 있어요. "}
+          이어서 진행할까요?
+        </p>
+        <div className="mt-6 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={onAccept}
+            className="flex h-12 w-full items-center justify-center rounded-md bg-berry text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+          >
+            이어서 진행할게요
+          </button>
+          <button
+            type="button"
+            onClick={onDecline}
+            className="flex h-11 w-full items-center justify-center rounded-md text-body font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
+          >
+            새로 시작할게요
+          </button>
+        </div>
       </div>
     </div>
   );
