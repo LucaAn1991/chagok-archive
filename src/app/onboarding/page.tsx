@@ -163,10 +163,7 @@ export default function OnboardingPage() {
         {step === 1 ? (
           <>
             <h1 className="text-h2 font-bold text-ink">거의 다 됐어요</h1>
-            {/* 60초 — PRD §5-2 확정값 */}
-            <p className="mt-2 text-body text-sub">
-              콘텐츠 준비에 필요한 것만 알려주세요. 60초면 충분해요.
-            </p>
+            <p className="mt-2 text-body text-sub">콘텐츠 준비에 필요한 것만 알려주세요.</p>
 
             <div className="mt-8 flex flex-col gap-6">
               <div className="flex flex-col gap-2">
@@ -193,9 +190,8 @@ export default function OnboardingPage() {
                   일주일에 몇 번 올리는 걸 목표로 하시나요?
                 </p>
 
-                {/* 주기 — 한 줄 배치. 테두리 두께가 바뀌면 칸이 흔들려서 두 상태 모두 2px */}
-                <p className="mt-1 text-caption text-sub">주기</p>
-                <div className="flex gap-1.5">
+                {/* 주기 칩 — 질문 바로 밑 한 줄 배치. 테두리 두께가 바뀌면 칸이 흔들려서 두 상태 모두 2px */}
+                <div className="mt-1 flex gap-1.5">
                   {FREQUENCIES.map((n) => {
                     const selected = frequency === n;
                     return (
@@ -220,10 +216,8 @@ export default function OnboardingPage() {
                 {/* 요일 — 주기를 고르면 나타난다 */}
                 {frequency != null && (
                   <>
-                    <p className="mt-3 text-caption text-sub">
-                      {daily
-                        ? "요일 — 매일이라 전부 선택했어요"
-                        : `요일 — ${frequency}개를 골라주세요`}
+                    <p className="mt-4 text-body font-semibold text-ink">
+                      업로드 요일도 정해볼게요.
                     </p>
                     <div className="flex gap-1.5">
                       {DAY_LABELS.map((label, d) => {
@@ -262,7 +256,7 @@ export default function OnboardingPage() {
                 className="h-12 rounded-md bg-berry text-[15px] font-semibold text-white
                            hover:bg-berry-dark"
               >
-                내 취향도 알려줄게요
+                좋아하는 게시물 골라보기
               </button>
 
               <p className="text-center text-caption text-sub">
