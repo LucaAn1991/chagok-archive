@@ -23,7 +23,7 @@ export type CaptionInput = {
   audience: string; // 겨냥한 대상
   intent: string; // 기획의도
   extraNote: string; // «이번에 꼭 넣을 내용»
-  tone: ToneKey;
+  tone: ToneKey | null; // null = 아직 안 정함 → 기본 말투 (08-28 온보딩 축소)
   avoidExpressions: string[];
 };
 
