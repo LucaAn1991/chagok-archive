@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { verifyRequest } from "@/lib/server/request-auth";
-import type { ToneKey } from "@/types";
+import type { LayoutId, ToneKey } from "@/types";
 
 /**
  * PATCH /api/users/me — 온보딩 저장 · 콘텐츠 설정 수정 (PLAN §6 · F1 · 설정).
@@ -19,6 +19,8 @@ import type { ToneKey } from "@/types";
  */
 
 const TONE_KEYS: ToneKey[] = ["friendly", "calm", "energetic", "professional"];
+// 온보딩 취향 선택지로 제공하는 3종 (PLAN §2-3 레이아웃 이름)
+const STYLE_KEYS: LayoutId[] = ["text-only", "image-full", "list"];
 
 export async function PATCH(request: Request) {
   const session = await verifyRequest(request);
@@ -71,6 +73,13 @@ export async function PATCH(request: Request) {
     (updates.uploadDays as number[]).length !== updates.uploadFrequency
   ) {
     return NextResponse.json({ error: "주기와 요일 개수가 맞지 않아요." }, { status: 400 });
+  }
+
+  if (body.preferredLayout !== undefined) {
+    if (body.preferredLayout !== null && !STYLE_KEYS.includes(body.preferredLayout as LayoutId)) {
+      return NextResponse.json({ error: "템플릿 값을 확인해주세요." }, { status: 400 });
+    }
+    updates.preferredLayout = body.preferredLayout;
   }
 
   if (body.tone !== undefined) {
@@ -126,6 +135,7 @@ export async function PATCH(request: Request) {
       if (merged.tone === undefined) updates.tone = null;
       if (merged.avoidExpressions === undefined) updates.avoidExpressions = [];
       if (merged.uploadDays === undefined) updates.uploadDays = [];
+      if (merged.preferredLayout === undefined) updates.preferredLayout = null;
     }
 
     await ref.set(updates, { merge: true });
