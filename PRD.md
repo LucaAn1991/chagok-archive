@@ -766,6 +766,7 @@ App Hosting(Node 런타임) 안에서 돌아가므로 **배포 대상이 하나�
 | 12 | **TTV 정의 확정** | 시작·종료 지점, 온보딩 포함 여부. 스톱워치 규칙이 5인에게 동일해야 한다 |
 | 13 | **수정률 정의** | 문장 단위 diff 기능이 v1에 없다. 관찰자 수동 집계로 좁히거나 v1에서 뺀다 |
 | 14 | **지금 착수 가능한 위험 대비** | ⓐ 고정 테스트 세트 20건 + 3점 채점표 + **생성자≠채점자** (위험 2·5) ⓑ 프롬프트 v0.4 실측 10회 p50/p95 (위험 3) ⓒ Firestore 스키마 Day 0 확정 (위험 7) ⓓ 스톡 provider 3곳 조사 (위험 6) |
+| 15 | **`[v2]` Onboarding Visual Preference Personalization** `[확정 — 08.28 사용자]` | 사용자가 입력한 활동 분야/콘텐츠 방향을 기반으로, 확정된 9개 Visual Frame의 구조는 유지하면서 각 Frame에 적합한 카피와 이미지 소스를 동적으로 생성·매핑한다. **카피와 이미지는 하나의 개인화 단위로 처리**하며, 생성 실패 또는 응답 지연 시 사전 제작된 Sample Set(fitness·beauty)으로 fallback한다. fallback 전환 threshold는 지금 정하지 않고 실측 후 확정한다. **선행 조건** — ⓐ LLM API 연결 ⓑ Stock image provider 및 라이선스 정책 확정(미결 2와 연동) ⓒ 이미지 검색·선정 품질 검증 |
 
 ---
 
@@ -774,6 +775,7 @@ App Hosting(Node 런타임) 안에서 돌아가므로 **배포 대상이 하나�
 | 날짜 | 내용 |
 |---|---|
 | 2026-08-26 | PRD v1 최초 작성 |
+| 2026-08-28 | **§10-15 신설 — `[v2]` Onboarding Visual Preference Personalization** — 9개 Visual Frame 고정 + 사용자 입력 기반 카피·이미지 동적 생성(한 묶음), 실패·지연 시 사전 제작 Sample Set fallback. threshold는 실측 후. 선행 조건: LLM API 연결·스톡 provider 확정·이미지 선정 품질 검증. v1은 fitness·beauty 프리셋 세트 + 키워드 매칭으로 감 |
 | 2026-08-27 | **AI 제공사·모델 확정** — Anthropic Claude `claude-opus-5`. 서버 API route에서만 호출. 사고가 기본 활성이라 «5초 이내»와 부딪힐 수 있어 노력 수준·스트리밍을 위험 3 측정 항목에 포함 |
 | 2026-08-27 | **카드뉴스 렌더링을 Node(satori+sharp)로 확정** (§10-11 해소) — Python/Pillow 폐기, App Hosting 단일 배포 유지. 스파이크의 «5장 0.05초»는 언어가 바뀌어 [미검증]으로 환원 |
 | 2026-08-27 | **실패 경로 확정** (§10-9 해소) — §5-7 신설. 자동 1회 재시도 / 부분 수정 우선 / 카드 생성 원자성 / v1 재시도 제한 없음 |

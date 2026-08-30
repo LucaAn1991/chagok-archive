@@ -22,7 +22,7 @@ export type SlidesInput = {
   audience: string;
   intent: string;
   extraNote: string;
-  tone: ToneKey;
+  tone: ToneKey | null; // null = 아직 안 정함 → 기본 말투 (08-28 온보딩 축소)
   avoidExpressions: string[];
   visualType: VisualType;
 };

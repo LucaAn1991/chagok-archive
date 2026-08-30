@@ -7,11 +7,18 @@ import { FirebaseError } from "firebase/app";
 import { onAuthStateChanged, signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
+import BrandPanel from "@/components/BrandPanel";
+import PasswordInput from "@/components/PasswordInput";
+import InlineAlert from "@/components/InlineAlert";
 
 /**
  * 로그인 — PLAN.md §3-1.
  * 비로그인 사용 불가(PRD §5-4)이므로 여기가 첫 관문이다.
  * 자동 로그인은 Firebase Auth의 기본 세션 유지(local persistence)로 처리된다.
+ *
+ * 레이아웃 — Desktop(>=1200)에서만 좌우 분할이다. 왼쪽은 브랜드,
+ * 오른쪽은 폼. 그보다 좁으면 왼쪽을 통째로 숨기고 폼만 남긴다.
+ * 축소가 아니라 제거다 (DESIGN.md ✕22 «모바일을 데스크톱의 축소판으로 만들지 않는다»).
  *
  * 에러는 인라인로만 표시한다. 빨간색 경고 금지 — 글자는 --ink,
  * 입력 테두리만 --line보다 진하게 (DESIGN.md §2 하단).
@@ -67,80 +74,106 @@ export default function LoginPage() {
   ].join(" ");
 
   return (
-    <main className="flex flex-1 items-center justify-center p-4">
-      <div className="w-full max-w-[400px]">
-        <h1 className="text-center text-h2 font-bold text-ink">차곡</h1>
-        <p className="mt-2 text-center text-body text-sub">로그인</p>
+    <main className="flex flex-1">
+      <BrandPanel />
 
-        <form onSubmit={handleSubmit} noValidate className="mt-8 flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <label htmlFor="email" className="text-label font-semibold text-ink">
-              이메일
-            </label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className={inputClass}
-            />
-          </div>
+      {/* 오른쪽 — 로그인 폼 */}
+      <div className="flex flex-1 items-center justify-center p-4 desktop:w-2/5">
+        <div className="w-full max-w-[400px]">
+          {/*
+            좌측 패널이 없는 폭에서는 여기가 유일한 브랜드 표시다.
+            Desktop에서는 왼쪽이 「차곡」을 말하므로 화면 이름만 남긴다.
+          */}
+          <h1 className="text-center text-h2 font-bold text-ink desktop:text-left">
+            <span className="desktop:hidden">차곡</span>
+            <span className="hidden desktop:inline">로그인</span>
+          </h1>
+          <p className="mt-2 text-center text-body text-sub desktop:hidden">로그인</p>
 
-          <div className="flex flex-col gap-2">
-            <label htmlFor="password" className="text-label font-semibold text-ink">
-              비밀번호
-            </label>
-            <input
+          <form onSubmit={handleSubmit} noValidate className="mt-8 flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <label htmlFor="email" className="text-body font-semibold text-ink">
+                이메일
+              </label>
+              <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setError(null); // 고치기 시작하면 제출 알럿은 지운다
+                }}
+                placeholder="you@example.com"
+                className={inputClass}
+              />
+            </div>
+
+            <PasswordInput
               id="password"
-              type="password"
-              autoComplete="current-password"
+              label="비밀번호"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className={inputClass}
+              onChange={(v) => {
+                setPassword(v);
+                setError(null);
+              }}
+              autoComplete="current-password"
+              hasError={error != null}
             />
+
+            {error && <InlineAlert>{error}</InlineAlert>}
+
+            {/* 이 화면의 primary는 이것 하나다 (DESIGN.md §6) */}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="mt-2 h-12 rounded-md bg-berry text-[15px] font-semibold text-white
+                         hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+            >
+              {submitting ? "···" : "로그인"}
+            </button>
+          </form>
+
+          <p className="mt-4 text-center text-body">
+            <Link href="/login/reset" className="text-sub hover:underline">
+              비밀번호를 잊으셨나요?
+            </Link>
+          </p>
+
+          {/* 가입 경로 — secondary 버튼 (DESIGN.md §6: 흰 배경 · 2px berry · 높이 44) */}
+          <div className="mt-8 border-t border-line pt-6">
+            <p className="text-center text-body text-sub">계정이 없으신가요?</p>
+            <Link
+              href="/signup"
+              className="mt-3 flex h-11 items-center justify-center rounded-md border-2
+                         border-berry bg-surface text-[15px] font-semibold text-berry
+                         hover:bg-berry-light hover:text-berry-dark"
+            >
+              회원가입
+            </Link>
           </div>
-
-          {error && (
-            <p role="alert" className="text-body text-ink">
-              {error}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="mt-2 h-12 rounded-md bg-berry text-[15px] font-semibold text-white
-                       hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
-          >
-            {submitting ? "···" : "로그인"}
-          </button>
-        </form>
-
-        <div className="mt-6 flex items-center justify-center gap-4 text-body">
-          <Link href="/signup" className="text-berry-dark hover:underline">
-            회원가입
-          </Link>
-          <span aria-hidden className="text-line">
-            |
-          </span>
-          <Link href="/login/reset" className="text-sub hover:underline">
-            비밀번호를 잊으셨나요?
-          </Link>
         </div>
       </div>
     </main>
   );
 }
 
-/** Firebase 에러 코드 → 한국어 안내. 계정 존재 여부는 노출하지 않는다 */
+/**
+ * Firebase 에러 코드 → 한국어 안내.
+ *
+ * 미가입 이메일은 구분해서 알려준다 (08-28 확정 — 구글·인스타그램식 표준 UX).
+ * 단, user-not-found·wrong-password는 Firebase 콘솔에서 «이메일 열거 보호»를
+ * 꺼야 내려온다. 켜져 있으면 둘 다 invalid-credential로 와서 일반 문구가 나온다.
+ * 비밀번호 재설정 화면은 계속 비노출 유지 («메일을 보냈어요» 동일 응답).
+ */
 function loginErrorMessage(err: unknown): string {
   if (err instanceof FirebaseError) {
     switch (err.code) {
-      case "auth/invalid-credential":
       case "auth/user-not-found":
+        return "가입되지 않은 이메일이에요.";
       case "auth/wrong-password":
+        return "비밀번호가 맞지 않아요.";
+      case "auth/invalid-credential":
         return "이메일 또는 비밀번호가 맞지 않아요.";
       case "auth/invalid-email":
         return "이메일 형식을 확인해주세요.";
