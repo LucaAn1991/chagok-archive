@@ -54,6 +54,7 @@ export async function POST(
       extraNote: card.extraNote,
       tone: user.tone,
       avoidExpressions: user.avoidExpressions,
+      visualPreferences: user.visualPreferences ?? null, // 취향의 문구 톤 반영 (08-31)
       visualType,
     });
 

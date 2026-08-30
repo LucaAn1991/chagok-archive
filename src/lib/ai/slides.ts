@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { Slide, VisualType } from "../../types/card";
-import type { ToneKey } from "../../types/user";
+import type { ToneKey, User } from "../../types/user";
 import { isClaudeConfigured } from "./caption";
 
 /**
@@ -15,6 +15,7 @@ import { isClaudeConfigured } from "./caption";
  *
  * @TODO: 실제 Claude 호출 구현 — src/lib/ai/caption.ts의 TODO와 동일 조건.
  *   슬라이드 장수(5~8)·레이아웃 배치도 AI가 내용에 맞게 정하게 한다.
+ *   visualPreferences는 buildPreferenceDirective()로 프롬프트에 반영 (08-31).
  */
 
 export type SlidesInput = {
@@ -24,6 +25,8 @@ export type SlidesInput = {
   extraNote: string;
   tone: ToneKey | null; // null = 아직 안 정함 → 기본 말투 (08-28 온보딩 축소)
   avoidExpressions: string[];
+  /** 온보딩 게시물 취향 — 실호출 시 buildPreferenceDirective()로 프롬프트에 반영 (08-31) */
+  visualPreferences?: User["visualPreferences"];
   visualType: VisualType;
 };
 

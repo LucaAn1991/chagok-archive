@@ -2,7 +2,7 @@ import "server-only";
 
 import { AUDIENCES } from "../audiences";
 import type { Caption } from "../../types/card";
-import type { ToneKey } from "../../types/user";
+import type { ToneKey, User } from "../../types/user";
 
 /**
  * 캡션 생성 (F7) — Hook · Body · CTA · Hashtag.
@@ -15,6 +15,8 @@ import type { ToneKey } from "../../types/user";
  *   - 모델: claude-opus-5 (PLAN.md §9 확정) · @anthropic-ai/sdk
  *   - 구조화 출력: client.messages.parse + zodOutputFormat — **zod 설치 승인 필요**
  *   - user.tone을 말투 지시로, avoidExpressions를 금지 목록으로 프롬프트에 반영
+ *   - visualPreferences는 buildPreferenceDirective()로 지시문을 만들어 시스템
+ *     프롬프트에 넣는다 (src/lib/ai/preferences.ts — 취향의 문구 톤 반영, 08-31)
  *   - 실패 시 자동 1회 재시도 (PRD §5-7)
  *   - 1턴 5초 제약: effort 'low' + 스트리밍 검토, p50/p95 실측 (PLAN §9)
  */
@@ -26,6 +28,8 @@ export type CaptionInput = {
   extraNote: string; // «이번에 꼭 넣을 내용»
   tone: ToneKey | null; // null = 아직 안 정함 → 기본 말투 (08-28 온보딩 축소)
   avoidExpressions: string[];
+  /** 온보딩 게시물 취향 — 실호출 시 buildPreferenceDirective()로 프롬프트에 반영 (08-31) */
+  visualPreferences?: User["visualPreferences"];
 };
 
 /** 실제 Claude 호출이 가능한 상태인가 — 키가 없으면 목 모드 */
