@@ -157,7 +157,7 @@ function CalendarView({ uid }: { uid: string }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  // 드롭 직후 바로 옮기지 않는다 — 확인 팝업을 거친다 (08-31 요청)
+  // 빈 날은 바로 옮기고, 이미 카드가 있는 날로 드롭할 때만 확인 팝업 (08-31 확정)
   const [pendingMove, setPendingMove] = useState<{ cardId: string; toDate: string } | null>(null);
 
   useEffect(() => {
@@ -288,6 +288,7 @@ function CalendarView({ uid }: { uid: string }) {
     pendingMove && state.phase === "ready"
       ? (state.cards.find((c) => c.id === pendingMove.cardId) ?? null)
       : null;
+  const pendingTargetCards = pendingMove ? (byDate.get(pendingMove.toDate) ?? []) : [];
 
   return (
     <div className="flex flex-1">
@@ -423,8 +424,12 @@ function CalendarView({ uid }: { uid: string }) {
                         onDragStartCard={setDraggingId}
                         onDropCard={(cardId) => {
                           setDraggingId(null);
-                          if (state.cards.some((c) => c.id === cardId && c.scheduledDate !== dateKey)) {
+                          const moving = state.cards.find((c) => c.id === cardId);
+                          if (!moving || moving.scheduledDate === dateKey) return;
+                          if ((byDate.get(dateKey) ?? []).length > 0) {
                             setPendingMove({ cardId, toDate: dateKey });
+                          } else {
+                            void moveCard(cardId, dateKey);
                           }
                         }}
                         onOpenCard={(id) => router.push(`/card/${id}`)}
@@ -510,7 +515,7 @@ function CalendarView({ uid }: { uid: string }) {
             </div>
           )}
 
-          {/* 드래그 이동 확인 팝업 — 잘못 놓은 드래그를 거른다 (08-31 요청. 카드 상세 모달 패턴) */}
+          {/* 충돌 확인 팝업 — 이미 카드가 있는 날로 드롭했을 때만 (카드 상세 모달 패턴) */}
           {pendingMove && pendingCard && (
             <div
               role="dialog"
@@ -524,14 +529,15 @@ function CalendarView({ uid }: { uid: string }) {
                 className="flex w-full max-w-[400px] flex-col gap-4 rounded-xl bg-surface p-6 shadow-lg"
               >
                 <h2 id="move-title" className="text-title font-bold text-ink">
-                  일정을 옮길까요?
+                  이 날에는 이미 카드가 있어요
                 </h2>
                 <p className="text-body text-sub">
-                  「{pendingCard.title}」 카드를{" "}
                   <span className="font-semibold text-ink">
                     {formatDayLabel(pendingMove.toDate)}
                   </span>
-                  로 옮겨요.
+                  에는 이미 「{pendingTargetCards[0]?.title}」
+                  {pendingTargetCards.length > 1 && ` 외 ${pendingTargetCards.length - 1}장`}이
+                  있어요. 「{pendingCard.title}」 카드를 같은 날에 함께 둘까요?
                 </p>
                 <div className="flex gap-2">
                   <button
@@ -550,7 +556,7 @@ function CalendarView({ uid }: { uid: string }) {
                     }}
                     className="h-11 flex-1 rounded-md bg-berry text-body font-semibold text-white hover:bg-berry-dark"
                   >
-                    옮기기
+                    함께 두기
                   </button>
                 </div>
               </div>
