@@ -172,6 +172,37 @@ SQL이라면 없는 컬럼에 쓰는 순간 막아주지만, Firestore는 세 �
 
 ---
 
+## 사진 업로드(F13)를 켜려면 — Storage 버킷
+
+**코드는 다 되어 있고, 버킷만 없습니다.** 버킷이 없는 동안 재료 추가 화면의 사진 칸은
+「사진 업로드는 준비 중이에요」로 표시되고, 나머지 기능은 그대로 동작합니다.
+버킷을 만들면 코드 수정 없이 바로 켜집니다.
+
+> ⚠️ **1번은 유료 플랜 전환입니다.** Firebase Storage는 Blaze(종량제)에서만 버킷을 만들 수
+> 있습니다. 저장 5GB까지는 무료 한도라 이 규모에서는 청구액이 거의 없지만,
+> **카드 등록이 필요하므로 팀에서 합의한 뒤 진행하세요.**
+
+```bash
+# 1. Blaze 업그레이드 + 버킷 생성 (콘솔에서 직접)
+#    https://console.firebase.google.com/project/chagok-aa563/storage
+
+# 2. 보안 규칙 배포 — 본인 카드 사진만 읽기·쓰기
+firebase deploy --only storage
+
+# 3. CORS 허용 — 브라우저가 Storage로 직접 PUT 하려면 필요합니다
+gcloud storage buckets update gs://chagok-aa563.firebasestorage.app \
+  --cors-file=storage.cors.json
+```
+
+3번을 빼먹으면 업로드가 브라우저 CORS 오류로 조용히 실패합니다. 배포 도메인이
+생기면 `storage.cors.json`의 `origin`에 그 주소도 추가해야 합니다.
+
+동작 방식은 서버가 **업로드 URL만 발급**하고(`POST /api/cards/[cardId]/photos`),
+파일 본체는 브라우저에서 Storage로 바로 갑니다. 앱 서버가 사진 용량만큼의
+메모리·시간을 쓰지 않게 하려는 구조입니다.
+
+---
+
 ## 커밋 전 체크
 
 ```bash

@@ -4,6 +4,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { getPlanningAI } from "@/lib/ai";
 import type { PlanningContext } from "@/lib/ai";
 import { verifyRequest } from "@/lib/server/request-auth";
+import { suffix로 } from "@/lib/josa";
 
 /**
  * POST /api/plans/[planId]/messages — 대화 1턴 (PLAN §6 · F2 · IA 2.1).
@@ -14,6 +15,8 @@ import { verifyRequest } from "@/lib/server/request-auth";
  *                          — ② 멀티 선택. 빈 배열이면 AI가 알아서 정하고 넘어간다
  *   { update: { topic?, audiences?, purposes?, intent? } }
  *                          — 기획안 카드 부분 수정 (PRD §5-7 ② — 부분 수정이 기본)
+ *   { resume: true }       — 이탈 후 복원. 아무것도 쓰지 않고 현재 진행 단계
+ *                            (주제 후보·대상 후보·확정 가능)만 계산해 돌려준다 (08-28)
  */
 
 type PlanUpdate = {
@@ -46,9 +49,16 @@ function parseUpdate(raw: unknown): PlanUpdate | null {
 /** 수정 내용을 대화 히스토리에 남길 사람 말로 바꾼다 */
 function updateLabel(update: PlanUpdate): string {
   const parts: string[] = [];
-  if (update.topic !== undefined) parts.push(`주제를 「${update.topic}」(으)로`);
-  if (update.audiences !== undefined) parts.push(`대상을 ${update.audiences.join(" · ")}(으)로`);
-  if (update.purposes !== undefined) parts.push(`목적을 ${update.purposes.join(" · ")}(으)로`);
+  if (update.topic !== undefined)
+    parts.push(`주제를 「${update.topic}」${suffix로(update.topic)}`);
+  if (update.audiences !== undefined) {
+    const joined = update.audiences.join(" · ");
+    parts.push(`대상을 ${joined}${suffix로(joined)}`);
+  }
+  if (update.purposes !== undefined) {
+    const joined = update.purposes.join(" · ");
+    parts.push(`목적을 ${joined}${suffix로(joined)}`);
+  }
   if (update.intent !== undefined) parts.push("기획의도를");
   return `${parts.join(", ")} 고쳤어요.`;
 }
@@ -67,9 +77,11 @@ export async function POST(
   let text = "";
   let selection: { audiences: string[]; purposes: string[] } | null = null;
   let update: PlanUpdate | null = null;
+  let resume = false;
   try {
     const body = await request.json();
     if (typeof body?.text === "string") text = body.text.trim();
+    resume = body?.resume === true;
     if (body?.selection && typeof body.selection === "object") {
       selection = {
         audiences: parseStringArray(body.selection.audiences),
@@ -80,7 +92,7 @@ export async function POST(
   } catch {
     return NextResponse.json({ error: "요청 형식이 올바르지 않습니다." }, { status: 400 });
   }
-  if (!text && !selection && !update) {
+  if (!text && !selection && !update && !resume) {
     return NextResponse.json({ error: "보낼 내용이 없습니다." }, { status: 400 });
   }
 
@@ -108,30 +120,85 @@ export async function POST(
       tone: String(userSnap.get("tone") ?? ""),
     };
 
+    // ── 복원(resume) — 문서를 건드리지 않고 진행 단계만 다시 계산한다 ──
+    if (resume) {
+      const audiences: string[] = planSnap.get("audiences") ?? [];
+      const summary = {
+        topic,
+        audiences,
+        purposes: planSnap.get("purposes") ?? [],
+        intent: planSnap.get("intent") ?? "",
+      };
+      if (audiences.length > 0) {
+        return NextResponse.json({
+          reply: null, proposal: null, topicSuggestions: null,
+          summary, readyToConfirm: true, isMock,
+        });
+      }
+      if (topic) {
+        // ② 단계에서 멈춤 — 후보를 다시 계산해 준다 (저장된 대화는 그대로)
+        const turn = await ai.ideaTurn(topic, ctx);
+        return NextResponse.json({
+          reply: null, proposal: turn.proposal ?? null, topicSuggestions: null,
+          summary, readyToConfirm: false, isMock,
+        });
+      }
+      // ① 단계에서 멈춤 — 주제 후보를 다시 계산
+      const turn = await ai.greeting(ctx);
+      return NextResponse.json({
+        reply: null, proposal: null, topicSuggestions: turn.topicSuggestions ?? null,
+        summary, readyToConfirm: false, isMock,
+      });
+    }
+
     // ── 기획안 카드 부분 수정 — AI 호출 없이 반영하고 짧게 답한다 ──
     if (update) {
+      const prevTopic: string = planSnap.get("topic") ?? "";
       const merged = {
-        topic: update.topic ?? planSnap.get("topic"),
+        topic: update.topic ?? prevTopic,
         audiences: update.audiences ?? planSnap.get("audiences"),
         purposes: update.purposes ?? planSnap.get("purposes"),
         intent: update.intent ?? planSnap.get("intent"),
       };
-      const reply = "반영했어요. 기획안을 업데이트했습니다.";
+
+      // 주제만 바뀐 경우 — 흔적을 대화에 한 줄 남긴다 (08-28).
+      // 과거 발화는 고치지 않고, 전/후 주제·시각이 히스토리(messages)에 그대로 남는다
+      const topicOnly =
+        update.topic !== undefined && update.topic !== prevTopic &&
+        update.audiences === undefined && update.purposes === undefined &&
+        update.intent === undefined;
+
+      /*
+       * 주제 변경은 대화가 아니라 **상태 변경 기록**이다 (08-28) —
+       * 말풍선이 아닌 가운데 시스템 라인으로 그린다. 문구는 새 주제만:
+       * 바꾸기 전 주제는 바로 위 말풍선에 이미 있고, 「대상은 그대로」류의
+       * 부연은 칩이 눈앞에 보이므로 반복하지 않는다.
+       */
+      const systemEvent = topicOnly
+        ? `주제를 「${update.topic}」${suffix로(update.topic ?? "")} 바꿨어요`
+        : null;
+      const reply = topicOnly ? null : "반영했어요. 기획안을 업데이트했습니다.";
+
+      const appended = topicOnly
+        ? [{ role: "system", text: systemEvent, createdAt: now }]
+        : [
+            { role: "user", text: updateLabel(update), createdAt: now },
+            { role: "assistant", text: reply, createdAt: now },
+          ];
+
       await planRef.update({
         ...merged,
         seriesTitle: update.topic ?? planSnap.get("seriesTitle") ?? merged.topic,
-        messages: [
-          ...planSnap.get("messages"),
-          { role: "user", text: updateLabel(update), createdAt: now },
-          { role: "assistant", text: reply, createdAt: now },
-        ],
+        messages: [...planSnap.get("messages"), ...appended],
       });
       return NextResponse.json({
         reply,
+        systemEvent,
         proposal: null,
         topicSuggestions: null,
         summary: merged,
-        readyToConfirm: true,
+        // 단계를 앞지르지 않는다 — 대상이 정해진 뒤에만 카드 생성으로 갈 수 있다 (08-28)
+        readyToConfirm: merged.audiences.length > 0,
         isMock,
       });
     }

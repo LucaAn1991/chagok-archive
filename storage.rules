@@ -1,0 +1,41 @@
+rules_version = '2';
+
+// 사용자 사진 업로드(F13)의 보안 규칙. 근거: PLAN.md §7 원칙 ①「본인 데이터만」.
+//
+// **업로드는 이 규칙을 지나가지 않는다.** 브라우저는 서버가 발급한 서명 URL로
+// 올리고, 서명 URL은 Admin 권한이라 규칙을 우회한다 (firestore.rules와 같은 구조).
+// 즉 쓰기 방어는 `POST /api/cards/[cardId]/photos`가, 읽기 방어는 여기가 맡는다.
+//
+// 그래도 write 규칙을 비워두지 않는다. 클라이언트 SDK로 직접 올리는 경로가
+// 열려 있으면 서버의 검사(형식·장수·소유권)를 통째로 건너뛸 수 있다.
+//
+// 여기에 match가 없는 경로는 전부 차단이 기본값이다.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // cards/{cardId}/photos/{fileName} — 카드 1장에 붙는 재료 사진
+    //
+    // 소유자 확인에 Firestore를 본다. 경로에 uid를 넣지 않은 이유는
+    // 카드가 이미 userId를 들고 있어서, 진실을 두 곳에 두면 어긋날 수 있기 때문이다.
+    match /cards/{cardId}/photos/{fileName} {
+      function cardOwnedByRequester() {
+        return request.auth != null
+          && firestore.get(/databases/(default)/documents/cards/$(cardId)).data.userId
+             == request.auth.uid;
+      }
+
+      // 읽기 — 카드 주인만. 사진에는 사장님 가게·얼굴이 담길 수 있어 공개로 두지 않는다.
+      // (다운로드 토큰이 붙은 URL은 이 규칙과 별개로 열린다 — 토큰을 아는 사람만 쓴다)
+      allow read: if cardOwnedByRequester();
+
+      // 쓰기 — 본인 카드 · 이미지 형식 · 10MB 이하. 서버(photos.ts)와 같은 값이다
+      allow write: if cardOwnedByRequester()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+
+      // 지우기는 «목록에서 빼기»로 충분하다. 실제 파일 삭제는 서버가 정리한다
+      // @TODO: 카드 버림·탈퇴 시 사진 정리 (PLAN.md §10 후속 관리)
+      allow delete: if false;
+    }
+  }
+}

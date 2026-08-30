@@ -1,4 +1,19 @@
 /**
+ * 시스템 이벤트 라인 — 대화가 아니라 상태 변경 기록 (08-28).
+ * 가운데 정렬 · 말풍선 배경·테두리·아바타 없음 · 좌우 얇은 구분선.
+ * 주제를 여러 번 바꿔도 말풍선처럼 쌓여 화면을 밀어내지 않는다.
+ */
+export function SystemEventLine({ text }: { text: string }) {
+  return (
+    <div className="flex items-center gap-3" role="status">
+      <span aria-hidden className="h-px flex-1 bg-line" />
+      <span className="max-w-[70%] truncate text-center text-[13px] text-sub">{text}</span>
+      <span aria-hidden className="h-px flex-1 bg-line" />
+    </div>
+  );
+}
+
+/**
  * AI 대화 말풍선 — DESIGN.md §7.
  * AI: --surface + 1px --line · 사용자: --berry-light 테두리 없음.
  * 아바타(로고 심볼 그라데이션) + 「차곡」은 연속 발화의 첫 줄에만 붙인다.

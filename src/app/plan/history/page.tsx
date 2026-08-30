@@ -145,7 +145,9 @@ export default function PlanHistoryPage() {
                       <span className="block truncate text-body font-semibold text-ink">
                         {row.topic}
                       </span>
-                      <span className="mt-0.5 block text-caption text-sub">
+                      <span className="mt-0.5 block truncate text-caption text-sub">
+                        {/* 표기 규칙 — label 변형 없이 «에게» 하나만 (08-28) */}
+                        {row.audiences.length > 0 && `${row.audiences.join(" · ")}에게 · `}
                         {formatDate(row.confirmedAt)} 확정 · 카드 {row.cardCount}장
                       </span>
                     </span>

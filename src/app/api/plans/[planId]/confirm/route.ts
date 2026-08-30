@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { getPlanningAI } from "@/lib/ai";
+import { AUDIENCES, AUDIENCE_DEFAULT, MAX_CARDS_PER_RUN } from "@/lib/audiences";
 import { verifyRequest } from "@/lib/server/request-auth";
 
 /**
@@ -33,25 +34,34 @@ export async function POST(
 
     // 멱등 — 이미 확정됐으면 다시 만들지 않는다
     if (planSnap.get("status") === "confirmed") {
-      return NextResponse.json({ cardCount: planSnap.get("cardCount") ?? 0, already: true });
+      return NextResponse.json({ cardCount: planSnap.get("cardCount") ?? 0, capped: false, already: true });
     }
 
     const topic: string = planSnap.get("topic") ?? "";
-    const audiences: string[] = planSnap.get("audiences") ?? [];
-    if (!topic || audiences.length === 0) {
+    if (!topic) {
       return NextResponse.json(
-        { error: "기획안이 아직 정리되지 않았어요. 주제와 대상을 먼저 정해주세요." },
+        { error: "기획안이 아직 정리되지 않았어요. 주제를 먼저 정해주세요." },
         { status: 400 },
       );
     }
 
+    // 미선택이면 기본 대상 하나로 진행한다 (08-28 — AUDIENCE_DEFAULT)
+    const stored: string[] = planSnap.get("audiences") ?? [];
+    const fallback =
+      AUDIENCES.find((a) => a.id === AUDIENCE_DEFAULT)?.label ?? AUDIENCES[0].label;
+    const audiences = stored.length > 0 ? stored : [fallback];
+
+    // 상한을 넘으면 8장까지만 — 결과 화면이 「먼저 8장만」 안내를 띄운다
+    const capped = audiences.length > MAX_CARDS_PER_RUN;
+    const targets = audiences.slice(0, MAX_CARDS_PER_RUN);
+
     const { ai } = getPlanningAI();
-    const drafts = await ai.generateCards({
-      topic,
-      audiences,
-      purposes: planSnap.get("purposes") ?? [],
-      intent: planSnap.get("intent") ?? "",
-    });
+    const purposes: string[] = planSnap.get("purposes") ?? [];
+    const intent: string = planSnap.get("intent") ?? "";
+    // **대상 하나당 독립 호출** — 지시가 정반대인 대상을 한 프롬프트에 섞지 않는다 (08-28)
+    const drafts = await Promise.all(
+      targets.map((audience) => ai.generateCard({ topic, audience, purposes, intent })),
+    );
     if (drafts.length < 1) {
       return NextResponse.json(
         { error: "카드를 만들지 못했어요. 잠시 후 다시 시도해주세요." },
@@ -105,7 +115,7 @@ export async function POST(
 
     await batch.commit(); // 전부 성공하거나 전부 취소
 
-    return NextResponse.json({ cardCount: drafts.length });
+    return NextResponse.json({ cardCount: drafts.length, capped });
   } catch {
     return NextResponse.json(
       { error: "카드를 만들지 못했어요. 잠시 후 다시 시도해주세요." },

@@ -5,11 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { ArrowUp, Check, Plus } from "lucide-react";
 import { auth } from "@/lib/firebase/client";
+import { clearDraft, loadDraft, saveDraft } from "@/lib/draft";
+import { addCustomAudience, loadCustomAudiences } from "@/lib/custom-audiences";
 import AppSidebar from "@/components/AppSidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
-import AIChatBubble from "@/components/AIChatBubble";
+import AIChatBubble, { SystemEventLine } from "@/components/AIChatBubble";
 import PlanningSummaryPanel, {
   PlanningSummaryInline,
+  TopicLine,
   type PlanSummary,
   type PlanSummaryPatch,
 } from "@/components/PlanningSummaryPanel";
@@ -29,12 +32,13 @@ import PlanTabs from "@/components/PlanTabs";
  * 이전 대화는 실패해도 계속 읽을 수 있다.
  */
 
-type Msg = { role: "user" | "assistant"; text: string };
+type Msg = { role: "user" | "assistant" | "system"; text: string };
 type Proposal = { audiences: string[]; purposes: string[] };
 
 /** 서버로 보낼 한 턴 — [다시 보내기]가 그대로 재사용한다 */
 type TurnPayload =
   | { kind: "init"; idea: string; from: string | null }
+  | { kind: "resume"; id: string } // 이탈 후 복원 — 진행 단계만 다시 받는다
   | { kind: "text"; text: string }
   | { kind: "selection"; audiences: string[]; purposes: string[] }
   | { kind: "update"; patch: PlanSummaryPatch };
@@ -93,7 +97,13 @@ function NewPlanScreen() {
   const [ready, setReady] = useState(false); // ③으로 넘어갈 수 있는 상태
   const [isMock, setIsMock] = useState(false);
 
+  // ② 대상 선택 — 초안 저장·복구를 위해 카드가 아니라 페이지가 들고 있는다 (08-28)
+  const [picked, setPicked] = useState<string[]>([]);
+  // 직접 입력으로 추가한 후보 — localStorage에 남겨 다음에도 칩으로 보인다 (08-28)
+  const [extraOptions, setExtraOptions] = useState<string[]>(() => loadCustomAudiences());
+  const [restored, setRestored] = useState(false); // 초안 자동 복구됨 — 상단 배너 표시
   const [confirming, setConfirming] = useState(false); // ③ 카드 생성 진행 중
+  const [confirmedLock, setConfirmedLock] = useState(false); // 카드 생성 후 — 주제 읽기 전용
   const [confirmError, setConfirmError] = useState(false);
 
   // 사진 — 추천 1번을 미리 골라둔다 (「이렇게 골랐어요」 — DESIGN §1·§12).
@@ -102,6 +112,10 @@ function NewPlanScreen() {
     STOCK_SUGGESTIONS[0].id,
   );
   const [userPhotos, setUserPhotos] = useState<string[]>([]);
+
+  // 입력창이 주인공 — 칩은 입력창을 채울 뿐, 전송은 사용자가 한다 (08-28)
+  const [chatText, setChatText] = useState("");
+  const [focusToken, setFocusToken] = useState(0); // 올리면 입력창에 포커스
 
   // 기획안 완성 후에는 입력창을 숨기고 [말로 수정하기]를 눌렀을 때만 연다 —
   // CTA와 입력창이 동시에 보이면 다음 행동이 흐려진다 (DESIGN §16, 08-27 피드백)
@@ -119,7 +133,9 @@ function NewPlanScreen() {
           ? payload.from
             ? await postWithRetry(`/api/plans/${payload.from}/continue`, {})
             : await postWithRetry("/api/plans", { idea: payload.idea })
-          : await postWithRetry(
+          : payload.kind === "resume"
+            ? await postWithRetry(`/api/plans/${payload.id}/messages`, { resume: true })
+            : await postWithRetry(
               `/api/plans/${planId}/messages`,
               payload.kind === "text"
                 ? { text: payload.text }
@@ -132,15 +148,41 @@ function NewPlanScreen() {
       if (typeof data.reply === "string") {
         setMessages((prev) => [...prev, { role: "assistant", text: data.reply as string }]);
       }
+      if (typeof data.systemEvent === "string") {
+        // 상태 변경 기록 — 말풍선이 아닌 가운데 라인으로 쌓인다
+        setMessages((prev) => [...prev, { role: "system", text: data.systemEvent as string }]);
+      }
       if (data.summary && typeof data.summary === "object") {
         setSummary(data.summary as PlanSummary);
       }
-      setTopicSuggestions((data.topicSuggestions as string[] | null) ?? null);
-      setProposal((data.proposal as Proposal | null) ?? null);
+      if (payload.kind !== "update") {
+        // 주제 등 부분 수정 턴에서는 후보·선택 상태를 건드리지 않는다 (08-28 — 선택 유지)
+        setTopicSuggestions((data.topicSuggestions as string[] | null) ?? null);
+        if (data.topicSuggestions && window.matchMedia("(min-width: 768px)").matches) {
+          // ① 단계 — 입력창이 주인공이므로 커서를 먼저 준다 (모바일은 키보드가 화면을 덮어 제외)
+          setFocusToken((k) => k + 1);
+        }
+        setProposal((data.proposal as Proposal | null) ?? null);
+        if (payload.kind === "init" || payload.kind === "text") {
+          // 새 후보 세트가 왔다 — 이전 «선택»만 비운다. 커스텀 후보는 세션을 넘어 유지 (08-28)
+          setPicked([]);
+        }
+      }
       setReady(Boolean(data.readyToConfirm));
       setIsMock(Boolean(data.isMock));
       setChatMode(false); // 응답이 오면 액션 바로 되돌린다
     } catch {
+      if (payload.kind === "resume") {
+        // 초안이 더 이상 유효하지 않다(확정됨·삭제됨) — 조용히 비우고 새로 시작
+        clearDraft();
+        setRestored(false);
+        setMessages([]);
+        setSummary({ topic: "", audiences: [], purposes: [], intent: "" });
+        setPicked([]);
+        setPlanId(null);
+        void runTurn({ kind: "init", idea: "", from: null });
+        return;
+      }
       setFailed(payload);
     } finally {
       setSending(false);
@@ -156,8 +198,28 @@ function NewPlanScreen() {
       }
       if (didInit.current) return;
       didInit.current = true;
-      if (idea && !from) setMessages([{ role: "user", text: idea }]);
-      void runTurn({ kind: "init", idea, from });
+
+      // 홈에서 아이디어를 들고 왔거나 「이어서 기획하기」로 온 경우 — 의도가 명확하니 바로 새 세션
+      if (idea || from) {
+        if (idea && !from) setMessages([{ role: "user", text: idea }]);
+        void runTurn({ kind: "init", idea, from });
+        return;
+      }
+
+      // 하다 만 대화가 있으면 **묻지 않고 그대로 복구**한다 (08-28 — 팝업 금지).
+      // localStorage는 클라이언트 전용 — 이 콜백은 브라우저에서만 돈다
+      const draft = loadDraft();
+      if (draft) {
+        setPlanId(draft.planId);
+        setMessages(draft.messages as Msg[]);
+        setSummary((prev) => ({ ...prev, topic: draft.topic }));
+        setPicked(draft.audiences ?? []);
+        setRestored(true); // 상단 얇은 배너 한 줄
+        void runTurn({ kind: "resume", id: draft.planId }); // 진행 단계(후보 등)만 서버에서 재계산
+        return;
+      }
+
+      void runTurn({ kind: "init", idea: "", from: null });
     });
     return unsubscribe;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -169,19 +231,54 @@ function NewPlanScreen() {
   }, [messages, sending, failed, proposal, topicSuggestions]);
 
   function sendText(text: string) {
+    dismissBanner();
     setMessages((prev) => [...prev, { role: "user", text }]);
     void runTurn({ kind: "text", text });
   }
 
-  /** ② 대상·목적 선택 제출 — 빈 선택이면 AI가 알아서 정한다 (IA 2.1-②) */
-  function sendSelection(audiences: string[], purposes: string[]) {
-    const label =
-      audiences.length > 0 || purposes.length > 0
-        ? [...audiences, ...purposes].join(" · ")
-        : "차곡이 알아서 정해주세요.";
+  /** 초안 배너의 「새로 시작」 — 초안을 지우고 빈 상태에서 시작한다 */
+  function startFresh() {
+    clearDraft();
+    setRestored(false);
+    setMessages([]);
+    setSummary({ topic: "", audiences: [], purposes: [], intent: "" });
+    setPicked([]);
+    setProposal(null);
+    setTopicSuggestions(null);
+    setReady(false);
+    setPlanId(null);
+    void runTurn({ kind: "init", idea: "", from: null });
+  }
+
+  /** 사용자가 무언가 하면 복구 배너는 역할이 끝난다 */
+  function dismissBanner() {
+    setRestored(false);
+  }
+
+  // 초안 자동 저장 — 상태가 바뀔 때마다, 500ms 디바운스 (매 키 입력마다 쓰지 않는다)
+  useEffect(() => {
+    if (!planId || confirmedLock) return;
+    const meaningful = summary.topic !== "" || messages.some((m) => m.role === "user");
+    if (!meaningful) return;
+    const timer = setTimeout(() => {
+      saveDraft({
+        planId,
+        topic: summary.topic,
+        audiences: picked,
+        messages,
+        step: ready ? "ready" : proposal ? "proposal" : "topic",
+      });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [planId, summary.topic, picked, messages, ready, proposal, confirmedLock]);
+
+  /** ② 대상 선택 제출 — 빈 선택이면 AI가 알아서 정한다. 목적은 대상에 딸려온다 (08-28) */
+  function sendSelection(audiences: string[]) {
+    dismissBanner();
+    const label = audiences.length > 0 ? audiences.join(" · ") : "차곡이 알아서 정해주세요.";
     setMessages((prev) => [...prev, { role: "user", text: label }]);
     setProposal(null);
-    void runTurn({ kind: "selection", audiences, purposes });
+    void runTurn({ kind: "selection", audiences, purposes: [] });
   }
 
   /**
@@ -193,9 +290,12 @@ function NewPlanScreen() {
     setConfirming(true);
     setConfirmError(false);
     try {
-      await postWithRetry(`/api/plans/${planId}/confirm`, {});
+      const res = await postWithRetry(`/api/plans/${planId}/confirm`, {});
+      setConfirmedLock(true); // 카드가 만들어졌다 — 이후 주제 수정은 「이어서 기획하기」로
+      clearDraft(); // 초안의 역할 종료 — 다음 진입은 빈 상태여야 한다
       await postWithRetry(`/api/plans/${planId}/schedule`, {});
-      router.push(`/plan/${planId}/result`);
+      // 상한을 넘겨 8장까지만 만든 경우 — 결과 화면이 한 줄 안내를 띄운다
+      router.push(`/plan/${planId}/result${res.capped ? "?capped=1" : ""}`);
     } catch {
       setConfirmError(true);
       setConfirming(false);
@@ -212,6 +312,8 @@ function NewPlanScreen() {
   const summaryProps = {
     summary,
     onSave: saveSummaryPatch,
+    topicLocked: confirmedLock,
+    continueHref: planId ? `/plan/new?from=${planId}` : undefined,
     showPhotos: ready, // 기획이 정리된 뒤에 사진을 고른다 — 순서를 앞지르지 않는다
     photos: {
       selectedStockId,
@@ -250,23 +352,58 @@ function NewPlanScreen() {
             </header>
 
             <div className="flex flex-col gap-4">
-              {messages.map((m, i) => (
-                <AIChatBubble
-                  key={i}
-                  role={m.role}
-                  text={m.text}
-                  showAvatar={m.role === "assistant" && messages[i - 1]?.role !== "assistant"}
-                />
-              ))}
+              {restored && <RestoreBanner onFresh={startFresh} />}
 
-              {/* ① 주제 후보 4개 — 열린 질문 금지 (IA 2.1-①) */}
-              {topicSuggestions && !sending && !failed && (
-                <TopicSuggestionPicker suggestions={topicSuggestions} onPick={sendText} />
+              {messages.map((m, i) =>
+                m.role === "system" ? (
+                  <SystemEventLine key={i} text={m.text} />
+                ) : (
+                  <AIChatBubble
+                    key={i}
+                    role={m.role}
+                    text={m.text}
+                    showAvatar={m.role === "assistant" && messages[i - 1]?.role !== "assistant"}
+                  />
+                ),
               )}
 
-              {/* ② 대상·목적 후보 — 멀티 선택 + 기타 입력 (IA 2.1-②) */}
-              {proposal && !sending && !failed && (
-                <ProposalPicker proposal={proposal} onSubmit={sendSelection} />
+              {/* ① 주제 후보 — 열린 질문 금지 (IA 2.1-①).
+                  칩은 바로 전송하지 않고 입력창을 채운다 — 다듬어 보내는 건 사용자 몫 */}
+              {topicSuggestions && !sending && !failed && (
+                <TopicSuggestionPicker
+                  suggestions={topicSuggestions}
+                  onPick={(t) => {
+                    dismissBanner();
+                    setChatText(t);
+                    setFocusToken((k) => k + 1);
+                  }}
+                />
+              )}
+
+              {/* ② 대상 후보 — sending 중에도 유지한다: 주제 저장 중 선택이 사라지면 안 된다 (08-28) */}
+              {proposal && !failed && (
+                <ProposalPicker
+                  base={proposal.audiences}
+                  extras={extraOptions.filter((o) => !proposal.audiences.includes(o))}
+                  picked={picked}
+                  topic={summary.topic}
+                  onSaveTopic={(next) => {
+                    dismissBanner();
+                    saveSummaryPatch({ topic: next });
+                  }}
+                  onToggle={(a) => {
+                    dismissBanner();
+                    setPicked((prev) =>
+                      prev.includes(a) ? prev.filter((v) => v !== a) : [...prev, a],
+                    );
+                  }}
+                  onAddOption={(a) => {
+                    dismissBanner();
+                    setExtraOptions(addCustomAudience(a)); // localStorage에도 남긴다
+                    setPicked((prev) => (prev.includes(a) ? prev : [...prev, a]));
+                  }}
+                  onSubmit={() => sendSelection(picked)}
+                />
               )}
 
               {/* <1280 — 기획안 인라인 카드. 수정도 여기서 한다 (DESIGN §7) */}
@@ -300,12 +437,17 @@ function NewPlanScreen() {
             onConfirm={() => void confirmPlan()}
             confirming={confirming}
             error={confirmError}
-            onEditByChat={() => setChatMode(true)}
+            onEditByChat={() => {
+              setChatMode(true);
+              setFocusToken((k) => k + 1);
+            }}
           />
         ) : (
           <ChatInputBar
             disabled={sending || !planId}
-            autoFocus={chatMode}
+            value={chatText}
+            onChange={setChatText}
+            focusToken={focusToken}
             placeholder={
               ready ? "바꾸고 싶은 부분을 알려주세요 (예: 대상을 직장인으로)" : undefined
             }
@@ -403,6 +545,29 @@ function ReadyActionBar({
 }
 
 /* ============================================================
+   초안 복구 배너 — 얇은 한 줄, 말풍선 아님 (08-28).
+   F11 「이어서 기획하기」와 다른 기능 — 그 라벨을 쓰지 않는다
+   ============================================================ */
+
+function RestoreBanner({ onFresh }: { onFresh: () => void }) {
+  return (
+    <div
+      role="status"
+      className="flex items-center justify-between rounded-md bg-surface-muted px-3 py-2"
+    >
+      <span className="text-[13px] text-sub">하던 기획을 이어서 열었어요</span>
+      <button
+        type="button"
+        onClick={onFresh}
+        className="shrink-0 px-1 text-[13px] font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
+      >
+        새로 시작
+      </button>
+    </div>
+  );
+}
+
+/* ============================================================
    ① 주제 후보 — 열린 질문 금지, 4개 제시 (IA 2.1-①)
    ============================================================ */
 
@@ -436,10 +601,12 @@ function TopicSuggestionPicker({
 function Chip({
   label,
   selected,
+  custom,
   onToggle,
 }: {
   label: string;
   selected: boolean;
+  custom?: boolean; // 사용자가 직접 쓴 대상 — 점선으로 시스템 정의와 구분 (08-28)
   onToggle: () => void;
 }) {
   // 선택 칩: 배경 --berry-light · 테두리 2px --berry · 글자 --berry-dark + Check (DESIGN §6)
@@ -450,6 +617,7 @@ function Chip({
       aria-pressed={selected}
       className={[
         "flex min-h-11 items-center gap-1.5 rounded-pill px-4 text-body transition-colors duration-200",
+        custom ? "border-dashed" : "",
         selected
           ? "border-2 border-berry bg-berry-light font-semibold text-berry-dark"
           : "border border-line bg-surface text-ink hover:bg-surface-muted",
@@ -462,91 +630,112 @@ function Chip({
 }
 
 function ProposalPicker({
-  proposal,
+  base,
+  extras,
+  picked,
+  topic,
+  onSaveTopic,
+  onToggle,
+  onAddOption,
   onSubmit,
 }: {
-  proposal: Proposal;
-  onSubmit: (audiences: string[], purposes: string[]) => void;
+  base: string[];
+  extras: string[]; // 직접 입력으로 추가된 후보 — 점선으로 구분
+  picked: string[];
+  topic: string;
+  onSaveTopic: (next: string) => void;
+  onToggle: (audience: string) => void;
+  onAddOption: (audience: string) => void;
+  onSubmit: () => void;
 }) {
-  const [audienceOptions, setAudienceOptions] = useState(proposal.audiences);
-  const [audiences, setAudiences] = useState<string[]>([]);
-  const [purposes, setPurposes] = useState<string[]>([]);
   const [custom, setCustom] = useState("");
+  // 「직접 쓰기」는 기본 접힘 — 하단 채팅창과 입력창이 두 개로 보이지 않게 (08-28)
+  const [customOpen, setCustomOpen] = useState(false);
+  const customInputRef = useRef<HTMLInputElement>(null);
 
-  function toggle(list: string[], set: (v: string[]) => void, value: string) {
-    set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
-  }
+  useEffect(() => {
+    if (customOpen) customInputRef.current?.focus();
+  }, [customOpen]);
 
   function addCustom() {
     const value = custom.trim();
     if (!value) return;
-    if (!audienceOptions.includes(value)) setAudienceOptions([...audienceOptions, value]);
-    if (!audiences.includes(value)) setAudiences([...audiences, value]);
+    onAddOption(value);
     setCustom("");
+    setCustomOpen(false); // 추가하고 나면 다시 접는다
   }
 
   return (
     <div className="rounded-lg border border-line bg-surface p-4">
+      {/* 주제 줄 — 대상을 고르는 동안에도 주제가 보이고, 그 자리에서 고칠 수 있다 (08-28).
+          데스크톱·모바일 동일 노출 — 우측 패널 유무와 무관 */}
+      <TopicLine topic={topic} onSave={onSaveTopic} />
+      <div className="my-3 border-t border-line" />
+
       <h2 className="text-body font-bold text-ink">누구에게 말할까요?</h2>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {audienceOptions.map((a) => (
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {base.map((a) => (
+          <Chip key={a} label={a} selected={picked.includes(a)} onToggle={() => onToggle(a)} />
+        ))}
+        {extras.map((a) => (
           <Chip
             key={a}
             label={a}
-            selected={audiences.includes(a)}
-            onToggle={() => toggle(audiences, setAudiences, a)}
+            custom
+            selected={picked.includes(a)}
+            onToggle={() => onToggle(a)}
           />
         ))}
-      </div>
-      <div className="mt-3 flex gap-2">
-        <label htmlFor="custom-audience" className="sr-only">
-          대상 직접 입력
-        </label>
-        <input
-          id="custom-audience"
-          value={custom}
-          onChange={(e) => setCustom(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              addCustom();
-            }
-          }}
-          placeholder="직접 입력할 수도 있어요"
-          className="h-11 min-w-0 flex-1 rounded-md border border-line bg-surface px-4 text-body text-ink placeholder:text-sub/60"
-        />
-        <button
-          type="button"
-          onClick={addCustom}
-          aria-label="대상 추가"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-line text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
-        >
-          <Plus size={18} aria-hidden />
-        </button>
+
+        {customOpen ? (
+          <span className="flex min-w-0 items-center gap-1.5">
+            <label htmlFor="custom-audience" className="sr-only">
+              대상 직접 입력
+            </label>
+            <input
+              id="custom-audience"
+              ref={customInputRef}
+              value={custom}
+              onChange={(e) => setCustom(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  addCustom();
+                }
+                if (e.key === "Escape") setCustomOpen(false);
+              }}
+              placeholder="누구에게 말할까요?"
+              className="h-11 w-44 min-w-0 rounded-pill border border-dashed border-line bg-surface px-4 text-body text-ink placeholder:text-sub/60"
+            />
+            <button
+              type="button"
+              onClick={addCustom}
+              aria-label="대상 추가"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-line text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
+            >
+              <Plus size={18} aria-hidden />
+            </button>
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setCustomOpen(true)}
+            className="flex min-h-11 items-center px-2 text-caption font-semibold text-sub transition-colors duration-200 hover:text-ink"
+          >
+            + 직접 쓰기
+          </button>
+        )}
       </div>
 
-      <h2 className="mt-5 text-body font-bold text-ink">어떤 목적인가요?</h2>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {proposal.purposes.map((pu) => (
-          <Chip
-            key={pu}
-            label={pu}
-            selected={purposes.includes(pu)}
-            onToggle={() => toggle(purposes, setPurposes, pu)}
-          />
-        ))}
-      </div>
-
+      {/* 라벨이 곧 안내다 — 0개면 AI가 정한다는 뜻, 고르면 몇 장이 나올지 약속 (08-28).
+          N = 선택 대상 수 × 주제 수 — 현 흐름은 대화당 주제 1개라 대상 수와 같다 */}
       <button
         type="button"
-        onClick={() => onSubmit(audiences, purposes)}
+        onClick={onSubmit}
         className="mt-5 flex h-11 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
       >
-        이대로 진행하기
+        {picked.length === 0 ? "차곡이 정해줄게요" : `카드 ${picked.length}장 만들기`}
       </button>
-      <p className="mt-2 text-center text-caption text-sub">
-        안 고르셔도 돼요 — 차곡이 알아서 정할게요.
-      </p>
     </div>
   );
 }
@@ -557,27 +746,38 @@ function ProposalPicker({
 
 function ChatInputBar({
   disabled,
-  autoFocus,
+  value,
+  onChange,
+  focusToken,
   placeholder,
   onSend,
 }: {
   disabled: boolean;
-  autoFocus?: boolean;
+  value: string;
+  onChange: (next: string) => void;
+  focusToken: number;
   placeholder?: string;
   onSend: (text: string) => void;
 }) {
-  const [text, setText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // [말로 수정하기]로 열렸을 때 바로 입력할 수 있게 포커스를 준다
+  // 칩 선택·[말로 수정하기]·① 단계 진입 시 입력창에 커서를 준다
   useEffect(() => {
-    if (autoFocus) textareaRef.current?.focus();
-  }, [autoFocus]);
+    if (focusToken > 0) {
+      const el = textareaRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length); // 커서를 끝으로
+        el.style.height = "auto";
+        el.style.height = `${el.scrollHeight}px`;
+      }
+    }
+  }, [focusToken]);
 
   function submit() {
-    const trimmed = text.trim();
+    const trimmed = value.trim();
     if (!trimmed || disabled) return;
-    setText("");
+    onChange("");
     const el = textareaRef.current;
     if (el) el.style.height = "auto";
     onSend(trimmed);
@@ -599,9 +799,9 @@ function ChatInputBar({
           id="chat-input"
           ref={textareaRef}
           rows={1}
-          value={text}
+          value={value}
           onChange={(e) => {
-            setText(e.target.value);
+            onChange(e.target.value);
             const el = textareaRef.current;
             if (el) {
               el.style.height = "auto";

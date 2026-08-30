@@ -1,14 +1,7 @@
 import Link from "next/link";
 import StatusBadge from "@/components/StatusBadge";
+import { audienceDateLine } from "@/lib/format";
 import type { Card } from "@/types";
-
-/** 'YYYY-MM-DD' → 'M월 D일 (요일)' */
-function formatScheduledDate(dateKey: string): string {
-  const [y, m, d] = dateKey.split("-").map(Number);
-  const date = new Date(y, m - 1, d);
-  const weekday = ["일", "월", "화", "수", "목", "금", "토"][date.getDay()];
-  return `${m}월 ${d}일 (${weekday})`;
-}
 
 /**
  * 홈 전용 Featured 카드 — DESIGN.md §6 ContentCard 3 variant 중 하나.
@@ -24,15 +17,15 @@ export default function FeaturedContentCard({ card }: { card: Card }) {
     <section className="rounded-lg border border-line bg-surface p-5 md:p-6">
       <div className="flex items-center gap-2.5">
         <StatusBadge status={card.status} />
-        <span className="text-caption text-sub">
-          {formatScheduledDate(card.scheduledDate)} 예정
-        </span>
       </div>
 
       <div className="mt-4 flex items-start gap-4">
         <div className="min-w-0 flex-1">
           <h2 className="line-clamp-2 text-h3 font-bold text-ink">{card.title}</h2>
-          <p className="mt-1.5 text-body text-sub">{card.audience}에게</p>
+          {/* 표기 규칙 — «{label}에게 · {M월 D일}» (08-28) */}
+          <p className="mt-1.5 text-body text-sub">
+            {audienceDateLine(card.audience, card.scheduledDate)}
+          </p>
         </div>
         {thumbnail ? (
           // 썸네일은 선택 사항 — 사진이 있을 때만. Next/Image는 원격 도메인 설정 후 전환

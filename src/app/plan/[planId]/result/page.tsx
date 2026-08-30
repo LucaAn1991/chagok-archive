@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import StatusBadge from "@/components/StatusBadge";
+import { audienceLine } from "@/lib/format";
+import { MAX_CARDS_PER_RUN } from "@/lib/audiences";
 import type { Card } from "@/types";
 
 /**
@@ -31,8 +33,17 @@ type ResultState =
   | { phase: "ready"; cards: Card[] };
 
 export default function PlanResultPage() {
+  return (
+    <Suspense fallback={null}>
+      <PlanResultScreen />
+    </Suspense>
+  );
+}
+
+function PlanResultScreen() {
   const router = useRouter();
   const { planId } = useParams<{ planId: string }>();
+  const capped = useSearchParams().get("capped") === "1";
   const [state, setState] = useState<ResultState>({ phase: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -117,6 +128,9 @@ export default function PlanResultPage() {
                 {state.cards.length}개의 콘텐츠가 일정에 추가됐어요
               </h1>
               <p className="mt-1 text-body-l text-sub">이제 하루에 하나씩, 차곡차곡 만들면 돼요.</p>
+              {capped && (
+                <p className="mt-1 text-body text-sub">먼저 {MAX_CARDS_PER_RUN}장만 만들어드릴게요.</p>
+              )}
 
               <ul className="mt-6 flex flex-col overflow-hidden rounded-lg border border-line bg-surface">
                 {state.cards.map((card) => (
@@ -131,7 +145,7 @@ export default function PlanResultPage() {
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-body text-ink">{card.title}</span>
                         <span className="block truncate text-caption text-sub">
-                          {card.audience}에게
+                          {audienceLine(card.audience)}
                         </span>
                       </span>
                       <StatusBadge status={card.status} />

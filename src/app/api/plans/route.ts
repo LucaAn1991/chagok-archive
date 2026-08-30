@@ -40,6 +40,34 @@ export async function POST(request: Request) {
     const { ai, isMock } = getPlanningAI();
     const turn = idea ? await ai.ideaTurn(idea, ctx) : await ai.greeting(ctx);
 
+    // idea 없는 진입 — 인사만 남은 기존 빈 draft가 있으면 재사용한다 (08-28).
+    // 진입할 때마다 빈 세션 문서가 쌓이지 않게 서버가 걸러준다
+    if (!idea) {
+      const draftsSnap = await adminDb
+        .collection("plans")
+        .where("userId", "==", session.uid)
+        .where("status", "==", "draft")
+        .get();
+      const empty = draftsSnap.docs
+        .filter((d) => {
+          const msgs = (d.get("messages") ?? []) as { role: string }[];
+          return !d.get("topic") && msgs.every((m) => m.role !== "user");
+        })
+        .sort((a, b) => b.get("createdAt").toMillis() - a.get("createdAt").toMillis())[0];
+      if (empty) {
+        const stored = (empty.get("messages") ?? []) as { text: string }[];
+        return NextResponse.json({
+          planId: empty.id,
+          reply: stored[0]?.text ?? turn.reply,
+          topicSuggestions: turn.topicSuggestions ?? null,
+          proposal: null,
+          summary: { topic: "", audiences: [], purposes: [], intent: "" },
+          readyToConfirm: false,
+          isMock,
+        });
+      }
+    }
+
     const now = Timestamp.now();
     const messages = [
       ...(idea ? [{ role: "user", text: idea, createdAt: now }] : []),
