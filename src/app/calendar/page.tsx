@@ -110,6 +110,11 @@ function weekTitle(startKey: string, endKey: string): string {
   return `${sy}년 ${sm}월 ${sd}일 – ${ed}일`;
 }
 
+/** '2026-09-05' → '9월 5일 (토)' */
+function formatDayLabel(key: string): string {
+  return `${Number(key.slice(5, 7))}월 ${Number(key.slice(8, 10))}일 (${DAY_HEADS[parseDateKey(key).getDay()]})`;
+}
+
 export default function CalendarPage() {
   const router = useRouter();
   const [uid, setUid] = useState<string | null>(null);
@@ -152,6 +157,8 @@ function CalendarView({ uid }: { uid: string }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // 드롭 직후 바로 옮기지 않는다 — 확인 팝업을 거친다 (08-31 요청)
+  const [pendingMove, setPendingMove] = useState<{ cardId: string; toDate: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -250,6 +257,8 @@ function CalendarView({ uid }: { uid: string }) {
     });
     try {
       await updateDoc(doc(db, "cards", cardId), { scheduledDate: dateKey });
+      setNotice("일정이 변경됐어요."); // Toast 문구 — DESIGN §13
+      setTimeout(() => setNotice(null), 3000);
     } catch {
       setState({ phase: "ready", cards: prev, overdueCount: state.overdueCount });
       setNotice("일정을 옮기지 못했어요. 잠시 후 다시 시도해주세요.");
@@ -275,6 +284,10 @@ function CalendarView({ uid }: { uid: string }) {
     }
   }
   const selectedCards = byDate.get(selectedDate) ?? [];
+  const pendingCard =
+    pendingMove && state.phase === "ready"
+      ? (state.cards.find((c) => c.id === pendingMove.cardId) ?? null)
+      : null;
 
   return (
     <div className="flex flex-1">
@@ -410,7 +423,9 @@ function CalendarView({ uid }: { uid: string }) {
                         onDragStartCard={setDraggingId}
                         onDropCard={(cardId) => {
                           setDraggingId(null);
-                          void moveCard(cardId, dateKey);
+                          if (state.cards.some((c) => c.id === cardId && c.scheduledDate !== dateKey)) {
+                            setPendingMove({ cardId, toDate: dateKey });
+                          }
                         }}
                         onOpenCard={(id) => router.push(`/card/${id}`)}
                       />
@@ -495,6 +510,53 @@ function CalendarView({ uid }: { uid: string }) {
             </div>
           )}
 
+          {/* 드래그 이동 확인 팝업 — 잘못 놓은 드래그를 거른다 (08-31 요청. 카드 상세 모달 패턴) */}
+          {pendingMove && pendingCard && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="move-title"
+              onClick={() => setPendingMove(null)}
+              className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="flex w-full max-w-[400px] flex-col gap-4 rounded-xl bg-surface p-6 shadow-lg"
+              >
+                <h2 id="move-title" className="text-title font-bold text-ink">
+                  일정을 옮길까요?
+                </h2>
+                <p className="text-body text-sub">
+                  「{pendingCard.title}」 카드를{" "}
+                  <span className="font-semibold text-ink">
+                    {formatDayLabel(pendingMove.toDate)}
+                  </span>
+                  로 옮겨요.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPendingMove(null)}
+                    className="h-11 flex-1 rounded-md border border-line bg-surface text-body font-semibold text-ink hover:bg-surface-muted"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const m = pendingMove;
+                      setPendingMove(null);
+                      void moveCard(m.cardId, m.toDate);
+                    }}
+                    className="h-11 flex-1 rounded-md bg-berry text-body font-semibold text-white hover:bg-berry-dark"
+                  >
+                    옮기기
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 이동 실패 안내 — 빨간색 금지 (DESIGN §2) */}
           {notice && (
             <div
@@ -545,6 +607,7 @@ function DayCell({
 
   return (
     <div
+      data-date={dateKey}
       onClick={onSelect}
       onDragOver={(e) => {
         e.preventDefault(); // 드롭 허용
