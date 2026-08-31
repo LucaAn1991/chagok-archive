@@ -84,7 +84,8 @@ function NewPlanScreen() {
 
   const [planId, setPlanId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
-  const [topicSuggestions, setTopicSuggestions] = useState<string[] | null>(null); // ① 후보 4개
+  const [topicSuggestions, setTopicSuggestions] = useState<string[] | null>(null); // ① 후보
+  const [topicPick, setTopicPick] = useState<string | null>(null); // ① 단일 선택 — 하나만
   const [proposal, setProposal] = useState<Proposal | null>(null); // ② 후보
   const [summary, setSummary] = useState<PlanSummary>({
     topic: "",
@@ -173,8 +174,14 @@ function NewPlanScreen() {
         setSummary(data.summary as PlanSummary);
       }
       if (payload.kind !== "update") {
-        // 주제 등 부분 수정 턴에서는 후보·선택 상태를 건드리지 않는다 (08-28 — 선택 유지)
-        setTopicSuggestions((data.topicSuggestions as string[] | null) ?? null);
+        // 주제 칩 목록은 지우지 않는다 (08-31) — 세션 시작(init)에서만 비우고,
+        // 그 외에는 새 세트가 왔을 때만 교체한다. 선택 표시가 계속 보여야 한다
+        if (payload.kind === "init") {
+          setTopicSuggestions((data.topicSuggestions as string[] | null) ?? null);
+          setTopicPick(null);
+        } else if (data.topicSuggestions) {
+          setTopicSuggestions(data.topicSuggestions as string[]);
+        }
         if (data.topicSuggestions && window.matchMedia("(min-width: 768px)").matches) {
           // ① 단계 — 입력창이 주인공이므로 커서를 먼저 준다 (모바일은 키보드가 화면을 덮어 제외)
           setFocusToken((k) => k + 1);
@@ -262,6 +269,7 @@ function NewPlanScreen() {
     setPicked([]);
     setProposal(null);
     setTopicSuggestions(null);
+    setTopicPick(null);
     setReady(false);
     setPlanId(null);
     setChatText("");
@@ -438,31 +446,40 @@ function NewPlanScreen() {
               <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
               {restored && <RestoreBanner />}
 
-                {messages.map((m, i) =>
-                  m.role === "system" ? (
-                    <SystemEventLine key={i} text={m.text} />
-                  ) : (
-                    <AIChatBubble
-                      key={i}
-                      role={m.role}
-                      text={m.text}
-                      showAvatar={m.role === "assistant" && messages[i - 1]?.role !== "assistant"}
-                    />
-                  ),
-                )}
-
-                {/* ① 주제 후보 — 열린 질문 금지 (IA 2.1-①).
-                    칩은 바로 전송하지 않고 입력창을 채운다 — 다듬어 보내는 건 사용자 몫 */}
-                {topicSuggestions && !sending && !failed && (
-                  <TopicSuggestionPicker
-                    suggestions={topicSuggestions}
-                    onPick={(t) => {
-                      dismissBanner();
-                      setChatText(t);
-                      setFocusToken((k) => k + 1);
-                    }}
-                  />
-                )}
+                {messages.map((m, i) => (
+                  <div key={i} className="flex flex-col gap-4">
+                    {m.role === "system" ? (
+                      <SystemEventLine text={m.text} />
+                    ) : (
+                      <AIChatBubble
+                        role={m.role}
+                        text={m.text}
+                        showAvatar={
+                          m.role === "assistant" && messages[i - 1]?.role !== "assistant"
+                        }
+                      />
+                    )}
+                    {/* ① 주제 후보 — 첫 안내 말풍선 아래 고정 (08-31).
+                        골라도 목록을 지우지 않고 선택 상태로 남는다. 다음 말풍선은 아래로 */}
+                    {i === 0 && topicSuggestions && !failed && (
+                      <TopicSuggestionPicker
+                        suggestions={topicSuggestions}
+                        picked={topicPick}
+                        onToggle={(t) => {
+                          dismissBanner();
+                          if (topicPick === t) {
+                            setTopicPick(null); // 다시 누르면 해제
+                            if (chatText === t) setChatText("");
+                          } else {
+                            setTopicPick(t);
+                            setChatText(t);
+                            setFocusToken((k) => k + 1);
+                          }
+                        }}
+                      />
+                    )}
+                  </div>
+                ))}
 
                 {/* ② 대상 후보 — sending 중에도 유지: 주제 저장 중 선택이 사라지면 안 된다 */}
                 {proposal && !failed && (
@@ -833,22 +850,19 @@ function RestoreBanner() {
 
 function TopicSuggestionPicker({
   suggestions,
-  onPick,
+  picked,
+  onToggle,
 }: {
   suggestions: string[];
-  onPick: (topic: string) => void;
+  picked: string | null;
+  onToggle: (topic: string) => void;
 }) {
+  // 대상 칩과 **같은 Chip 컴포넌트** — 스타일이 두 벌로 갈라지지 않게 (08-31).
+  // 차이는 단일 선택뿐: 다른 칩을 누르면 앞의 선택이 풀린다
   return (
     <div className="flex flex-wrap gap-2">
       {suggestions.map((t) => (
-        <button
-          key={t}
-          type="button"
-          onClick={() => onPick(t)}
-          className="flex min-h-11 items-center rounded-pill border border-line bg-surface px-4 text-body text-ink transition-colors duration-200 hover:bg-surface-muted"
-        >
-          {t}
-        </button>
+        <Chip key={t} label={t} selected={picked === t} onToggle={() => onToggle(t)} />
       ))}
     </div>
   );
