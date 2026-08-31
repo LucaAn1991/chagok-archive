@@ -432,17 +432,18 @@ function CalendarView({ uid }: { uid: string }) {
                 </button>
               </div>
 
-              {/* 월간/주간 토글 — 제목 아래 정렬 */}
-              <div className="ml-11 mt-1.5 inline-flex h-9 items-center rounded-md border border-line bg-surface p-0.5">
+              {/* 월간/주간 — 박스 대신 밑줄 탭 (카카오 이모티콘 탭 문법, 08-31 v5).
+                  ‹ 화살표 시작선에 맞춰 왼쪽 정렬 */}
+              <div className="mt-1 flex gap-5">
                 {(["month", "week"] as const).map((v) => (
                   <button
                     key={v}
                     type="button"
                     onClick={() => switchView(v)}
                     className={[
-                      "h-8 rounded-[4px] px-3 text-body",
+                      "relative h-9 text-body",
                       view === v
-                        ? "bg-berry-light font-semibold text-berry-dark"
+                        ? "font-semibold text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-[2px] after:rounded-pill after:bg-berry"
                         : "text-sub hover:text-ink",
                     ].join(" ")}
                   >
