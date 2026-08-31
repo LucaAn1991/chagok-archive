@@ -12,7 +12,8 @@ import SlotToolbar from "@/components/SlotToolbar";
 import SlideEditor from "@/components/SlideEditor";
 import CardPhotoUploader from "@/components/CardPhotoUploader";
 import { IMAGE_LAYOUTS, LAYOUT_LABELS, layoutOptionsFor } from "@/lib/slide-layout";
-import { bakeToElements } from "@/lib/free-layout";
+import { bakeToElements, newTextBox } from "@/lib/free-layout";
+import { Plus, Trash2 } from "lucide-react";
 import { MAX_PHOTOS_PER_CARD } from "@/lib/storage/limits";
 import type { Card, FontId, LayoutId, SlideElement, SlotStyle } from "@/types";
 
@@ -62,6 +63,8 @@ export default function SlideEditPage() {
   const [textDraft, setTextDraft] = useState<Record<string, string>>({});
   const [styleDraft, setStyleDraft] = useState<Record<string, SlotStyle>>({});
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  /** 자유 배치일 때 상자별 글자 초안 (id → 글) */
+  const [boxDraft, setBoxDraft] = useState<Record<string, string>>({});
   const [selectedElId, setSelectedElId] = useState<string | null>(null);
   /** 파일이 실제로 있는 폰트만 툴바에 띄운다 — 서버만 아는 값이라 물어본다 */
   const [fontIds, setFontIds] = useState<FontId[]>([]);
@@ -108,11 +111,21 @@ export default function SlideEditPage() {
     setSelectedElId(id);
     const slot = hitBoxes.find((b) => b.id === id)?.slot ?? null;
     setSelectedSlot(slot);
-    if (!slot) return;
+    if (!id) return;
     setTab("text");
-    // 탭이 그려진 뒤에 커서를 옮긴다
-    setTimeout(() => fieldRefs.current[slot]?.focus(), 0);
+    // 탭이 그려진 뒤에 커서를 옮긴다. 자유 배치는 상자 id, 레이아웃 모드는 슬롯 이름
+    const key = freeMode ? id : slot;
+    if (key) setTimeout(() => fieldRefs.current[key]?.focus(), 0);
   }
+
+  /** 툴바에 보여줄 «무엇을 고쳤나» — 자유 배치는 이름이 없어 내용 앞부분을 쓴다 */
+  const toolbarLabel = freeMode
+    ? selectedElId
+      ? (boxDraft[selectedElId]?.trim().slice(0, 10) || "빈 상자")
+      : null
+    : selectedSlot
+      ? (SLOT_LABELS[selectedSlot] ?? selectedSlot)
+      : null;
 
   /** 이 슬라이드 PNG를 받아 화면에 건다. `fresh`면 캐시를 지나친다 */
   const loadImage = useCallback(
@@ -148,6 +161,13 @@ export default function SlideEditPage() {
         setCard(data);
         setTextDraft({ ...found.texts });
         setStyleDraft({ ...(found.styleOverrides ?? {}) });
+        setBoxDraft(
+          Object.fromEntries(
+            (found.elements ?? [])
+              .filter((e) => e.kind === "text")
+              .map((e) => [e.id, e.text ?? ""]),
+          ),
+        );
         setPhase("ready");
         fetch("/api/fonts")
           .then((r) => (r.ok ? r.json() : null))
@@ -180,6 +200,14 @@ export default function SlideEditPage() {
       }
       const data = (await res.json()) as Pick<Card, "slides">;
       setCard((prev) => (prev ? { ...prev, slides: data.slides } : prev));
+      const fresh = data.slides.find((s) => s.order === order);
+      if (fresh?.elements) {
+        setBoxDraft(
+          Object.fromEntries(
+            fresh.elements.filter((e) => e.kind === "text").map((e) => [e.id, e.text ?? ""]),
+          ),
+        );
+      }
       await loadImage(token, true);
       setSavedAt(true);
       setTimeout(() => setSavedAt(false), 1500);
@@ -199,6 +227,44 @@ export default function SlideEditPage() {
       el.slot && textDraft[el.slot] !== undefined
         ? { ...el, text: textDraft[el.slot], style: styles[el.slot] }
         : el,
+    );
+  }
+
+  /** 상자 목록을 저장하고 다시 그린다 */
+  function saveBoxes(next: SlideElement[]) {
+    void save({ slides: [{ order, elements: next }] });
+  }
+
+  function addBox() {
+    if (!slide?.elements) return;
+    const box = newTextBox(slide.elements);
+    setSelectedElId(box.id);
+    saveBoxes([...slide.elements, box]);
+  }
+
+  function removeBox(id: string) {
+    if (!slide?.elements) return;
+    const next = slide.elements.filter((e) => e.id !== id);
+
+    /*
+      마지막 상자까지 지우면 서버가 `elements`를 떼어내 **레이아웃으로 돌아간다**
+      (빈 슬라이드를 남기지 않는다). 모르고 지우면 배치가 통째로 사라진 것처럼
+      보이므로 미리 알린다.
+    */
+    if (next.length === 0 && !window.confirm("마지막 상자예요. 지우면 원래 레이아웃으로 돌아가요.")) {
+      return;
+    }
+    if (selectedElId === id) setSelectedElId(null);
+    saveBoxes(next);
+  }
+
+  /** 자유 배치 상자들의 글자를 한 번에 저장 */
+  function saveBoxTexts() {
+    if (!slide?.elements) return;
+    saveBoxes(
+      slide.elements.map((e) =>
+        e.kind === "text" && boxDraft[e.id] !== undefined ? { ...e, text: boxDraft[e.id] } : e,
+      ),
     );
   }
 
@@ -253,6 +319,12 @@ export default function SlideEditPage() {
   /** 문구만 «저장 안 됨»으로 본다 — 툴바 조절은 알아서 반영되므로 (08-31) */
   const dirty = Boolean(slide && JSON.stringify(slide.texts) !== JSON.stringify(textDraft));
 
+  /** 자유 배치 상자들의 글자가 저장된 것과 다른가 */
+  const boxDirty = Boolean(
+    freeMode &&
+      slide?.elements?.some((e) => e.kind === "text" && (boxDraft[e.id] ?? "") !== (e.text ?? "")),
+  );
+
   if (phase === "not-found") {
     return (
       <AppShell>
@@ -273,7 +345,13 @@ export default function SlideEditPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <BackLink fallbackHref={`/card/${cardId}/result`}>제작 결과</BackLink>
         <span className="text-caption text-sub">
-          {saving ? "저장 중···" : savedAt ? "저장됐어요" : dirty ? "저장 안 됨" : ""}
+          {saving
+            ? "저장 중···"
+            : savedAt
+              ? "저장됐어요"
+              : dirty || boxDirty
+                ? "저장 안 됨"
+                : ""}
         </span>
       </div>
 
@@ -301,11 +379,28 @@ export default function SlideEditPage() {
       {/* 툴바는 위에 — 고른 줄 하나를 조절한다 */}
       <div className="mt-3">
         <SlotToolbar
-          slotLabel={selectedSlot ? (SLOT_LABELS[selectedSlot] ?? selectedSlot) : null}
-          value={selectedSlot ? styleDraft[selectedSlot] : undefined}
+          slotLabel={toolbarLabel}
+          value={
+            freeMode
+              ? slide?.elements?.find((e) => e.id === selectedElId)?.style
+              : selectedSlot
+                ? styleDraft[selectedSlot]
+                : undefined
+          }
           availableFontIds={fontIds}
           disabled={saving}
           onChange={(next) => {
+            /*
+              자유 배치에서는 «고른 상자»에, 레이아웃 모드에서는 «고른 줄»에 건다.
+              자유 배치엔 슬롯이 없다 — 상자가 곧 대상이다.
+            */
+            if (freeMode) {
+              if (!selectedElId || !slide?.elements) return;
+              saveBoxes(
+                slide.elements.map((e) => (e.id === selectedElId ? { ...e, style: next } : e)),
+              );
+              return;
+            }
             if (!selectedSlot) return;
             const merged = { ...styleDraft };
             if (next) merged[selectedSlot] = next;
@@ -394,7 +489,96 @@ export default function SlideEditPage() {
       </div>
 
       <div className="mt-4 flex flex-col gap-3 pb-8">
-        {tab === "text" && slide && (
+        {/*
+          자유 배치에서는 «제목·부제»가 아니라 **텍스트 상자 목록**이다 (08-31).
+          좌표를 가진 상자를 슬롯 이름으로 부르는 게 안 맞고, 상자를 더하거나
+          지울 수 있어야 자유 배치라는 말이 성립한다.
+        */}
+        {tab === "text" && slide && freeMode && (
+          <>
+            <button
+              type="button"
+              onClick={addBox}
+              disabled={saving}
+              className="flex h-11 items-center gap-1 self-start rounded-md border-2 border-berry bg-surface px-4 text-body font-semibold text-berry disabled:opacity-60"
+            >
+              <Plus size={16} aria-hidden />
+              텍스트 상자 추가
+            </button>
+
+            {(slide.elements ?? [])
+              .filter((e) => e.kind === "text")
+              .map((e, i) => {
+                const active = selectedElId === e.id;
+                return (
+                  <div key={e.id} className="flex items-start gap-2">
+                    <label className="flex flex-1 flex-col gap-1">
+                      <span
+                        className={`text-label font-semibold ${
+                          active ? "text-berry-dark" : "text-sub"
+                        }`}
+                      >
+                        텍스트 상자 {i + 1}
+                      </span>
+                      <textarea
+                        ref={(el) => {
+                          fieldRefs.current[e.id] = el;
+                        }}
+                        value={boxDraft[e.id] ?? ""}
+                        rows={(boxDraft[e.id] ?? "").length > 40 ? 3 : 1}
+                        onFocus={() => {
+                          setSelectedElId(e.id);
+                          setSelectedSlot(null);
+                        }}
+                        onChange={(ev) => setBoxDraft({ ...boxDraft, [e.id]: ev.target.value })}
+                        className={`${inputClass} ${active ? "border-berry" : ""}`}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      aria-label={`텍스트 상자 ${i + 1} 지우기`}
+                      disabled={saving}
+                      onClick={() => removeBox(e.id)}
+                      className="mt-6 flex size-11 items-center justify-center rounded-md text-sub hover:bg-surface-muted disabled:opacity-60"
+                    >
+                      <Trash2 size={16} aria-hidden />
+                    </button>
+                  </div>
+                );
+              })}
+
+            {boxDirty && (
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={saveBoxTexts}
+                  disabled={saving}
+                  className="h-11 rounded-md bg-berry px-5 text-body font-semibold text-white
+                             hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+                >
+                  {saving ? "···" : "저장"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setBoxDraft(
+                      Object.fromEntries(
+                        (slide.elements ?? [])
+                          .filter((e) => e.kind === "text")
+                          .map((e) => [e.id, e.text ?? ""]),
+                      ),
+                    )
+                  }
+                  className="text-body text-sub"
+                >
+                  되돌리기
+                </button>
+              </div>
+            )}
+          </>
+        )}
+
+        {tab === "text" && slide && !freeMode && (
           <>
             {Object.entries(textDraft).map(([key, value]) => {
               const active = selectedSlot === key;

@@ -110,3 +110,23 @@ export function clampElement(e: SlideElement): SlideElement {
     y: Math.min(Math.max(e.y, 0), 1 - h),
   };
 }
+
+/**
+ * 새 텍스트 상자 (08-31 · 편집기).
+ *
+ * **조금씩 어긋나게 놓는다.** 같은 자리에 쌓으면 방금 더한 것이 아래에 숨어
+ * «추가했는데 아무것도 안 생겼다»가 된다.
+ */
+export function newTextBox(existing: SlideElement[]): SlideElement {
+  const n = existing.length;
+  return clampElement({
+    id: `box-${Date.now().toString(36)}`,
+    kind: "text",
+    x: 0.1 + (n % 4) * 0.03,
+    y: 0.14 + (n % 6) * 0.06,
+    w: 0.6,
+    h: 0.1,
+    z: Math.max(0, ...existing.map((e) => e.z)) + 1,
+    text: "새 문구",
+  });
+}
