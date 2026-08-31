@@ -49,6 +49,9 @@ export default function CardDetailPage() {
   const [savingDate, setSavingDate] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false); // ··· 더 보기 (버리기가 산다)
+  // 카드뉴스 미리보기 — 완성 PNG는 저장하지 않으므로(PLAN §9) 즉석 렌더 API에서 받는다
+  const [slideUrls, setSlideUrls] = useState<string[]>([]);
+  const [slideError, setSlideError] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -68,6 +71,24 @@ export default function CardDetailPage() {
         }
         setCard(data);
         setDateDraft(data.scheduledDate);
+
+        // 슬라이드 이미지 — 제작 결과 페이지와 같은 즉석 렌더 API, 순서대로 공개
+        if (data.slides?.length) {
+          const token = await user.getIdToken();
+          for (let order = 0; order < data.slides.length; order++) {
+            try {
+              const res = await fetch(`/api/cards/${cardId}/slides/${order}/image`, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (!res.ok) throw new Error();
+              const url = URL.createObjectURL(await res.blob());
+              setSlideUrls((prev) => [...prev, url]);
+            } catch {
+              setSlideError(true);
+              break;
+            }
+          }
+        }
 
         // 원 기획 세션이 있어야만 출처 링크를 보여준다
         if (data.planId) {
@@ -213,6 +234,66 @@ export default function CardDetailPage() {
           </Link>
         )}
       </section>
+
+      {/* 카드뉴스 미리보기 — 제작이 끝났으면 이미지가 당연히 보여야 한다 (08-31).
+          가로 스크롤 = 인스타 캐러셀 감각. 편집은 제작 결과 페이지의 몫 */}
+      {card.slides.length > 0 && (
+        <section
+          aria-label="카드뉴스 미리보기"
+          className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-6"
+        >
+          <span className="text-label font-semibold text-sub">
+            카드뉴스 · {card.slides.length}장
+          </span>
+          <div className="-mx-2 flex gap-2 overflow-x-auto px-2 pb-1">
+            {slideUrls.map((url, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={url}
+                src={url}
+                alt={`슬라이드 ${i + 1}`}
+                className="aspect-square w-40 shrink-0 rounded-md border border-line object-cover"
+              />
+            ))}
+            {!slideError &&
+              slideUrls.length < card.slides.length &&
+              Array.from({ length: card.slides.length - slideUrls.length }).map((_, i) => (
+                <div
+                  key={`sk-${i}`}
+                  className="aspect-square w-40 shrink-0 animate-pulse rounded-md bg-surface-muted"
+                />
+              ))}
+          </div>
+          {slideError && slideUrls.length === 0 && (
+            <p className="text-caption text-sub">
+              이미지를 불러오지 못했어요. 제작 결과 보기에서 다시 시도해주세요.
+            </p>
+          )}
+        </section>
+      )}
+
+      {/* 캡션 미리보기 — 제작이 끝난 카드는 실제 게시물처럼: 본문 + #해시태그 (08-31).
+          편집은 제작 결과 페이지의 몫, 여기는 보기 전용 */}
+      {card.caption && (
+        <section
+          aria-label="캡션 미리보기"
+          className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-6"
+        >
+          <span className="text-label font-semibold text-sub">캡션</span>
+          <p className="whitespace-pre-wrap break-keep text-body leading-relaxed text-ink">
+            {card.caption.hook}
+            {"\n\n"}
+            {card.caption.body}
+            {"\n\n"}
+            {card.caption.cta}
+          </p>
+          {card.caption.hashtags.length > 0 && (
+            <p className="break-keep text-body text-berry-dark">
+              {card.caption.hashtags.map((tag) => `#${tag}`).join(" ")}
+            </p>
+          )}
+        </section>
+      )}
 
       {actionError && (
         <p role="alert" className="text-body text-ink">
