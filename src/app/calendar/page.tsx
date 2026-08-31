@@ -190,6 +190,8 @@ function CalendarView({ uid }: { uid: string }) {
   // 온보딩에서 고른 업로드 요일 (월=0…일=6)·주기 — 쉬는 날/채울 날 구분과 주간 헤더에 쓴다 (08-31)
   const [uploadDays, setUploadDays] = useState<number[] | null>(null);
   const [uploadFrequency, setUploadFrequency] = useState<number | null>(null);
+  // [실험] 아코디언 — 기본은 순수 월간. «주 펼치기»를 눌러야 그 주만 보드로 확장 (주 시작일 키)
+  const [expandedWeekKey, setExpandedWeekKey] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -259,11 +261,13 @@ function CalendarView({ uid }: { uid: string }) {
     const r = rangeFor(view, nextAnchor);
     setAnchor(nextAnchor);
     setSelectedDate(todayKey >= r.start && todayKey <= r.end ? todayKey : r.start);
+    setExpandedWeekKey(null); // 월·주 이동 시 기본(순수 월간)으로
     setState({ phase: "loading" });
   }
 
   function goToday() {
     setSelectedDate(todayKey);
+    setExpandedWeekKey(null);
     if (anchor !== todayKey) {
       setAnchor(todayKey);
       setState({ phase: "loading" });
@@ -275,7 +279,15 @@ function CalendarView({ uid }: { uid: string }) {
     if (next === view) return;
     setView(next);
     setAnchor(selectedDate);
+    setExpandedWeekKey(null);
     setState({ phase: "loading" });
+  }
+
+  /** 날짜 선택 — 패널 갱신 + 그 주를 바로 펼친다 (v3: 펼치기 버튼은 불편해서 제거).
+      초기 진입·월 이동 때는 순수 월간 — 클릭해야만 펼쳐진다 */
+  function selectDate(dateKey: string) {
+    setSelectedDate(dateKey);
+    setExpandedWeekKey(weekDates(dateKey)[0]);
   }
 
   /** 드래그로 예정일 변경 — 실패 시 원위치 + 안내 (PLAN §3-1) */
@@ -515,29 +527,80 @@ function CalendarView({ uid }: { uid: string }) {
                   ))}
                 </div>
 
-                <div className="grid grid-cols-7 gap-1">
-                  {cells.map((dateKey, i) =>
-                    dateKey === null ? (
-                      <div key={`empty-${i}`} />
-                    ) : (
-                      <DayCell
-                        key={dateKey}
-                        dateKey={dateKey}
-                        cards={byDate.get(dateKey) ?? []}
-                        isToday={dateKey === todayKey}
-                        isSelected={dateKey === selectedDate}
-                        dragging={draggingId != null}
-                        onSelect={() => setSelectedDate(dateKey)}
-                        onDragStartCard={setDraggingId}
-                        onDropCard={(cardId) => handleDrop(cardId, dateKey)}
-                        showPlus={
-                          (byDate.get(dateKey) ?? []).length === 0 &&
-                          dateKey >= todayKey &&
-                          isUploadDayOf(uploadDays, dateKey) === true
-                        }
-                      />
-                    ),
-                  )}
+                {/* [실험] 아코디언 월간 v2 — 기본은 순수 월간. 날짜 클릭은 패널만 갱신하고,
+                    선택한 주 아래의 «주 펼치기»를 눌러야 그 주만 보드로 확장된다 (08-31) */}
+                <div className="flex flex-col gap-1">
+                  {Array.from({ length: cells.length / 7 }, (_, wi) =>
+                    cells.slice(wi * 7, wi * 7 + 7),
+                  ).map((week, wi) => {
+                    const days = week.filter((d): d is string => d !== null);
+                    const weekStart = days.length > 0 ? weekDates(days[0])[0] : null;
+                    const expanded = weekStart !== null && weekStart === expandedWeekKey;
+
+                    if (!expanded) {
+                      return (
+                        <div key={`w-${wi}`}>
+                          <div className="grid grid-cols-7 gap-1">
+                            {week.map((dateKey, i) =>
+                              dateKey === null ? (
+                                <div key={`empty-${wi}-${i}`} />
+                              ) : (
+                                <DayCell
+                                  key={dateKey}
+                                  dateKey={dateKey}
+                                  cards={byDate.get(dateKey) ?? []}
+                                  isToday={dateKey === todayKey}
+                                  isSelected={dateKey === selectedDate}
+                                  dragging={draggingId != null}
+                                  onSelect={() => selectDate(dateKey)}
+                                  onDragStartCard={setDraggingId}
+                                  onDropCard={(cardId) => handleDrop(cardId, dateKey)}
+                                  showPlus={
+                                    (byDate.get(dateKey) ?? []).length === 0 &&
+                                    dateKey >= todayKey &&
+                                    isUploadDayOf(uploadDays, dateKey) === true
+                                  }
+                                />
+                              ),
+                            )}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={`w-${wi}`}>
+                        <div className="grid grid-cols-7 gap-2 rounded-lg bg-berry-tint p-1.5">
+                          {week.map((dateKey, i) =>
+                            dateKey === null ? (
+                              <div key={`empty-${wi}-${i}`} />
+                            ) : (
+                              <WeekColumn
+                                key={dateKey}
+                                dateKey={dateKey}
+                                cards={byDate.get(dateKey) ?? []}
+                                isToday={dateKey === todayKey}
+                                isSelected={dateKey === selectedDate}
+                                dragging={draggingId != null}
+                                onSelect={() => selectDate(dateKey)}
+                                onDragStartCard={setDraggingId}
+                                onDropCard={(cardId) => handleDrop(cardId, dateKey)}
+                                emptyHint={
+                                  (byDate.get(dateKey) ?? []).length > 0
+                                    ? "none"
+                                    : isUploadDayOf(uploadDays, dateKey) === false
+                                      ? "rest"
+                                      : isUploadDayOf(uploadDays, dateKey) === true &&
+                                          dateKey >= todayKey
+                                        ? "invite"
+                                        : "none"
+                                }
+                              />
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </>
             ) : (
