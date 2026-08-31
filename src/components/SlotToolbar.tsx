@@ -114,25 +114,30 @@ export default function SlotToolbar({
         {slotLabel}
       </span>
 
-      {fonts.length > 1 && (
-        <>
-          <Sep />
-          <select
-            aria-label="폰트"
-            disabled={disabled}
-            value={v.fontId ?? ""}
-            onChange={(e) => set("fontId", (e.target.value || undefined) as FontId | undefined)}
-            className="h-8 shrink-0 rounded-md border border-line bg-surface px-2 text-caption text-ink"
-          >
-            <option value="">기본 폰트</option>
-            {fonts.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.label}
-              </option>
-            ))}
-          </select>
-        </>
-      )}
+      {/*
+        폰트는 **여기서 고른다** (08-31). 설정의 「내 스타일」은 «모든 카드의 기본»이고,
+        이 드롭다운은 «이 줄만»이다.
+
+        고를 게 하나뿐이어도 숨기지 않는다. 숨기면 «폰트는 설정에서만 바꾸나 보다»가
+        되는데, 폰트 파일을 넣는 순간 쓸 수 있게 되는 자리다.
+      */}
+      <Sep />
+      <select
+        aria-label="폰트"
+        disabled={disabled}
+        value={v.fontId ?? ""}
+        onChange={(e) => set("fontId", (e.target.value || undefined) as FontId | undefined)}
+        className={`h-8 shrink-0 rounded-md border bg-surface px-2 text-caption text-ink ${
+          v.fontId ? "border-berry" : "border-line"
+        }`}
+      >
+        <option value="">기본 폰트</option>
+        {fonts.map((f) => (
+          <option key={f.id} value={f.id}>
+            {f.label}
+          </option>
+        ))}
+      </select>
 
       <Sep />
       {/* 크기는 px로 직접 (08-31). 캔버스 1080 기준이라 «그려지는 그 크기»다 */}

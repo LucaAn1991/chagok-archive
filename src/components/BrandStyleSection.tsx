@@ -220,7 +220,7 @@ export default function BrandStyleSection({ initial, availableFontIds, onSaved }
 
       {/* 폰트 */}
       <div className="flex flex-col gap-2">
-        <span className="text-label font-semibold text-sub">폰트</span>
+        <span className="text-label font-semibold text-sub">기본 폰트</span>
         <div role="radiogroup" aria-label="폰트" className="flex flex-wrap gap-2">
           {fonts.map((f) => (
             <button
@@ -287,6 +287,10 @@ export default function BrandStyleSection({ initial, availableFontIds, onSaved }
           <p className="text-caption text-sub">
             <strong>TTF · OTF</strong>만 올릴 수 있어요 (woff2는 안 돼요). 한글이 있는 폰트여야
             해요.
+          </p>
+          <p className="text-caption text-sub">
+            여기서 정한 건 <strong>모든 카드의 기본</strong>이에요. 줄마다 다른 폰트를 쓰고
+            싶으면 슬라이드 편집 화면의 툴바에서 고르면 돼요.
           </p>
         </div>
         <p className="text-caption text-sub">
