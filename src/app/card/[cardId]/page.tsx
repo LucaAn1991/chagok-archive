@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { ChevronLeft, MoreHorizontal } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import type { Card, CardStatus } from "@/types";
 
@@ -23,8 +24,7 @@ import type { Card, CardStatus } from "@/types";
 type Phase = "loading" | "ready" | "not-found" | "error";
 
 const STATUS_LABELS: Record<CardStatus, string> = {
-  planned: "기획 완료",
-  crafted: "제작 완료",
+  planned: "제작 대기",
   pending: "업로드 대기",
   published: "발행 완료",
   discarded: "버림",
@@ -33,7 +33,6 @@ const STATUS_LABELS: Record<CardStatus, string> = {
 /** 상태 배지 색 — 명도 계단 (DESIGN.md §2). 색만으로 구분하지 않고 라벨 병행 (§15) */
 const STATUS_DOT_CLASS: Record<CardStatus, string> = {
   planned: "bg-st-planned",
-  crafted: "bg-st-crafted",
   pending: "bg-st-pending",
   published: "bg-st-published",
   discarded: "bg-st-discarded",
@@ -49,6 +48,7 @@ export default function CardDetailPage() {
   const [dateDraft, setDateDraft] = useState("");
   const [savingDate, setSavingDate] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false); // ··· 더 보기 (버리기가 산다)
   const [discarding, setDiscarding] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -147,6 +147,16 @@ export default function CardDetailPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-6 p-4 pb-16 pt-8">
+      {/* 뒤로 — 진입 경로가 여럿(캘린더·홈·놓친 카드)이라 브라우저 히스토리를 따른다 */}
+      <button
+        type="button"
+        onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))}
+        aria-label="뒤로 가기"
+        className="-mb-3 -ml-2 flex size-11 items-center justify-center self-start rounded-md text-sub hover:bg-surface-muted"
+      >
+        <ChevronLeft size={20} aria-hidden />
+      </button>
+
       {/* 상태 + 주제 */}
       <header className="flex flex-col gap-3">
         <span className="flex items-center gap-2 self-start rounded-pill border border-line bg-surface px-3 py-1 text-caption font-semibold text-ink">
@@ -210,28 +220,49 @@ export default function CardDetailPage() {
         </p>
       )}
 
-      {/* 행동 — primary는 한 화면에 1개 (DESIGN.md §6) */}
+      {/* 행동 — primary는 한 화면에 1개 (DESIGN.md §6).
+          파괴적 액션(버리기)은 primary와 같은 크기로 전시하지 않는다 — ··· 메뉴 속으로 (08-31) */}
       {!discarded && (
         <section className="flex flex-col gap-3">
           <Link
             href={`/card/${cardId}/result`}
             className="flex h-12 items-center justify-center rounded-md bg-berry text-[15px] font-semibold text-white hover:bg-berry-dark"
           >
-            {card.status === "planned" ? "제작하기" : "제작 결과 보기"}
+            {card.status === "planned" ? "콘텐츠 제작하기" : "제작 결과 보기"}
           </Link>
-          <Link
-            href={`/card/${cardId}/materials`}
-            className="flex h-11 items-center justify-center rounded-md border-2 border-berry bg-surface text-body font-semibold text-berry"
-          >
-            사진·문구 추가하기
-          </Link>
-          <button
-            type="button"
-            onClick={() => setDiscardOpen(true)}
-            className="h-11 rounded-md border border-warn bg-transparent text-body font-semibold text-warn"
-          >
-            버리기
-          </button>
+          <div className="flex items-center justify-between">
+            <Link
+              href={`/card/${cardId}/materials`}
+              className="flex h-11 items-center rounded-md border-2 border-berry bg-surface px-4 text-body font-semibold text-berry hover:bg-berry-light hover:text-berry-dark"
+            >
+              사진·문구 추가하기
+            </Link>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMenuOpen((v) => !v)}
+                aria-label="더 보기"
+                aria-expanded={menuOpen}
+                className="flex size-11 items-center justify-center rounded-md border border-line text-sub hover:bg-surface-muted"
+              >
+                <MoreHorizontal size={20} aria-hidden />
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-12 z-10 w-40 rounded-md border border-line bg-surface p-1 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setDiscardOpen(true);
+                    }}
+                    className="flex h-10 w-full items-center rounded-[4px] px-3 text-body text-warn hover:bg-surface-muted"
+                  >
+                    카드 버리기
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </section>
       )}
 

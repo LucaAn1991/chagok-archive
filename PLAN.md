@@ -136,15 +136,18 @@ type Card = {
 };
 
 /**
- * 기획 완료 → 제작 완료 → 업로드 대기 → 발행 완료
- *     └───────────┴────────────┴──────→ 버림 (어느 단계에서든)
+ * 제작 대기 → 업로드 대기 → 발행 완료
+ *     └──────────┴──────→ 버림 (어느 단계에서든)
+ *
+ * 「제작 완료(crafted)」는 없앴다 (08-31) — 제작이 끝나면 바로 업로드 대기.
+ * 발행 의향의 '아니오'·'미응답' 구분은 publishIntent가 따로 든다.
  *
  * 「제작 중」은 없다. 렌더링이 0.05초라 로딩이지 상태가 아니다 (DESIGN.md §11).
  * overdue도 상태가 아니다 — scheduledDate < today && status != 'published' 로 계산한다.
  */
-type CardStatus = 'planned' | 'crafted' | 'pending' | 'published' | 'discarded';
+type CardStatus = 'planned' | 'pending' | 'published' | 'discarded';
 
-/** status와 합치면 「제작 완료」가 '아니오'와 '미응답' 둘을 뜻하게 되어 분모가 흐려진다 */
+/** status에 합치면 '아니오'와 '미응답'을 구분할 수 없어 분모가 흐려진다 — 별도 필드 유지 */
 type PublishIntent = null | 'yes' | 'no';
 
 type VisualType = 'user_photo_preferred' | 'stock_recommended' | 'text_only';
@@ -245,8 +248,8 @@ type LayoutId =
 | 오늘의 카드 (F5) | 홈 진입 | 없음 (uid · 오늘 날짜) | `scheduledDate == today && status != 'discarded'` 조회 → **1건만** | 상태 B: Featured Card + `[제작하기]` | 0건 → 상태 C. 전체 0개 → 상태 A |
 | 카드 상세 · 생성 출처 (F6) | 홈·캘린더에서 카드 클릭 | `cardId` | `card` 조회 + `planId`로 출처 링크 | 기획 정보 + `[제작하기]` `[사진·문구 추가하기]` | 카드 없음 → 404. 원 `plan` 없음 → 출처 숨김 |
 | 캡션 생성 (F7) | `[제작하기]` 클릭 | `card` 기획 정보 · `user.tone` · `avoidExpressions` | 서버 API로 AI 호출 → `Caption` 생성 | Hook·Body·CTA·해시태그 칩 | 자동 1회 재시도 → 해당 영역 인라인 + `[다시 만들기]`(보조 버튼). **글자 직접 수정이 기본 경로** |
-| 템플릿형 카드뉴스 (F8) | `[제작하기]` 클릭 (캡션과 함께) | `card` 정보 · `photoUrls` · `extraNote` · `templateVars` | 이미지 폴백 사슬로 `visualType` 판정 → 렌더링 요청 → `slides` 저장, `status='crafted'` | skeleton 3장 → 순차 reveal | 사진 없으면 스톡 → 없으면 text_only. **어디서 멈춰도 완성** |
-| 발행 상태 관리 (F9) | 제작 완료 후 · 홈 `[업로드하셨나요?]` | 의향 1문항 응답 | 「업로드할게요」 → `publishIntent='yes'`, `status='pending'` / 「고민 중」 → `publishIntent='no'`, status 유지. 「올렸어요」 → `status='published'`, `publishedAt` 기록 | 상태 배지 갱신 | 저장 실패 → Toast + 원상 복구 |
+| 템플릿형 카드뉴스 (F8) | `[제작하기]` 클릭 (캡션과 함께) | `card` 정보 · `photoUrls` · `extraNote` · `templateVars` | 이미지 폴백 사슬로 `visualType` 판정 → 렌더링 요청 → `slides` 저장, `status='pending'` | skeleton 3장 → 순차 reveal | 사진 없으면 스톡 → 없으면 text_only. **어디서 멈춰도 완성** |
+| 발행 상태 관리 (F9) | 제작 후 · 홈 `[업로드하셨나요?]` | 의향 1문항 응답 | 「업로드할게요」 → `publishIntent='yes'` / 「고민 중」 → `publishIntent='no'` (status는 pending 유지). 「올렸어요」 → `status='published'`, `publishedAt` 기록 | 상태 배지 갱신 | 저장 실패 → Toast + 원상 복구 |
 | 확정 기획 세션 조회 (F10) | AI 기획 탭 → `[지난 기획]` | 없음 (uid) | `plan` where `status='confirmed'` 최신순 | 주제·확정일·카드 수·진행 상태 목록 | 0건 → empty state |
 | 이어서 기획하기 (F11) | 지난 기획 상세 → `[이어서 기획하기]` | `planId` | 기존 `messages`를 컨텍스트로 새 대화 시작 | 새 기획 화면(이전 맥락 로드됨) | **TODO: 과거 카드 몇 개까지 프롬프트에 넣을지 미확정** |
 | 기록형 카드 (F12) | 대화에서 기록형으로 판정 | 템플릿 예시 핑퐁 · 기간 | `plan.type='record'` · `templateVarNames` 확정 → 기간만큼 매일 `card` 생성 | 배치 결과 화면 | **TODO: 최대 기간 미확정. 3개월이면 90장** |
@@ -360,9 +363,8 @@ flowchart TD
     MAT --> MAKE
     CARD -->|제작하기| MAKE[제작 결과]
 
-    MAKE --> PUB{{발행 상태 관리<br/>팝업}}
-    PUB -->|업로드할게요| PENDING[업로드 대기]
-    PUB -->|아직 고민 중| CRAFTED[제작 완료 유지]
+    MAKE --> PENDING[업로드 대기]
+    PENDING --> PUB{{발행 의향 팝업<br/>publishIntent만 기록}}
     PENDING -->|올렸어요| PUBLISHED[발행 완료]
 
     GNB[/AI 기획 탭/] --> PLANNEW
@@ -415,7 +417,7 @@ flowchart TD
 | POST | `/api/plans/[planId]/schedule` | 업로드 빈도에 맞춰 예정일 배정 | F4 · `card` `user` | ○ |
 | POST | `/api/plans/[planId]/continue` | 이전 맥락을 이어 새 대화 시작 | F11 · `plan` | ○ |
 | POST | `/api/cards/[cardId]/caption` | 캡션 생성 — **AI 호출** | F7 · `card` `user` | ○ |
-| POST | `/api/cards/[cardId]/render` | 카드뉴스 **구성 생성** — 슬라이드 레이아웃·텍스트를 만들어 저장, status→'crafted'. 완성 PNG는 저장하지 않는다 | F8 · `card` | ○ |
+| POST | `/api/cards/[cardId]/render` | 카드뉴스 **구성 생성** — 슬라이드 레이아웃·텍스트를 만들어 저장, status→'pending'. 완성 PNG는 저장하지 않는다 | F8 · `card` | ○ |
 | GET | `/api/cards/[cardId]/slides/[order]/image` | 슬라이드 1장을 **요청 시 PNG로 렌더링** — satori + sharp (같은 프로세스 안) | F8 · `card` | ○ |
 | PATCH | `/api/cards/[cardId]/content` | 제작 결과 **부분 수정** — 캡션 전체 · 슬라이드 texts만. layoutId·imageUrl·order는 서버가 기존 값 유지(편집 범위 강제, DESIGN.md §12) | F7 F8 수정 · `card` | ○ |
 | PATCH | `/api/cards/[cardId]` | 기획 정보·예정일 수정 | F6 · 예정일 변경 · `card` | ○ |
@@ -568,6 +570,7 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 | 날짜 | 변경 내용 | 이유 | 관련 섹션 |
 |---|---|---|---|
 | 2026-08-27 | 최초 작성 | PRD·IA·DESIGN 기준 기술 설계 수립 | 전체 |
+| 2026-08-31 | 카드 상태에서 'crafted' 제거 — 제작(F8) 완료 시 바로 'pending'. planned 라벨은 «제작 대기»로 | 상태 4→3단계로 단순화. crafted/pending 구분은 publishIntent와 중복이었다. 기존 crafted 문서는 pending으로 이전, 보안 규칙 enum도 축소 | §2-3 · §7 · §9 |
 | 2026-08-27 | AI 실패·재시도 처리 확정 | PRD §5-7 신설에 따름. F2·F3 화면 확정을 막던 TODO 해소 | §3 · §3-1 · §9 · §12 |
 | 2026-08-27 | 렌더링을 Node(satori+sharp)로 확정 | 언어를 하나로 유지해야 3인이 서로의 코드를 본다(위험 7). 배포 대상도 1개 유지 | §6 · §8 · §12 |
 | 2026-08-27 | AI 모델을 Anthropic Claude로 확정 | 한국어 기획 대화 품질이 제품의 전부(PRD §3). 구조화 출력으로 F3 파싱 실패를 차단 | §8 · §9 · §12 |

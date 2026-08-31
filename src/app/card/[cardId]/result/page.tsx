@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged, type User as AuthUser } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
+import { ChevronLeft } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import type { Card, Caption } from "@/types";
 
@@ -273,6 +274,14 @@ export default function CardResultPage() {
   return (
     <main className="mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-6 p-4 pb-16">
       <header className="flex flex-col gap-1 pt-4">
+        {/* 뒤로 — 제작 흐름 중간이라 카드 상세로 고정한다 */}
+        <Link
+          href={`/card/${cardId}`}
+          aria-label="카드로 돌아가기"
+          className="-ml-2 mb-1 flex size-11 items-center justify-center self-start rounded-md text-sub hover:bg-surface-muted"
+        >
+          <ChevronLeft size={20} aria-hidden />
+        </Link>
         <h1 className="text-h3 font-bold text-ink">제작 결과</h1>
         {card && <p className="text-body text-sub">{card.title}</p>}
         {isMock && (

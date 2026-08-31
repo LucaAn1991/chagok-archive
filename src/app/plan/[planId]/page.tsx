@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
+import { ChevronLeft } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
@@ -102,6 +103,15 @@ export default function PlanDetailPage() {
 
           {state.phase === "ready" && (
             <>
+              {/* 뒤로 — 지난 기획 목록으로 */}
+              <Link
+                href="/plan/history"
+                aria-label="지난 기획 목록으로"
+                className="-ml-2 mb-2 inline-flex size-11 items-center justify-center rounded-md text-sub hover:bg-surface-muted"
+              >
+                <ChevronLeft size={20} aria-hidden />
+              </Link>
+
               {/* 확정 기획안 */}
               <h1 className="text-h3 font-bold text-ink">{state.plan.topic}</h1>
               <dl className="mt-4 flex flex-col gap-3 rounded-lg border border-line bg-surface p-5">

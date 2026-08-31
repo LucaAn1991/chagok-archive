@@ -10,7 +10,7 @@ import type { Card, VisualType, User } from "@/types";
  * POST /api/cards/[cardId]/render — 카드뉴스 구성 생성 (F8).
  *
  * 이미지 폴백 사슬로 visualType을 판정하고, 슬라이드 구성(레이아웃·텍스트)을
- * 생성해 저장한 뒤 status를 '제작 완료(crafted)'로 바꾼다.
+ * 생성해 저장한 뒤 status를 '업로드 대기(pending)'로 바꾼다 (08-31: crafted 단계 제거).
  * 완성 PNG는 저장하지 않는다 — slides/[order]/image 가 요청 시 렌더링한다.
  */
 export async function POST(
@@ -61,7 +61,7 @@ export async function POST(
     await cardSnap.ref.update({
       slides,
       visualType,
-      status: "crafted",
+      status: "pending",
       updatedAt: FieldValue.serverTimestamp(),
     });
 
