@@ -398,9 +398,10 @@ function NewPlanScreen() {
         {/* 간격은 --plan-gap 하나로 관리 (08-31) — 바깥 좌우 여백 = 열 사이 간격 */}
         <main className="mx-auto flex w-full max-w-[560px] flex-1 flex-col px-[var(--plan-gap)] pb-36 pt-3 [--plan-gap:1rem] md:[--plan-gap:1.5rem] lg:max-w-[1080px] lg:min-h-0 lg:pb-[var(--plan-gap)] lg:pt-4">
           {/* 헤더·탭 — 그대로 (지시 §0) */}
+          {/* 헤더 — [←] 와 제목만. 칩은 탭 줄로 옮겼다 (08-31 확정) */}
           <header>
-            <PageHeader
-              title="AI 기획"
+            <PageHeader title="AI 기획" />
+            <PlanTabs
               action={
                 <button
                   type="button"
@@ -413,13 +414,12 @@ function NewPlanScreen() {
                   /* 중성 회색 알약 칩 (08-31 확정 지시). 값은 지시서 고정 색 —
                      DESIGN §2 팔레트 밖(토큰 승격은 DESIGN 반영과 함께, 보고됨).
                      대비 #444 on #EDEDED ≈ 8.2:1 (AA 통과) */
-                  className="flex h-[30px] items-center rounded-pill border border-[#DCDCDC] bg-[#EDEDED] px-3 text-[13px] font-medium text-[#444444] transition-colors duration-200 hover:bg-[#E4E4E4] active:bg-[#E4E4E4] disabled:opacity-50"
+                  className="flex h-[30px] items-center whitespace-nowrap rounded-pill border border-[#DCDCDC] bg-[#EDEDED] px-3 text-[13px] font-medium text-[#444444] transition-colors duration-200 hover:bg-[#E4E4E4] active:bg-[#E4E4E4] disabled:opacity-50"
                 >
                   다시 시작
                 </button>
               }
             />
-            <PlanTabs />
             {isMock && (
               <p className="mt-2 text-caption text-sub">
                 모의 AI로 동작 중이에요 — API 키 연결 전 개발용 응답입니다.
