@@ -548,44 +548,50 @@ function CalendarView({ uid }: { uid: string }) {
                   </>
                 ) : (
                   <>
-                    {/* 주간 = 실행 관리 — 제목 옆 요약 + 상태별 집계 한 줄 (08-31 v3) */}
-                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                      <h2 className="text-body-l font-semibold text-ink">
-                        {todayKey >= range.start && todayKey <= range.end
-                          ? "이번 주 콘텐츠"
-                          : "이 주의 콘텐츠"}
-                      </h2>
-                      <span className="text-caption text-sub">
-                        {uploadFrequency ? `주 ${uploadFrequency}회 목표 · ` : ""}
-                        {state.cards.length}개 기획됨
-                      </span>
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
-                      {(
-                        [
-                          ["planned", "제작 대기"],
-                          ["pending", "업로드 대기"],
-                          ["published", "발행"],
-                        ] as const
-                      ).map(([status, label]) => (
-                        <span
-                          key={status}
-                          className="flex items-center gap-1.5 text-caption text-sub"
-                        >
-                          {status === "published" ? (
-                            <span aria-hidden className="font-semibold">
-                              ✓
+                    {/* 주간 헤더 — 왼쪽은 계획(목표·기획 수), 오른쪽은 진행 상태 (08-31 v4).
+                        상태는 큰 badge로 만들지 않는다 — dot + text 그대로, 우측 정렬만 */}
+                    <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+                      <div>
+                        <h2 className="text-body-l font-semibold text-ink">
+                          {todayKey >= range.start && todayKey <= range.end
+                            ? "이번 주 콘텐츠"
+                            : "이 주의 콘텐츠"}
+                        </h2>
+                        <p className="mt-0.5 text-caption text-sub">
+                          {uploadFrequency ? `목표 주 ${uploadFrequency}회 · ` : ""}
+                          {state.cards.length}개 기획
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+                        {(
+                          [
+                            ["planned", "제작 대기"],
+                            ["pending", "업로드 대기"],
+                            ["published", "발행"],
+                          ] as const
+                        ).map(([status, label]) => (
+                          <span
+                            key={status}
+                            className="flex items-center gap-1.5 text-caption text-sub"
+                          >
+                            {status === "published" ? (
+                              <span aria-hidden className="font-semibold">
+                                ✓
+                              </span>
+                            ) : (
+                              <span
+                                aria-hidden
+                                className="h-2 w-2 rounded-pill"
+                                style={{ background: STATUS_COLOR[status] }}
+                              />
+                            )}
+                            {label}{" "}
+                            <span className="font-medium">
+                              {state.cards.filter((c) => c.status === status).length}
                             </span>
-                          ) : (
-                            <span
-                              aria-hidden
-                              className="h-2 w-2 rounded-pill"
-                              style={{ background: STATUS_COLOR[status] }}
-                            />
-                          )}
-                          {label} {state.cards.filter((c) => c.status === status).length}
-                        </span>
-                      ))}
+                          </span>
+                        ))}
+                      </div>
                     </div>
 
                     {/* Desktop/Tablet — 플래너 컬럼 */}
