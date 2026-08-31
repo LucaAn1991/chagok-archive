@@ -3,8 +3,9 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
+import { doc, updateDoc } from "firebase/firestore";
 import { ArrowUp, Check, Plus } from "lucide-react";
-import { auth } from "@/lib/firebase/client";
+import { auth, db } from "@/lib/firebase/client";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/draft";
 import { addCustomAudience, loadCustomAudiences } from "@/lib/custom-audiences";
 import AppSidebar from "@/components/AppSidebar";
@@ -171,8 +172,13 @@ function NewPlanScreen() {
   const [confirmedLock, setConfirmedLock] = useState(false); // 카드 생성 후 — 주제 읽기 전용
   const [confirmError, setConfirmError] = useState(false);
 
-  // 사진 — 추천 1번을 미리 골라둔다 (「이렇게 골랐어요」 — DESIGN §1·§12).
-  // @TODO: F3 연결 시 카드로 전달. 내 사진 업로드 저장은 Storage 구성 후 (PLAN §8)
+  /*
+    사진 — 올린 사진은 기획에 저장되고, 카드 생성 때 주소를 물려준다 (08-31).
+
+    «추천» 칩은 아직 자리표시용 SVG다. 스톡은 **제작 단계에서** 슬라이드 내용을
+    보고 고르는 쪽이 훨씬 잘 맞아 그렇게 뒀다 (`lib/ai/slides.ts` · 08-31 확정).
+    @TODO: 추천 칩을 지울지, 실물로 채울지 결정 필요 (PLAN §12)
+  */
   const [selectedStockId, setSelectedStockId] = useState<string | null>(
     STOCK_SUGGESTIONS[0].id,
   );
@@ -188,6 +194,80 @@ function NewPlanScreen() {
 
   const didInit = useRef(false); // StrictMode의 이중 실행으로 plan이 2개 생기는 것을 막는다
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * 기획 단계 사진 업로드 (08-31).
+   *
+   * 카드가 생기기 전이라 기획에 붙여둔다 — 카드 생성 때 주소만 물려받는다.
+   * 재료 추가 화면(`CardPhotoUploader`)과 같은 흐름이다:
+   * 서버가 서명 URL을 주고, 파일은 브라우저 → Storage로 바로 간다.
+   *
+   * **먼저 미리보기를 띄우고 나중에 진짜 주소로 바꾼다.** 업로드가 끝날 때까지
+   * 빈 자리를 보여주면 «올라간 건가?» 싶어진다. 실패하면 그 사진만 걷어낸다.
+   */
+  async function uploadPhotos(files: FileList) {
+    const user = auth.currentUser;
+    if (!user || !planId) return;
+
+    for (const file of Array.from(files)) {
+      const preview = URL.createObjectURL(file);
+      setUserPhotos((prev) => [...prev, preview]);
+
+      try {
+        const token = await user.getIdToken();
+        const ticketRes = await fetch(`/api/plans/${planId}/photos`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ contentType: file.type }),
+        });
+        if (!ticketRes.ok) throw new Error("업로드하지 못했어요.");
+
+        const ticket = (await ticketRes.json()) as {
+          uploadUrl: string;
+          headers: Record<string, string>;
+          readUrl: string;
+        };
+
+        const put = await fetch(ticket.uploadUrl, {
+          method: "PUT",
+          headers: ticket.headers,
+          body: file,
+        });
+        if (!put.ok) throw new Error("업로드하지 못했어요.");
+
+        // 미리보기를 진짜 주소로 갈아끼우고, 기획에도 남긴다
+        setUserPhotos((prev) => {
+          const next = prev.map((u) => (u === preview ? ticket.readUrl : u));
+          void savePhotoUrls(next.filter((u) => !u.startsWith("blob:")));
+          return next;
+        });
+        URL.revokeObjectURL(preview);
+      } catch {
+        // 실패한 사진만 걷어낸다 — 나머지는 그대로 (PLAN §3-1 F13)
+        setUserPhotos((prev) => prev.filter((u) => u !== preview));
+        URL.revokeObjectURL(preview);
+      }
+    }
+  }
+
+  function removePhoto(url: string) {
+    if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+    setUserPhotos((prev) => {
+      const next = prev.filter((u) => u !== url);
+      void savePhotoUrls(next.filter((u) => !u.startsWith("blob:")));
+      return next;
+    });
+  }
+
+  /** 올라간 사진 주소를 기획에 저장한다. 보안 규칙이 photoUrls 쓰기를 허용한다 */
+  async function savePhotoUrls(urls: string[]) {
+    if (!planId) return;
+    try {
+      await updateDoc(doc(db, "plans", planId), { photoUrls: urls });
+    } catch {
+      // 저장 실패는 조용히 넘긴다 — 사진은 «있으면 쓰는» 재료라 여기서 화면을 막지 않는다
+    }
+  }
 
   async function runTurn(payload: TurnPayload) {
     setSending(true);
@@ -391,15 +471,8 @@ function NewPlanScreen() {
       selectedStockId,
       userPhotos,
       onSelectStock: setSelectedStockId,
-      onAddUserPhotos: (files: FileList) => {
-        // 미리보기용 Object URL — Storage 연결 전이라 세션 안에서만 유지된다
-        const urls = Array.from(files).map((f) => URL.createObjectURL(f));
-        setUserPhotos((prev) => [...prev, ...urls]);
-      },
-      onRemoveUserPhoto: (url: string) => {
-        URL.revokeObjectURL(url);
-        setUserPhotos((prev) => prev.filter((u) => u !== url));
-      },
+      onAddUserPhotos: uploadPhotos,
+      onRemoveUserPhoto: removePhoto,
     },
   };
   // 기획안이 준비됐고 조용한 상태 → 다음 행동은 [이대로 카드 만들기] 하나다

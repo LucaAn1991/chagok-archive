@@ -16,6 +16,17 @@ export type Plan = {
   messages: PlanMessage[]; // 대화 히스토리 전문. 「지난 기획 상세」에서 그대로 보여준다
   cardCount: number; // 생성된 카드 수. 하한 1 · 상한 없음
 
+  /**
+   * 기획 단계에서 올린 사진 (08-31). 순서 = 배열 순서.
+   *
+   * 카드를 만들 때 **주소만 물려준다** — 대상이 3명이면 카드가 3장인데
+   * 같은 사진을 3벌 저장할 이유가 없다. 파일은 `plans/{planId}/photos/`에 한 번만 있다.
+   *
+   * 스톡은 여기 담기지 않는다. 제작 단계에서 슬라이드 내용을 보고 고르는 쪽이
+   * 훨씬 잘 맞기 때문이다 (`lib/ai/slides.ts` · DESIGN §12 폴백 사슬).
+   */
+  photoUrls: string[];
+
   /** 기록형(type='record')일 때만 채워진다 */
   recordDays: number | null; // 며칠치를 미리 깔지. @TODO: PRD §9 미결 5 — 3개월이면 90장
   templateVarNames: string[]; // 템플릿 변수 이름 목록. 카드 상세에서 입력칸이 자동 렌더링된다

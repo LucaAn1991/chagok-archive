@@ -420,6 +420,7 @@ flowchart TD
 | PATCH | `/api/cards/[cardId]/content` | 제작 결과 **부분 수정** — 캡션 전체 · 슬라이드 texts만. layoutId·imageUrl·order는 서버가 기존 값 유지(편집 범위 강제, DESIGN.md §12) | F7 F8 수정 · `card` | ○ |
 | PATCH | `/api/cards/[cardId]` | 기획 정보·예정일 수정 | F6 · 예정일 변경 · `card` | ○ |
 | PATCH | `/api/cards/[cardId]/status` | 발행 의향·발행 완료·버리기 | F9 · 카드 버리기 · `card` | ○ |
+| POST | `/api/plans/[planId]/photos` | **기획 단계** 사진 업로드 URL 발급 (08-31). 확정된 기획은 409 | F2 · `plan` | ○ |
 | POST | `/api/cards/[cardId]/photos` | 사진 업로드 URL 발급 | F13 · `card` | ○ |
 | PATCH | `/api/users/me` | 온보딩 저장 · 콘텐츠 설정 수정 | F1 · 설정 · `user` | ○ |
 | DELETE | `/api/users/me` | 회원 탈퇴 — 계정 + 데이터 삭제 | 회원 탈퇴 · `user` `plan` `card` | ○ |
@@ -453,6 +454,7 @@ flowchart TD
 
 | 경로 | 담기는 것 | 보안 규칙 메모 |
 |---|---|---|
+| `plans/{planId}/photos/{uuid}.{jpg\|png\|webp}` | **기획 단계**에서 올린 사진 (08-31). 카드 생성 시 **주소만** 물려준다 — 대상이 여럿이면 카드도 여럿이지만 파일은 한 벌 | `storage.rules` — `plans/{planId}.userId` 조회로 본인 기획만. delete 금지(카드가 참조 중) |
 | `cards/{cardId}/photos/{uuid}.{jpg\|png\|webp}` | 재료 추가에서 올린 사진. 순서는 `card.photoUrls` 배열 순서를 따른다 | `storage.rules` — Firestore의 `cards/{cardId}.userId`를 조회해 **본인 카드만** 읽기·쓰기. 형식 3종·10MB 제한. delete 금지 |
 
 **파일명은 사용자가 준 이름을 쓰지 않는다.** 원본 이름에는 경로 문자나 개인정보가 섞일 수 있고, 같은 이름을 다시 올리면 앞의 것을 덮어쓴다. 서버가 UUID로 새로 짓는다.
@@ -612,6 +614,7 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 | 2026-08-31 | 슬라이드 `texts`를 **키·값 배열**로 받도록 스키마 변경 | 구조화 출력이 «임의 키를 가진 객체»를 거부한다("`additionalProperties: object` is not supported"). 레이아웃마다 슬롯이 달라 고정 속성으로도 못 적는다 | §9 |
 | 2026-08-31 | **사진 슬라이드 배정** — 이미지 레이아웃에 올린 순서대로, 모자라면 글자 레이아웃으로 강등. 렌더 시 **data URI 변환**(`lib/render/fetch-image.ts`) | satori가 원격 URL을 못 받아온다(「Image size cannot be determined」). 허용 호스트를 못박아 SSRF를 막았다 | §6 |
 | 2026-08-31 | **스톡 provider를 Pexels로 확정** — 폴백 사슬 ②단계 구현. `PEXELS_API_KEY` 없으면 ③ text-only로 내려앉는다 | 무료 한도가 넉넉하고(시간당 200건 vs Unsplash 50건), 표기가 **앱 안 링크 하나**로 끝나 카드뉴스 레이아웃 6종을 건드리지 않는다. §12 미결 9 해소 | §12 |
+| 2026-08-31 | **기획 단계 사진 → 카드 물려주기** — `plan.photoUrls` 신설 · `POST /api/plans/[planId]/photos` 신설 · `plans/{planId}/photos/` 저장 경로와 규칙 추가. `confirm`이 카드에 주소를 물려주고 `visualType`을 사진 유무로 판정 | 카드가 생기기 전에 올린 사진이 버려지고 있었다(`photoUrls: []` TODO). **파일은 복사하지 않고 주소만 넘긴다** — 대상이 셋이면 카드도 셋인데 같은 사진을 세 벌 둘 이유가 없다. 기획 화면의 «추천» 칩(스톡)은 자리표시로 남겨둠 — 스톡은 제작 단계에서 슬라이드 내용을 보고 고르는 쪽이 정확하다(승인받음) | §2-2 · §6 · §7 |
 | 2026-08-31 | `Slide.imageCredit` 필드 신설 · 제작 결과 화면에 스톡 출처 표기 | **Pexels API 약관이 크레딧을 요구한다**(사진 라이선스와 별개). 생성 시점에 안 담아두면 나중에 사진가를 알아낼 방법이 없다 | §2-3 · §12 |
 
 > **코딩 중 이 문서를 수정하게 되면 반드시 이 표에 기록한다.** (`CLAUDE.md` 「우선순위 및 충돌 처리」 3번)
