@@ -9,7 +9,8 @@ import { auth, db } from "@/lib/firebase/client";
 import AppShell from "@/components/AppShell";
 import BackLink from "@/components/BackLink";
 import StockAttribution from "@/components/StockAttribution";
-import type { Card, Caption } from "@/types";
+import { THEMES, THEME_ORDER, resolveTheme } from "@/lib/render/themes";
+import type { Card, Caption, ThemeId } from "@/types";
 
 /**
  * 제작 결과 (F7·F8) — 슬라이드 · 캡션 · 부분 수정.
@@ -287,7 +288,7 @@ export default function CardResultPage() {
           const body = (await res.json().catch(() => null)) as { error?: string } | null;
           throw new Error(body?.error ?? "저장하지 못했어요.");
         }
-        const data = (await res.json()) as Pick<Card, "caption" | "slides">;
+        const data = (await res.json()) as Pick<Card, "caption" | "slides" | "themeId">;
         const next = card ? { ...card, ...data } : null;
         if (next) setCard(next);
         showToast("저장됐어요.");
@@ -321,6 +322,33 @@ export default function CardResultPage() {
       setSlideUrls((prev) => prev.map((u, i) => (i === selectedSlide ? url : u)));
     } catch {
       /* 이미지 갱신 실패는 다음 진입 때 다시 그려진다 — 저장 자체는 성공 */
+    }
+  }
+
+  /**
+   * 테마 변경 (08-31).
+   *
+   * 테마는 카드 전체에 걸리므로 **모든 슬라이드를 다시 그려야 한다.**
+   * 문구 수정(한 장만 갱신)과 달리 여기서는 전체를 새로 받는다.
+   * 저장이 실패하면 이미지는 건드리지 않는다 — 화면과 DB가 어긋나면 안 된다.
+   */
+  async function selectTheme(next: ThemeId) {
+    if (!card || card.themeId === next || saving) return;
+
+    const updated = await saveContent({ themeId: next });
+    if (!updated) return;
+
+    const user = userRef.current;
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      const urls = await Promise.all(
+        updated.slides.map((s) => fetchSlideImage(s.order, token, true)),
+      );
+      setSlideUrls(urls);
+    } catch {
+      /* 저장은 됐다 — 다음 진입 때 새 테마로 그려진다 */
+      showToast("테마는 바뀌었어요. 미리보기는 잠시 후 반영돼요.");
     }
   }
 
@@ -393,6 +421,54 @@ export default function CardResultPage() {
           </div>
         ) : (
           <>
+            {/*
+              테마 고르기 (08-31) — 카드 «전체»에 걸린다. 그래서 슬라이드 줄 위에 둔다.
+              고르면 아래 미리보기가 통째로 바뀌는 관계가 자리로 드러난다.
+
+              칩 안의 색 동그라미는 테마의 실제 배경·글자색이다. 브랜드 토큰이 아니라
+              «콘텐츠 세계» 색이라 인라인 스타일로 넣는다 (PLAN.md 08-28 확정 예외).
+            */}
+            {phase === "ready" && card && (
+              <div className="flex flex-col gap-2">
+                <span className="text-label font-semibold text-sub">카드 분위기</span>
+                <div role="radiogroup" aria-label="카드 분위기" className="flex flex-wrap gap-2">
+                  {THEME_ORDER.map((id) => {
+                    const theme = THEMES[id];
+                    const active = resolveTheme(card.themeId).id === id;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => selectTheme(id)}
+                        disabled={saving}
+                        className={`flex items-center gap-2 rounded-pill border px-3 py-2 text-caption font-semibold
+                                    disabled:opacity-60 ${
+                                      active
+                                        ? "border-berry bg-berry-light text-berry-dark"
+                                        : "border-line bg-surface text-sub hover:text-ink"
+                                    }`}
+                      >
+                        <span
+                          aria-hidden
+                          className="flex h-4 w-4 items-center justify-center rounded-pill border"
+                          style={{ background: theme.color.bg, borderColor: theme.color.sub }}
+                        >
+                          <span
+                            className="h-1.5 w-1.5 rounded-pill"
+                            style={{ background: theme.color.ink }}
+                          />
+                        </span>
+                        {theme.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-caption text-sub">{resolveTheme(card.themeId).hint}</p>
+              </div>
+            )}
+
             {/*
               선택 강조가 `outline-offset`으로 **요소 바깥에** 그려지는데
               이 줄은 `overflow-x-auto`라 그 바깥이 잘린다.

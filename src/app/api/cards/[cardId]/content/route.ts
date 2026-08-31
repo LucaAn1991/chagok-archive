@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { getUidFromRequest } from "@/lib/api/auth";
-import type { Card, Caption, Slide } from "@/types";
+import type { Card, Caption, Slide, ThemeId } from "@/types";
+import { THEMES } from "@/lib/render/themes";
 
 /**
  * PATCH /api/cards/[cardId]/content — 제작 결과 수정 (캡션 · 슬라이드 문구).
@@ -13,11 +14,15 @@ import type { Card, Caption, Slide } from "@/types";
  * 편집 범위(DESIGN.md §12)를 서버에서 강제한다 —
  * 슬라이드는 **texts(글자 내용)만** 바꿀 수 있고, layoutId·imageUrl·order는
  * 요청에 무엇이 오든 기존 값을 유지한다.
+ *
+ * 테마(08-31)도 같은 원칙이다 — **정해진 3종 중 하나**만 받는다.
+ * 색을 직접 실어 보내는 요청은 형식 자체가 없다.
  */
 
 type PatchBody = {
   caption?: unknown;
   slides?: unknown;
+  themeId?: unknown;
 };
 
 const MAX_TEXT = 2000; // 필드당 글자 상한 — 문서 크기 방어
@@ -64,6 +69,13 @@ export async function PATCH(
     updates.slides = merged;
   }
 
+  if (body.themeId !== undefined) {
+    if (typeof body.themeId !== "string" || !(body.themeId in THEMES)) {
+      return NextResponse.json({ error: "없는 테마예요." }, { status: 400 });
+    }
+    updates.themeId = body.themeId as ThemeId;
+  }
+
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: "수정할 내용이 없어요." }, { status: 400 });
   }
@@ -74,6 +86,7 @@ export async function PATCH(
   return NextResponse.json({
     caption: (updates.caption as Caption | undefined) ?? card.caption,
     slides: (updates.slides as Slide[] | undefined) ?? card.slides,
+    themeId: (updates.themeId as ThemeId | undefined) ?? card.themeId,
   });
 }
 

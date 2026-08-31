@@ -15,6 +15,12 @@ export type Card = {
   status: CardStatus;
   publishIntent: PublishIntent; // status와 별개 필드 (DESIGN.md §11)
 
+  /**
+   * 산출물 테마 (08-31). 카드 한 장 전체에 같은 테마가 적용된다 —
+   * 슬라이드마다 다른 테마를 주면 한 묶음으로 안 보인다.
+   * 생성 시 온보딩 취향에서 정해지고, 제작 결과 화면에서 바꿀 수 있다.
+   */
+  themeId: ThemeId;
   visualType: VisualType; // 이미지 폴백 사슬의 판정 결과 (DESIGN.md §12)
   photoUrls: string[]; // 사용자가 올린 사진. 순서 = 배열 순서 (F13)
   extraNote: string; // «이번에 꼭 넣을 내용» 자유 입력 (F13)
@@ -78,6 +84,18 @@ export type StockCredit = {
   photographer: string;
   sourceUrl: string;
 };
+
+/**
+ * 카드뉴스 «테마» 3종 (08-31 신설).
+ *
+ * 레이아웃이 «무엇을 어디에 놓는가»라면 테마는 «어떤 색·글자 비율로 그리는가»다.
+ * 레이아웃과 마찬가지로 **고르는 것만 가능하고 직접 만들 수는 없다** —
+ * 색을 직접 지정하게 하면 DESIGN.md §0의 «디자인 편집기 아님»을 어긴다.
+ *
+ * id는 온보딩 취향의 `Direction`(lib/style-examples.ts)과 같은 말을 쓴다.
+ * 실제 색·글자 값은 `lib/render/themes.ts`.
+ */
+export type ThemeId = "warm" | "editorial" | "graphic";
 
 /**
  * 카드뉴스 레이아웃 6종 (PLAN.md §2-3, 08-27 확정).

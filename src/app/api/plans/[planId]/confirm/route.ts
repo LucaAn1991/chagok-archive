@@ -4,6 +4,8 @@ import { adminDb } from "@/lib/firebase/admin";
 import { getPlanningAI } from "@/lib/ai";
 import { AUDIENCES, AUDIENCE_DEFAULT, MAX_CARDS_PER_RUN } from "@/lib/audiences";
 import { verifyRequest } from "@/lib/server/request-auth";
+import { themeFromAttributes } from "@/lib/render/themes";
+import type { StyleAttributes } from "@/types";
 
 /**
  * POST /api/plans/[planId]/confirm — 기획 확정 → 카드 N장 생성 (F3 · PLAN §6).
@@ -84,6 +86,18 @@ export async function POST(
     const planPhotos: string[] = planSnap.get("photoUrls") ?? [];
     const visualType = planPhotos.length > 0 ? "user_photo_preferred" : "stock_recommended";
 
+    /*
+      산출물 테마는 **온보딩에서 고른 취향**에서 정한다 (08-31).
+      그동안 `visualPreferences`는 모으기만 하고 결과물에 닿지 않아서,
+      어떤 취향을 골랐든 카드가 똑같이 나왔다.
+
+      취향이 없으면(«잘 모르겠어요») 기본 테마로 떨어진다.
+      사용자는 제작 결과 화면에서 언제든 바꿀 수 있다.
+    */
+    const userSnap = await adminDb.collection("users").doc(session.uid).get();
+    const attributes: StyleAttributes[] = userSnap.get("visualPreferences.attributes") ?? [];
+    const themeId = themeFromAttributes(attributes);
+
     for (const [index, draft] of drafts.entries()) {
       const cardRef = adminDb.collection("cards").doc();
       // 생성 순서를 createdAt에 1ms씩 새겨 둔다 — 배치(F4)가 이 순서대로 날짜를 준다
@@ -99,6 +113,7 @@ export async function POST(
         scheduledDate: "", // 배치(F4·/schedule)가 부여한다
         status: "planned",
         publishIntent: null,
+        themeId, // 온보딩 취향에서 정한 기본값. 제작 결과 화면에서 변경 가능 (08-31)
         visualType, // 사진 유무로 판정. 렌더 시점에 다시 확인한다 (DESIGN §12)
         photoUrls: planPhotos, // 기획 단계 사진을 그대로 물려받는다 (08-31)
         extraNote: "",

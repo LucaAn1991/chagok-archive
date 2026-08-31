@@ -37,6 +37,8 @@ export async function GET(
   try {
     const png = await renderSlidePng({
       layoutId: slide.layoutId,
+      // 테마는 카드 전체가 하나를 공유한다 (08-31). 옛 카드엔 없어서 기본값으로 그려진다
+      themeId: card.themeId,
       texts: slide.texts,
       // satori는 원격 URL을 못 받아온다 — 여기서 data URI로 바꿔 넘긴다.
       // 실패하면 null이 되어 사진 없이 그려진다 (카드 전체를 못 쓰게 하지 않는다)

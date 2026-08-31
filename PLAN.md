@@ -122,6 +122,7 @@ type Card = {
   status: CardStatus;             // 아래 상태 모델 참고
   publishIntent: PublishIntent;   // status와 별개 필드 (DESIGN.md §11)
 
+  themeId: ThemeId;               // 산출물 테마. 카드 한 장 전체에 하나 (08-31)
   visualType: VisualType;         // 이미지 폴백 사슬의 판정 결과 (DESIGN.md §12)
   photoUrls: string[];            // 사용자가 올린 사진. 순서 = 배열 순서 (F13)
   extraNote: string;              // «이번에 꼭 넣을 내용» 자유 입력 (F13)
@@ -182,6 +183,25 @@ type LayoutId =
 
 // TODO: 각 레이아웃의 texts 슬롯 키와 여백·글자 크기·이미지 비율은 시안이 나와야 정해진다.
 //       DESIGN.md §18 참조. 이름이 확정됐으므로 렌더러 골격은 먼저 짤 수 있다.
+
+/**
+ * 산출물 테마 3종 `[확정 08-31]`
+ *
+ * 레이아웃이 «무엇을 어디에 놓는가»면 테마는 «어떤 색·글자 비율로 그리는가»다.
+ * 레이아웃과 같이 **고르는 것만 가능하고 직접 만들 수 없다** — 색을 직접
+ * 지정하게 하면 DESIGN.md §0의 «디자인 편집기 아님»을 어긴다.
+ *
+ * 이름은 08-28에 확정한 visual direction 3종을 그대로 쓴다 (아래 변경 이력).
+ * 온보딩 취향(`users.visualPreferences`)의 Direction과 **같은 id**여야
+ * 취향과 산출물이 어긋나지 않는다.
+ *
+ * 산출물 색은 브랜드 토큰을 따르지 않는다 — 08-28 확정 예외.
+ * 실제 값은 `lib/render/themes.ts`.
+ */
+type ThemeId =
+  | 'warm'        // 포근한 — 베이지 바탕 · 넉넉한 여백
+  | 'editorial'   // 또렷한 — 흰 바탕 · 크고 굵은 제목
+  | 'graphic';    // 글자 중심 — 글씨를 크게, 가운데로
 ```
 
 ---
@@ -483,8 +503,8 @@ plans  (userId ASC, status ASC, confirmedAt DESC)      지난 기획 목록
    전면 차단에서 컬렉션 3개를 열었다. 새 컬렉션을 열 때마다 이 조건을 붙인다)
 ② AI 생성 필드는 서버만 쓰기 — slides · caption · intent · shortTitle
    클라이언트가 쓸 수 있으면 «AI가 만들었다»는 전제가 깨진다
-③ status는 클라이언트 쓰기를 허용하되 값 검증 — 정해진 5개 값만,
-   published로 갈 때 publishedAt이 함께 기록되는지 확인
+③ status는 클라이언트 쓰기를 허용하되 값 검증 — 정해진 4개 값만
+   (08-31 crafted 제거 반영), published로 갈 때 publishedAt이 함께 기록되는지 확인
 ④ 버림은 삭제가 아니다 — cards 문서 delete를 막는다. discarded로만 바뀌어야
    발행률 분모가 유지된다 (DESIGN.md §11)
 ⑤ onboardedAt은 서버만 쓰기 — 라우트 가드의 근거라 클라이언트가 임의로 못 쓴다.
@@ -493,6 +513,8 @@ plans  (userId ASC, status ASC, confirmedAt DESC)      지난 기획 목록
    클라이언트가 만들 경로가 없다 (08-27 확정)
 ⑦ users·plans도 클라이언트 delete 금지 — v1에 삭제 기능이 없고,
    탈퇴 시 삭제는 서버(DELETE /api/users/me)가 한다 (08-27 확정)
+⑧ themeId도 값 검증 — 정해진 3종만 (08-31). 색을 직접 실어 넣는 길을 서버 밖에서도
+   막는다. 옛 카드엔 이 필드가 없으므로 «없으면 통과»를 함께 둔다
 ```
 
 ---
@@ -573,6 +595,7 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 | 날짜 | 변경 내용 | 이유 | 관련 섹션 |
 |---|---|---|---|
 | 2026-08-27 | 최초 작성 | PRD·IA·DESIGN 기준 기술 설계 수립 | 전체 |
+| 2026-08-31 | **산출물 테마 3종 신설** — `Card.themeId` · `ThemeId` 추가. 렌더러의 고정 색·글자 상수를 `lib/render/themes.ts`로 분리하고, 기본값은 온보딩 취향(`users.visualPreferences.attributes`)에서 정한다. 제작 결과 화면에서 변경 가능 | 온보딩에서 취향을 모으고도 결과물에 닿지 않아 누가 무엇을 골랐든 카드가 똑같이 나왔다. 이름은 08-28 확정 direction 3종을 그대로 써 어휘를 하나로 유지 | §2-3 · §7 · §9 |
 | 2026-08-31 | §9 미결 9번 행의 표 칸 복구 — «해소» 설명이 새 칸으로 들어가 있던 것을 「항목」 칸 안으로 넣음 | 3칸 표에 4칸이라 마지막 「출처」(`PRD.md` §9 미결 2·3)가 렌더링 때 잘렸다. 내용은 그대로, 칸만 맞춤 | §9 |
 | 2026-08-31 | 카드 상태에서 'crafted' 제거 — 제작(F8) 완료 시 바로 'pending'. planned 라벨은 «제작 대기»로 | 상태 4→3단계로 단순화. crafted/pending 구분은 publishIntent와 중복이었다. 기존 crafted 문서는 pending으로 이전, 보안 규칙 enum도 축소 | §2-3 · §7 · §9 |
 | 2026-08-27 | AI 실패·재시도 처리 확정 | PRD §5-7 신설에 따름. F2·F3 화면 확정을 막던 TODO 해소 | §3 · §3-1 · §9 · §12 |
