@@ -1,356 +1,455 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
   collection,
   doc,
   getDoc,
   getDocs,
+  orderBy,
   query,
-  serverTimestamp,
+  Timestamp,
   updateDoc,
   where,
 } from "firebase/firestore";
-import { ArrowLeft } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
-import AppSidebar from "@/components/AppSidebar";
-import MobileBottomNav from "@/components/MobileBottomNav";
-import InlineAlert from "@/components/InlineAlert";
+import AppShell from "@/components/AppShell";
+import BackLink from "@/components/BackLink";
 import StatusBadge from "@/components/StatusBadge";
-import { formatDateLabel, todayKey } from "@/lib/calendar";
-import type { Card, Plan } from "@/types";
+import type { Card } from "@/types";
 
 /**
- * 놓친 카드 목록 (F14 · PLAN.md §3-1).
+ * 놓친 카드 모아보기 (F14) — PLAN §3 · §4.
  *
- * **overdue는 상태가 아니다** (DESIGN.md §11). `scheduledDate < today && status != 'published'`
- * 로 «여기서» 계산한다. 별도 status를 만들면 발행률 분모가 흐려진다.
- *
- * 이 화면의 존재 이유는 회수다 — 「올렸어요」를 안 눌러 미발행으로 잡힌 카드를
- * 되찾아온다 (PRD 위험 4). 그래서 세 가지 행동을 한자리에 둔다:
- * **올렸어요 · 날짜 다시 잡기 · 버리기.**
- *
- * **0건일 때 죄책감을 주지 않는다** (PLAN.md §3-1). 빨간색·경고 아이콘을 쓰지 않고,
- * 밀린 게 없다는 사실만 담담히 말한다.
- *
- * 묶는 기준은 `plan.seriesTitle`이다. 원 기획이 지워졌거나 없는 카드는
- * 「따로 만든 카드」로 모은다 — 묶이지 않는다고 목록에서 빠지면 안 된다.
+ * overdue = scheduledDate < 오늘 && status ∉ {published, discarded}.
+ * 별도 status를 만들지 않는다 (PLAN §3 «overdue 계산»).
+ * plan.seriesTitle로 묶어 보여주고, 카드마다 세 가지 회수 동작:
+ *   올렸어요(→published) · 날짜 재지정 · 버리기(→discarded)
+ * 0건 empty state는 죄책감 없는 문구 — 빨간색·경고 금지 (PLAN §2 F14).
  */
 
-const UNGROUPED = "따로 만든 카드";
+function toDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
-type Phase = "loading" | "ready" | "error";
-type Group = { title: string; cards: Card[] };
+const DAY_HEADS = ["일", "월", "화", "수", "목", "금", "토"];
 
-export default function MissedCardsPage() {
+/** '2026-08-28' → '8월 28일 (금)' — 놓친 카드는 최근이라 연도는 뺀다 */
+function formatDayLabel(key: string): string {
+  const [y, m, d] = key.split("-").map(Number);
+  return `${m}월 ${d}일 (${DAY_HEADS[new Date(y, m - 1, d).getDay()]})`;
+}
+
+export default function MissedPage() {
   const router = useRouter();
-
-  const [phase, setPhase] = useState<Phase>("loading");
-  const [cards, setCards] = useState<Card[]>([]);
-  const [seriesByPlanId, setSeriesByPlanId] = useState<Record<string, string>>({});
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [confirmDiscard, setConfirmDiscard] = useState<Card | null>(null);
-
-  const today = todayKey();
-
-  const load = useCallback(
-    async (uid: string) => {
-      // 예정일이 오늘보다 이전인 것만. status 필터는 클라이언트에서 —
-      // Firestore는 부등호를 한 필드에만 걸 수 있어 scheduledDate 범위와 status !=를 같이 못 준다
-      const snap = await getDocs(
-        query(
-          collection(db, "cards"),
-          where("userId", "==", uid),
-          where("scheduledDate", "<", today),
-        ),
-      );
-
-      const overdue = snap.docs
-        .map((d) => ({ ...(d.data() as Card), id: d.id }))
-        .filter((c) => c.status !== "published" && c.status !== "discarded")
-        .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
-
-      setCards(overdue);
-
-      // 묶음 제목은 plan에 있다. 같은 기획을 여러 번 읽지 않도록 planId를 먼저 추린다
-      const planIds = [...new Set(overdue.map((c) => c.planId).filter(Boolean))];
-      const entries = await Promise.all(
-        planIds.map(async (id) => {
-          const p = await getDoc(doc(db, "plans", id)).catch(() => null);
-          const title = (p?.data() as Plan | undefined)?.seriesTitle;
-          return [id, title ?? ""] as const;
-        }),
-      );
-      setSeriesByPlanId(Object.fromEntries(entries.filter(([, t]) => t)));
-    },
-    [today],
-  );
+  const [uid, setUid] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!user) {
         router.replace("/login");
         return;
       }
-      try {
-        await load(user.uid);
-        setPhase("ready");
-      } catch {
-        setPhase("error");
-      }
+      setUid(user.uid);
     });
     return unsubscribe;
-  }, [router, load]);
+  }, [router]);
 
-  /** 시리즈별 묶음 — 원 기획이 없는 카드도 반드시 어딘가에 담긴다 */
-  const groups = useMemo<Group[]>(() => {
-    const map = new Map<string, Card[]>();
-    for (const c of cards) {
-      const title = seriesByPlanId[c.planId] || UNGROUPED;
-      const list = map.get(title);
-      if (list) list.push(c);
-      else map.set(title, [c]);
+  if (!uid) {
+    return (
+      <main className="flex min-h-screen items-center justify-center">
+        <p className="text-body text-sub">불러오는 중…</p>
+      </main>
+    );
+  }
+  return <MissedView uid={uid} />;
+}
+
+type Group = { seriesTitle: string; cards: Card[] };
+type ViewState =
+  | { phase: "loading" }
+  | { phase: "error" }
+  | { phase: "ready"; groups: Group[] };
+
+function MissedView({ uid }: { uid: string }) {
+  const router = useRouter();
+  const todayKey = toDateKey(new Date());
+
+  const [state, setState] = useState<ViewState>({ phase: "loading" });
+  const [reloadKey, setReloadKey] = useState(0);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // 날짜 재지정 — 어떤 카드의 날짜 입력이 열려 있나
+  const [rescheduleId, setRescheduleId] = useState<string | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  // 올렸어요 — 실제 올린 날짜를 물어본다 (08-31 요청)
+  const [publishId, setPublishId] = useState<string | null>(null);
+  const [publishDate, setPublishDate] = useState("");
+  // 버리기 확인 모달 — 되돌릴 수 없으므로 (PLAN §2 · 카드 상세와 동일)
+  const [discardTarget, setDiscardTarget] = useState<Card | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        // 온보딩 가드 (PLAN §3)
+        const userSnap = await getDoc(doc(db, "users", uid));
+        if (!userSnap.exists()) {
+          await signOut(auth);
+          return;
+        }
+        if (userSnap.data().onboardedAt == null) {
+          router.replace("/onboarding");
+          return;
+        }
+
+        // overdue 조회 — (userId, scheduledDate) 인덱스, status는 클라이언트 필터
+        const snap = await getDocs(
+          query(
+            collection(db, "cards"),
+            where("userId", "==", uid),
+            where("scheduledDate", "<", todayKey),
+            orderBy("scheduledDate", "asc"),
+          ),
+        );
+        const cards = snap.docs
+          .map((d) => {
+            const data = d.data() as Omit<Card, "id">;
+            // 과도기 방어 — 옛 코드의 'crafted'는 pending으로 읽는다 (08-31 상태 개편)
+            const status = (data.status as string) === "crafted" ? "pending" : data.status;
+            return { ...data, status, id: d.id };
+          })
+          .filter(
+            (c) =>
+              // 날짜가 빈 카드(기획 도중 미완성 데이터)는 «놓친» 게 아니다
+              c.scheduledDate !== "" && c.status !== "published" && c.status !== "discarded",
+          );
+
+        // plan.seriesTitle로 묶는다 (PLAN §3 F14) — plan이 없으면 카드 제목으로
+        const planIds = [...new Set(cards.map((c) => c.planId))];
+        const titles = new Map<string, string>();
+        await Promise.all(
+          planIds.map(async (planId) => {
+            try {
+              const planSnap = await getDoc(doc(db, "plans", planId));
+              if (planSnap.exists()) {
+                titles.set(planId, planSnap.data().seriesTitle ?? planSnap.data().topic ?? "");
+              }
+            } catch {
+              // plan 접근 실패 → 묶음 제목 없이 진행 (출처 숨김 — PLAN §3 F6과 동일 태도)
+            }
+          }),
+        );
+
+        const bySeries = new Map<string, Card[]>();
+        for (const card of cards) {
+          const key = titles.get(card.planId) || "기타";
+          const list = bySeries.get(key) ?? [];
+          list.push(card);
+          bySeries.set(key, list);
+        }
+        const groups = [...bySeries.entries()].map(([seriesTitle, list]) => ({
+          seriesTitle,
+          cards: list,
+        }));
+
+        if (cancelled) return;
+        setState({ phase: "ready", groups });
+      } catch {
+        if (!cancelled) setState({ phase: "error" });
+      }
     }
-    // «따로 만든 카드»는 항상 맨 뒤 — 이름이 붙은 시리즈가 먼저 눈에 들어와야 한다
-    return [...map.entries()]
-      .map(([title, list]) => ({ title, cards: list }))
-      .sort((a, b) =>
-        a.title === UNGROUPED ? 1 : b.title === UNGROUPED ? -1 : a.title.localeCompare(b.title),
-      );
-  }, [cards, seriesByPlanId]);
 
-  /** 처리한 카드는 더 이상 «놓친» 것이 아니므로 목록에서 뺀다 */
-  function removeFromList(cardId: string) {
-    setCards((prev) => prev.filter((c) => c.id !== cardId));
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [uid, router, todayKey, reloadKey]);
+
+  function showNotice(message: string) {
+    setNotice(message);
+    setTimeout(() => setNotice(null), 3000);
   }
 
+  /** 목록에서 카드 제거 (동작 성공 후) */
+  function removeCard(cardId: string) {
+    if (state.phase !== "ready") return;
+    setState({
+      phase: "ready",
+      groups: state.groups
+        .map((g) => ({ ...g, cards: g.cards.filter((c) => c.id !== cardId) }))
+        .filter((g) => g.cards.length > 0),
+    });
+  }
+
+  /** 올렸어요 — 실제 올린 날짜를 받아 기록한다 (F9: published는 publishedAt 필수) */
   async function markPublished(card: Card) {
+    if (!publishDate) return;
     setBusyId(card.id);
-    setError(null);
     try {
-      // 보안 규칙이 published로 갈 때 publishedAt을 함께 요구한다 (PLAN §7 원칙 ③)
+      const [y, m, d] = publishDate.split("-").map(Number);
       await updateDoc(doc(db, "cards", card.id), {
         status: "published",
-        publishedAt: serverTimestamp(),
+        publishIntent: "yes",
+        // 정오로 만든다 — 자정은 UTC 표기에서 하루 밀릴 수 있다
+        publishedAt: Timestamp.fromDate(new Date(y, m - 1, d, 12)),
+        scheduledDate: publishDate, // 캘린더에도 실제 올린 날로 보이게
       });
-      removeFromList(card.id);
+      removeCard(card.id);
+      setPublishId(null);
+      showNotice("발행 완료로 기록했어요.");
     } catch {
-      setError("처리하지 못했어요. 다시 시도해주세요.");
+      showNotice("저장하지 못했어요. 잠시 후 다시 시도해주세요.");
     } finally {
       setBusyId(null);
     }
   }
 
-  async function reschedule(card: Card, date: string) {
-    if (!date || date === card.scheduledDate) return;
+  /** 날짜 재지정 — 캘린더 드래그와 동일한 쓰기 */
+  async function reschedule(card: Card) {
+    if (!rescheduleDate) return;
     setBusyId(card.id);
-    setError(null);
     try {
-      await updateDoc(doc(db, "cards", card.id), { scheduledDate: date });
-      if (date >= today) {
-        removeFromList(card.id); // 오늘 이후로 옮겼으면 더 이상 놓친 카드가 아니다
-      } else {
-        setCards((prev) =>
-          prev
-            .map((c) => (c.id === card.id ? { ...c, scheduledDate: date } : c))
-            .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate)),
-        );
-      }
+      await updateDoc(doc(db, "cards", card.id), { scheduledDate: rescheduleDate });
+      removeCard(card.id);
+      setRescheduleId(null);
+      showNotice("일정을 다시 잡았어요.");
     } catch {
-      setError("날짜를 옮기지 못했어요. 다시 시도해주세요.");
+      showNotice("저장하지 못했어요. 잠시 후 다시 시도해주세요.");
     } finally {
       setBusyId(null);
     }
   }
 
+  /** 버리기 — 삭제가 아니라 discarded (PLAN §2) */
   async function discard(card: Card) {
     setBusyId(card.id);
-    setError(null);
     try {
       await updateDoc(doc(db, "cards", card.id), { status: "discarded" });
-      removeFromList(card.id);
-      setConfirmDiscard(null);
+      removeCard(card.id);
+      showNotice("카드를 버렸어요.");
     } catch {
-      setError("버리지 못했어요. 다시 시도해주세요.");
+      showNotice("저장하지 못했어요. 잠시 후 다시 시도해주세요.");
     } finally {
       setBusyId(null);
     }
   }
 
   return (
-    <div className="flex flex-1">
-      <AppSidebar />
+    <AppShell width={960}>
+      <BackLink fallbackHref="/calendar">돌아가기</BackLink>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <main className="mx-auto w-full max-w-[720px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
+      <h1 className="mt-3 text-title font-bold text-ink">놓친 카드</h1>
+
+      {state.phase === "loading" && (
+        <div className="mt-6 flex flex-col gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-20 animate-pulse rounded-lg bg-surface-muted" />
+          ))}
+        </div>
+      )}
+
+      {state.phase === "error" && (
+        <div className="mt-16 flex flex-col items-center gap-3">
+          <p className="text-body text-sub">목록을 불러오지 못했어요.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setState({ phase: "loading" });
+              setReloadKey((k) => k + 1);
+            }}
+            className="h-11 rounded-md border border-line bg-surface px-5 text-body font-semibold text-ink hover:bg-surface-muted"
+          >
+            다시 시도
+          </button>
+        </div>
+      )}
+
+      {/* 0건 — 죄책감 없는 문구, 빨간색·경고 금지 (PLAN §2 F14) */}
+      {state.phase === "ready" && state.groups.length === 0 && (
+        <div className="mt-16 flex flex-col items-center gap-2">
+          <p className="text-body-l font-semibold text-ink">밀린 카드가 없어요</p>
+          <p className="text-body text-sub">지금 페이스 그대로면 충분해요.</p>
           <Link
             href="/calendar"
-            className="inline-flex items-center gap-1 text-body text-sub hover:text-ink"
+            className="mt-3 flex h-11 items-center rounded-md border border-line bg-surface px-5 text-body font-semibold text-ink hover:bg-surface-muted"
           >
-            <ArrowLeft size={16} aria-hidden />
-            캘린더
+            캘린더로 돌아가기
           </Link>
+        </div>
+      )}
 
-          <header className="mt-3 flex flex-col gap-1">
-            <h1 className="text-h3 font-bold text-ink">지나간 카드</h1>
-            <p className="text-body text-sub">
-              예정일이 지났지만 아직 올리지 않은 카드예요. 지금 올려도 늦지 않아요.
-            </p>
-          </header>
+      {state.phase === "ready" &&
+        state.groups.map((group) => (
+          <section key={group.seriesTitle} className="mt-6">
+            <h2 className="text-body font-semibold text-ink">{group.seriesTitle}</h2>
+            <ul className="mt-2 flex flex-col gap-2">
+              {group.cards.map((card) => {
+                const busy = busyId === card.id;
+                return (
+                  <li
+                    key={card.id}
+                    className="rounded-lg border border-line bg-surface p-4 md:p-5"
+                  >
+                    {/* 정보는 한 줄씩 내려 쓴다 — 카드가 화면을 채우게 (08-31 피드백) */}
+                    <div className="flex items-start justify-between gap-3">
+                      <Link href={`/card/${card.id}`} className="min-w-0">
+                        <span className="block text-body-l font-semibold text-ink hover:underline">
+                          {card.title}
+                        </span>
+                      </Link>
+                      <StatusBadge status={card.status} />
+                    </div>
+                    <p className="mt-2 text-body text-sub">
+                      {formatDayLabel(card.scheduledDate)} 예정이었어요
+                    </p>
+                    <p className="mt-1 text-body text-sub">{card.audience}</p>
 
-          {error && (
-            <div className="mt-4">
-              <InlineAlert>{error}</InlineAlert>
-            </div>
-          )}
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      {publishId === card.id ? (
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="text-body text-sub">언제 올리셨어요?</span>
+                          <input
+                            type="date"
+                            value={publishDate}
+                            min={card.scheduledDate}
+                            max={todayKey}
+                            onChange={(e) => setPublishDate(e.target.value)}
+                            className="h-9 rounded-md border border-line bg-surface px-2 text-body text-ink"
+                          />
+                          <button
+                            type="button"
+                            disabled={busy || !publishDate}
+                            onClick={() => void markPublished(card)}
+                            className="h-9 rounded-md bg-berry px-3 text-body font-semibold text-white hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+                          >
+                            확인
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPublishId(null)}
+                            className="text-body text-sub hover:text-ink"
+                          >
+                            취소
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            setPublishId(card.id);
+                            setPublishDate(todayKey);
+                            setRescheduleId(null);
+                          }}
+                          className="h-9 rounded-md bg-berry px-3 text-body font-semibold text-white hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+                        >
+                          올렸어요
+                        </button>
+                      )}
 
-          {phase === "loading" && (
-            <div aria-hidden className="mt-6 flex animate-pulse flex-col gap-3">
-              <div className="h-6 w-32 rounded-md bg-surface-muted" />
-              <div className="h-28 rounded-lg bg-surface-muted" />
-              <div className="h-28 rounded-lg bg-surface-muted" />
-            </div>
-          )}
+                      {rescheduleId === card.id ? (
+                        <span className="flex items-center gap-2">
+                          <input
+                            type="date"
+                            value={rescheduleDate}
+                            min={todayKey}
+                            onChange={(e) => setRescheduleDate(e.target.value)}
+                            className="h-9 rounded-md border border-line bg-surface px-2 text-body text-ink"
+                          />
+                          <button
+                            type="button"
+                            disabled={busy || !rescheduleDate}
+                            onClick={() => void reschedule(card)}
+                            className="h-9 rounded-md border-2 border-berry bg-surface px-3 text-body font-semibold text-berry hover:bg-berry-light hover:text-berry-dark disabled:border-line disabled:text-sub"
+                          >
+                            확정
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRescheduleId(null)}
+                            className="text-body text-sub hover:text-ink"
+                          >
+                            취소
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            setRescheduleId(card.id);
+                            setRescheduleDate(todayKey);
+                            setPublishId(null);
+                          }}
+                          className="h-9 rounded-md border border-line bg-surface px-3 text-body font-semibold text-ink hover:bg-surface-muted disabled:text-sub"
+                        >
+                          날짜 다시 잡기
+                        </button>
+                      )}
 
-          {phase === "error" && (
-            <div className="mt-6 flex flex-col items-center gap-3 rounded-lg border border-line bg-surface p-8">
-              <p className="text-body text-ink">목록을 불러오지 못했어요.</p>
-              <button
-                type="button"
-                onClick={() => location.reload()}
-                className="h-11 rounded-md border border-line px-4 text-body font-semibold text-ink"
-              >
-                다시 시도
-              </button>
-            </div>
-          )}
-
-          {/* 0건 — 죄책감을 주지 않는다. 경고색·아이콘을 쓰지 않는다 (PLAN §3-1) */}
-          {phase === "ready" && cards.length === 0 && (
-            <div className="mt-6 flex flex-col items-center gap-2 rounded-lg border border-line bg-surface p-10">
-              <p className="text-body font-semibold text-ink">밀린 카드가 없어요.</p>
-              <p className="text-body text-sub">차곡차곡 잘 쌓고 계세요.</p>
-              <Link
-                href="/calendar"
-                className="mt-2 text-body text-berry-dark underline underline-offset-4"
-              >
-                캘린더 보기
-              </Link>
-            </div>
-          )}
-
-          {phase === "ready" && groups.length > 0 && (
-            <div className="mt-6 flex flex-col gap-6">
-              {groups.map((group) => (
-                <section key={group.title} className="flex flex-col gap-2">
-                  <h2 className="text-body font-semibold text-ink">
-                    {group.title}
-                    <span className="ml-1.5 text-caption font-normal text-sub">
-                      {group.cards.length}건
-                    </span>
-                  </h2>
-
-                  <ul className="flex flex-col gap-2">
-                    {group.cards.map((card) => (
-                      <li
-                        key={card.id}
-                        className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-4"
+                      {/* destructive — 휴지통 아이콘 + 확인 모달 (되돌릴 수 없으므로, PLAN §2) */}
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setDiscardTarget(card)}
+                        aria-label="버리기"
+                        title="버리기"
+                        className="ml-auto flex size-9 items-center justify-center rounded-md border border-warn text-warn hover:bg-surface-muted disabled:border-line disabled:text-sub"
                       >
-                        <div className="flex items-start gap-3">
-                          <span className="min-w-0 flex-1">
-                            <Link
-                              href={`/card/${card.id}`}
-                              className="block truncate text-body font-semibold text-ink hover:text-berry-dark"
-                            >
-                              {card.title}
-                            </Link>
-                            <span className="mt-0.5 block text-caption text-sub">
-                              {formatDateLabel(card.scheduledDate)} 예정 · {card.audience}
-                            </span>
-                          </span>
-                          <StatusBadge status={card.status} />
-                        </div>
+                        <Trash2 size={16} aria-hidden />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
 
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => markPublished(card)}
-                            disabled={busyId === card.id}
-                            className="h-10 rounded-md bg-berry px-4 text-body font-semibold text-white
-                                       hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
-                          >
-                            올렸어요
-                          </button>
-
-                          <label className="flex items-center gap-1.5 text-caption text-sub">
-                            날짜 다시 잡기
-                            <input
-                              type="date"
-                              defaultValue={card.scheduledDate}
-                              disabled={busyId === card.id}
-                              onChange={(e) => reschedule(card, e.target.value)}
-                              className="h-10 rounded-md border border-line bg-surface px-2
-                                         text-body text-ink"
-                            />
-                          </label>
-
-                          <button
-                            type="button"
-                            onClick={() => setConfirmDiscard(card)}
-                            disabled={busyId === card.id}
-                            className="ml-auto h-10 rounded-md px-3 text-body text-sub
-                                       hover:bg-surface-muted hover:text-ink disabled:text-sub/50"
-                          >
-                            버리기
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ))}
-            </div>
-          )}
-        </main>
-      </div>
-
-      {/* 버리기는 되돌릴 수 없다 → 확인 모달 (PLAN.md §3-1 「카드 버리기」) */}
-      {confirmDiscard && (
+      {/* 버리기 확인 모달 — 카드 상세와 같은 문구·패턴 (DESIGN §13) */}
+      {discardTarget && (
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="discard-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
-          onClick={() => setConfirmDiscard(null)}
+          onClick={() => setDiscardTarget(null)}
+          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="flex w-full max-w-[400px] flex-col gap-3 rounded-lg bg-surface p-6"
+            className="flex w-full max-w-[400px] flex-col gap-4 rounded-xl bg-surface p-6 shadow-lg"
           >
             <h2 id="discard-title" className="text-title font-bold text-ink">
               이 카드를 버릴까요?
             </h2>
             <p className="text-body text-sub">
-              «{confirmDiscard.title}»을 버리면 목록에서 사라져요. 되돌릴 수 없어요.
+              버린 카드는 되돌릴 수 없어요. 삭제되는 건 아니고, 계획했던 기록으로 남아요.
             </p>
-            <div className="mt-2 flex gap-2">
+            <div className="flex gap-3">
               <button
                 type="button"
-                onClick={() => setConfirmDiscard(null)}
-                className="h-11 flex-1 rounded-md border border-line text-body font-semibold text-ink"
+                onClick={() => setDiscardTarget(null)}
+                className="h-11 flex-1 rounded-md border border-line bg-surface text-body font-semibold text-ink"
               >
-                그대로 두기
+                취소
               </button>
               <button
                 type="button"
-                onClick={() => discard(confirmDiscard)}
-                disabled={busyId === confirmDiscard.id}
-                className="h-11 flex-1 rounded-md bg-berry text-body font-semibold text-white
-                           hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+                onClick={() => {
+                  const target = discardTarget;
+                  setDiscardTarget(null);
+                  void discard(target);
+                }}
+                className="h-11 flex-1 rounded-md border border-warn bg-transparent text-body font-semibold text-warn"
               >
                 버리기
               </button>
@@ -359,7 +458,14 @@ export default function MissedCardsPage() {
         </div>
       )}
 
-      <MobileBottomNav />
-    </div>
+      {notice && (
+        <div
+          role="alert"
+          className="fixed bottom-20 left-1/2 -translate-x-1/2 rounded-md border border-line bg-surface px-4 py-2.5 text-body text-ink shadow-sm md:bottom-8"
+        >
+          {notice}
+        </div>
+      )}
+    </AppShell>
   );
 }

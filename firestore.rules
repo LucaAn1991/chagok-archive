@@ -64,12 +64,12 @@ service cloud.firestore {
 
       // 클라이언트 쓰기 허용: status · publishIntent · scheduledDate 등 (§7 메모)
       // AI 생성 필드(slides · caption · intent · shortTitle)는 서버만 쓴다 (원칙 ②)
-      // status는 정해진 5개 값만, published로 갈 때는 publishedAt이 함께 (원칙 ③)
+      // status는 정해진 4개 값만 (08-31: crafted 제거), published로 갈 때는 publishedAt이 함께 (원칙 ③)
       allow update: if isOwner(resource.data.userId)
         && !changedKeys().hasAny(
           ['userId', 'planId', 'slides', 'caption', 'intent', 'shortTitle', 'createdAt'].toSet()
         )
-        && request.resource.data.status in ['planned', 'crafted', 'pending', 'published', 'discarded']
+        && request.resource.data.status in ['planned', 'pending', 'published', 'discarded']
         && (request.resource.data.status != 'published'
             || request.resource.data.publishedAt != null);
 

@@ -9,17 +9,29 @@ import MobileBottomNav from "@/components/MobileBottomNav";
  *
  * **로그인 전 화면에는 쓰지 않는다** — 랜딩·로그인·회원가입·온보딩·약관은
  * 아직 앱 안이 아니라서 GNB를 보여줄 자리가 아니다.
- *
- * 폭은 두 가지뿐이다. Tailwind는 `max-w-[${값}]`처럼 조립한 클래스를 못 알아보므로
- * (빌드 때 훑어서 쓰이는 클래스만 남긴다) 미리 적어둔 둘 중에서 고른다.
  */
+
+/**
+ * 최대 폭은 DESIGN.md §4에 적힌 값만 쓴다. 숫자를 그대로 이름으로 삼아
+ * 문서와 대조하기 쉽게 뒀다.
+ *
+ * Tailwind는 `max-w-[${값}]`처럼 조립한 클래스를 못 알아본다 —
+ * 빌드 때 소스를 훑어서 «글자 그대로 나온» 클래스만 남기기 때문에,
+ * 이렇게 미리 적어둔 것 중에서 골라야 한다.
+ */
+const MAX_WIDTH = {
+  720: "max-w-[720px]", // 제작 결과 · 카드 상세
+  960: "max-w-[960px]", // 홈 · 설정 · 놓친 카드
+  1200: "max-w-[1200px]", // 캘린더 — 전폭
+} as const;
+
 export default function AppShell({
   children,
-  /** 캘린더처럼 넓은 화면이면 true (1100px), 기본은 읽기 폭 720px */
-  wide = false,
+  width = 720,
 }: {
   children: React.ReactNode;
-  wide?: boolean;
+  /** DESIGN.md §4 「최대 폭」 */
+  width?: keyof typeof MAX_WIDTH;
 }) {
   return (
     <div className="flex flex-1">
@@ -27,10 +39,7 @@ export default function AppShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <main
-          className={[
-            "mx-auto w-full flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8",
-            wide ? "max-w-[1100px]" : "max-w-[720px]",
-          ].join(" ")}
+          className={`mx-auto w-full flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8 ${MAX_WIDTH[width]}`}
         >
           {children}
         </main>

@@ -362,7 +362,7 @@ export default function CardResultPage() {
 
   return (
     <AppShell>
-      <BackLink fallbackHref="/">돌아가기</BackLink>
+      <BackLink fallbackHref={`/card/${cardId}`}>돌아가기</BackLink>
       <div className="mt-3 flex flex-col gap-6">
       <header className="flex flex-col gap-1 pt-4">
         <h1 className="text-h3 font-bold text-ink">제작 결과</h1>
