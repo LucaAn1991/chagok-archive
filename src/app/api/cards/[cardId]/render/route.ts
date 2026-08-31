@@ -66,7 +66,9 @@ export async function POST(
     });
 
     return NextResponse.json({ slides, visualType, mock: !isClaudeConfigured() });
-  } catch {
+  } catch (e) {
+    // 사용자에게는 사정을 감추되 서버에는 남긴다 — 삼켜버리면 원인을 못 찾는다
+    console.error("[render]", e);
     return NextResponse.json(
       { error: "카드뉴스를 만들지 못했어요. 다시 시도해주세요." },
       { status: 502 },

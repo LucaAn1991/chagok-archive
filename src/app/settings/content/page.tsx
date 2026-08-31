@@ -9,6 +9,8 @@ import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import InlineAlert from "@/components/InlineAlert";
+// 말투 정의는 lib/tone.ts가 단일 출처 — AI 프롬프트도 같은 값을 쓴다
+import { TONES } from "@/lib/tone";
 import type { ToneKey, User } from "@/types";
 
 /**
@@ -26,36 +28,6 @@ import type { ToneKey, User } from "@/types";
 
 const FREQUENCIES = [1, 2, 3, 4, 5, 6, 7] as const;
 const DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"]; // index = 저장값 (0=월 … 6=일)
-
-/**
- * 말투 4종 — 사용자는 «키»가 아니라 «문장»을 보고 고른다.
- *
- * @TODO: 아래 예시 문장은 확정 카피가 아니다 (PLAN.md §12 「값이 비어 있는 것」 5번 —
- *   «말투 4종의 키·예시 문장» 미확정). 키 4개는 User 타입에 확정돼 있고 문장만 임시다.
- *   실제 카피가 정해지면 이 배열만 교체하면 된다.
- */
-const TONES: { key: ToneKey; label: string; sample: string }[] = [
-  {
-    key: "friendly",
-    label: "친근한",
-    sample: "오늘도 들러주셔서 고마워요. 같이 해봐요!",
-  },
-  {
-    key: "calm",
-    label: "차분한",
-    sample: "오늘은 이런 이야기를 준비했습니다.",
-  },
-  {
-    key: "energetic",
-    label: "활기찬",
-    sample: "자, 오늘도 시작해볼까요? 진짜 좋아요!",
-  },
-  {
-    key: "professional",
-    label: "전문적인",
-    sample: "핵심만 정리했습니다. 세 가지만 확인하세요.",
-  },
-];
 
 const MAX_AVOID = 20;
 const MAX_AVOID_LEN = 30;

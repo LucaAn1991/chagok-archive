@@ -1,8 +1,11 @@
 import "server-only";
 
-import type { Slide, VisualType } from "../../types/card";
+import { audiencePrompt } from "../audiences";
+import { toneDirective } from "../tone";
+import { BASE_SYSTEM, STR, callJson, isClaudeConfigured, obj } from "./client";
+import { buildPreferenceDirective } from "./preferences";
+import type { LayoutId, Slide, VisualType } from "../../types/card";
 import type { ToneKey, User } from "../../types/user";
-import { isClaudeConfigured } from "./caption";
 
 /**
  * 카드뉴스 슬라이드 구성 생성 (F8) — 슬라이드 5~8장의 레이아웃·텍스트.
@@ -30,13 +33,132 @@ export type SlidesInput = {
   visualType: VisualType;
 };
 
+/**
+ * 레이아웃별로 렌더러가 **실제로 읽는** 텍스트 슬롯 (`lib/render/layouts.ts`).
+ *
+ * 여기 없는 키를 넣으면 조용히 사라지고, 빠뜨리면 그 자리가 빈다.
+ * 그래서 프롬프트에 그대로 넣어 모델이 지어내지 못하게 한다.
+ */
+const LAYOUT_SLOTS: Record<LayoutId, string> = {
+  cover: "title, subtitle",
+  "text-only": "title, body",
+  "image-top": "title, body",
+  "image-full": "title",
+  list: "title, item1, item2, item3, item4 (item은 3~4개)",
+  closing: "message, cta",
+};
+
+/** 이미지가 없으면 이미지 레이아웃은 빈 면이 된다 — 아예 후보에서 뺀다 */
+const TEXT_ONLY_LAYOUTS: LayoutId[] = ["cover", "text-only", "list", "closing"];
+const ALL_LAYOUTS = Object.keys(LAYOUT_SLOTS) as LayoutId[];
+
+const MIN_SLIDES = 5;
+const MAX_SLIDES = 8;
+
+/**
+ * 텍스트 슬롯을 **객체가 아니라 키·값 배열**로 받는다.
+ *
+ * 구조화 출력은 «임의의 키를 가진 객체»를 허용하지 않는다
+ * ("For 'object' type, 'additionalProperties: object' is not supported").
+ * 레이아웃마다 슬롯이 달라 고정 속성으로도 못 적으므로 배열로 받아 코드에서 조립한다.
+ */
+const SLIDES_SCHEMA = obj(
+  {
+    slides: {
+      type: "array",
+      items: obj(
+        {
+          layoutId: STR,
+          texts: {
+            type: "array",
+            items: obj({ key: STR, value: STR }, ["key", "value"]),
+          },
+        },
+        ["layoutId", "texts"],
+      ),
+    },
+  },
+  ["slides"],
+);
+
+/** 레이아웃별로 렌더러가 받아들이는 슬롯 이름 — 모르는 키는 버린다 */
+const ALLOWED_KEYS: Record<LayoutId, string[]> = {
+  cover: ["title", "subtitle"],
+  "text-only": ["title", "body"],
+  "image-top": ["title", "body"],
+  "image-full": ["title"],
+  list: ["title", "item1", "item2", "item3", "item4"],
+  closing: ["message", "cta"],
+};
+
 export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
   if (!isClaudeConfigured()) {
     return mockSlides(input);
   }
 
-  // @TODO: 실제 Claude 호출로 교체. 키가 있어도 아직 목을 반환한다.
-  return mockSlides(input);
+  // 사진이 없으면 이미지 레이아웃을 고를 수 없다 (DESIGN §12 폴백 사슬)
+  const usable = input.visualType === "text_only" ? TEXT_ONLY_LAYOUTS : ALL_LAYOUTS;
+
+  const directives = [
+    toneDirective(input.tone),
+    buildPreferenceDirective(input.visualPreferences),
+    input.avoidExpressions.length
+      ? `다음 표현은 절대 쓰지 마라: ${input.avoidExpressions.join(", ")}.`
+      : null,
+  ].filter(Boolean);
+
+  const result = await callJson<{
+    slides: { layoutId: string; texts: { key: string; value: string }[] }[];
+  }>({
+    system: [BASE_SYSTEM, "", ...directives].join("\n"),
+    user: [
+      `주제: ${input.title}`,
+      `읽는 사람: ${input.audience}`,
+      `대상별 지시: ${audiencePrompt(input.audience)}`,
+      input.intent ? `기획의도: ${input.intent}` : "",
+      input.extraNote ? `**이번에 꼭 넣어야 하는 것: ${input.extraNote}**` : "",
+      "",
+      `이 게시물의 카드뉴스를 ${MIN_SLIDES}~${MAX_SLIDES}장으로 구성해라. 넘겨보는 순서가 곧 이야기 흐름이다.`,
+      "",
+      "쓸 수 있는 레이아웃과 **정해진 텍스트 슬롯** (다른 키를 만들면 화면에서 사라진다):",
+      ...usable.map((id) => `- ${id}: ${LAYOUT_SLOTS[id]}`),
+      "",
+      "규칙:",
+      "- 첫 장은 반드시 `cover`, 마지막 장은 반드시 `closing`.",
+      "- 슬라이드 한 장에 담는 생각은 하나. 글자가 많으면 넘기지 않는다.",
+      "- 제목은 짧게(20자 안팎), 본문도 3~4줄을 넘기지 않는다. 화면이 정사각형이라 길면 잘린다.",
+      "- 같은 레이아웃을 세 번 넘게 잇달아 쓰지 않는다.",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    schema: SLIDES_SCHEMA,
+    effort: "medium", // 결과물로 남는다 (PLAN §9)
+  });
+
+  const slides: Slide[] = result.slides
+    // 렌더러가 모르는 레이아웃은 버린다 — 넣어봐야 빈 화면이 된다
+    .filter((s) => usable.includes(s.layoutId as LayoutId))
+    .slice(0, MAX_SLIDES)
+    .map((s, order) => {
+      const layoutId = s.layoutId as LayoutId;
+      const allowed = ALLOWED_KEYS[layoutId];
+      // 그 레이아웃이 읽지 않는 키는 버린다 — 남겨둬도 화면에 안 나오고 문서만 커진다
+      const texts: Record<string, string> = {};
+      for (const { key, value } of s.texts ?? []) {
+        if (allowed.includes(key) && typeof value === "string") texts[key] = value;
+      }
+      return {
+        order,
+        layoutId,
+        texts,
+        // 사진 배정은 렌더 route가 판정한 visualType에 따라 별도로 채운다
+        // @TODO: 사용자 사진을 슬라이드에 배정하는 규칙 (지금은 전부 null)
+        imageUrl: null,
+      };
+    });
+
+  // 너무 적게 오면 화면이 허전하다 — 최소 장수를 못 채우면 샘플로 되돌린다
+  return slides.length >= MIN_SLIDES ? slides : mockSlides(input);
 }
 
 /** 개발용 샘플 5장 — 레이아웃 6종 중 텍스트 계열로 구성 (visualType 반영 전) */

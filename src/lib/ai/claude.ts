@@ -1,14 +1,8 @@
 import "server-only";
 
-import Anthropic from "@anthropic-ai/sdk";
 import { AUDIENCES, AUDIENCE_DEFAULT, audiencePrompt } from "@/lib/audiences";
-import type {
-  CardDraft,
-  OnText,
-  PlanningAI,
-  PlanProposal,
-  PlanTurnResult,
-} from "./types";
+import { BASE_SYSTEM, STR, STR_ARRAY, callJson, obj } from "./client";
+import type { CardDraft, PlanningAI, PlanProposal, PlanTurnResult } from "./types";
 
 /**
  * Anthropic Claude 실구현 (PLAN.md §9).
@@ -26,32 +20,9 @@ import type {
  * 키는 서버에서만 읽는다. `NEXT_PUBLIC_` 접두사를 절대 붙이지 않는다 (CLAUDE.md 보안 2).
  */
 
-const MODEL = "claude-opus-5";
-
-/** 대화 턴 — 화면에서 기다리는 시간이라 낮게. 카드 생성은 한 단계 위 */
+/** 대화 턴은 화면에서 기다리는 시간이라 낮게. 카드는 결과물로 남으므로 한 단계 위 */
 const EFFORT_TURN = "low" as const;
 const EFFORT_CARD = "medium" as const;
-
-/** 작은 JSON만 받지만 상한을 낮게 잡으면 생각이 잘려 응답이 깨진다 */
-const MAX_TOKENS = 16000;
-
-let client: Anthropic | null = null;
-function getClient(): Anthropic {
-  // 키는 환경에서 읽는다 — 생성자에 하드코딩하지 않는다
-  if (!client) client = new Anthropic();
-  return client;
-}
-
-/** 이 제품이 무엇인지 — 모든 호출에 공통으로 깔린다 */
-const BASE_SYSTEM = [
-  "너는 «차곡»의 기획 도우미다. 인스타그램을 운영해야 하지만 마케팅이 본업이 아닌 1인 운영자를 돕는다.",
-  "",
-  "말투 규칙:",
-  "- 한국어로만 답한다. 존댓말을 쓰되 딱딱하지 않게.",
-  "- 마케팅 용어(타깃·퍼널·톤앤매너·인게이지먼트)를 쓰지 않는다. 사용자는 그 말을 모르고 배우고 싶어하지도 않는다.",
-  "- 빈칸을 던지지 않는다. 먼저 정리해서 건네고, 사용자는 고치기만 하면 되게 한다.",
-  "- 앞에 나서지 않는다. 감탄사·이모지를 남발하지 않는다.",
-].join("\n");
 
 /** 온보딩에서 받은 맥락을 시스템 프롬프트 꼬리에 붙인다 */
 function contextBlock(ctx: { field: string; tone: string }): string {
@@ -61,148 +32,10 @@ function contextBlock(ctx: { field: string; tone: string }): string {
   return lines.join("\n");
 }
 
-type CallOptions = {
-  system: string;
-  user: string;
-  schema: Record<string, unknown>;
-  effort: typeof EFFORT_TURN | typeof EFFORT_CARD;
-  /** 있으면 reply를 만들어지는 대로 흘려보낸다 */
-  onText?: OnText;
-};
-
-/**
- * 아직 끝나지 않은 JSON에서 `reply` 문자열만 뽑아낸다.
- *
- * 스트리밍으로 오는 건 `{"reply":"안녕하` 같은 **깨진 JSON**이라 `JSON.parse`가 안 된다.
- * 모든 스키마가 `reply`를 첫 속성으로 두어 가장 먼저 흘러나오게 해뒀다.
- *
- * 못 찾으면 null — 그때는 스트리밍만 포기하고 완성본을 기다린다.
- * 이 함수가 틀려도 최종 결과는 `JSON.parse`가 따로 만든다.
- */
-function extractPartialReply(buffer: string): string | null {
-  const at = buffer.indexOf('"reply"');
-  if (at < 0) return null;
-
-  // "reply" 다음의 콜론·공백을 건너뛰고 여는 따옴표를 찾는다
-  let i = at + '"reply"'.length;
-  while (i < buffer.length && buffer[i] !== '"') {
-    if (!":  \n\r\t".includes(buffer[i])) return null; // 예상 못 한 모양
-    i++;
-  }
-  if (i >= buffer.length) return null;
-  i++;
-
-  const ESCAPES: Record<string, string> = {
-    n: "\n", t: "\t", r: "\r", b: "\b", f: "\f", '"': '"', "\\": "\\", "/": "/",
-  };
-
-  let out = "";
-  while (i < buffer.length) {
-    const c = buffer[i];
-    if (c === '"') return out; // 문자열이 끝났다
-    if (c !== "\\") {
-      out += c;
-      i++;
-      continue;
-    }
-    const next = buffer[i + 1];
-    if (next === undefined) break; // 이스케이프가 잘렸다 — 다음 조각을 기다린다
-    if (next === "u") {
-      if (i + 5 >= buffer.length) break;
-      out += String.fromCharCode(parseInt(buffer.slice(i + 2, i + 6), 16));
-      i += 6;
-      continue;
-    }
-    out += ESCAPES[next] ?? next;
-    i += 2;
-  }
-  return out; // 아직 오는 중
-}
-
-/** 다시 시도해봐야 같은 결과인 실패 — 재시도 루프를 그냥 통과시킨다 */
-class NonRetryableError extends Error {}
-
-/**
- * 한 번 호출하고 JSON으로 받는다. 실패하면 **한 번만** 다시 시도한다 (§9 · PRD §5-7).
- *
- * 재시도해도 안 되면 던진다 — 호출한 route가 잡아서 「다시 시도」를 사용자에게 넘긴다.
- * 여기서 조용히 기본값을 돌려주면 사용자는 AI가 만든 줄 알게 된다.
- *
- * 재시도해도 소용없는 셋은 즉시 던진다: 요청 형식 오류·인증 실패·안전 거부.
- */
-async function callJson<T>({ system, user, schema, effort, onText }: CallOptions): Promise<T> {
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const stream = getClient().messages.stream({
-        model: MODEL,
-        max_tokens: MAX_TOKENS,
-        system,
-        messages: [{ role: "user", content: user }],
-        thinking: { type: "adaptive" },
-        output_config: {
-          effort,
-          format: { type: "json_schema", schema },
-        },
-      });
-
-      if (onText) {
-        // 재시도로 두 번째 호출이 되면 앞서 흘려보낸 글자와 겹친다.
-        // 그래서 «지금까지 보낸 길이»를 시도마다 새로 센다
-        let buffer = "";
-        let sent = 0;
-        stream.on("text", (delta) => {
-          buffer += delta;
-          const reply = extractPartialReply(buffer);
-          if (reply === null || reply.length <= sent) return;
-          onText(reply.slice(sent));
-          sent = reply.length;
-        });
-      }
-
-      const response = await stream.finalMessage();
-
-      if (response.stop_reason === "refusal") {
-        throw new NonRetryableError("AI가 이 요청에는 답하지 않았어요. 다른 주제로 해볼까요?");
-      }
-
-      const text = response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === "text")
-        .map((b) => b.text)
-        .join("");
-
-      return JSON.parse(text) as T;
-    } catch (e) {
-      if (
-        e instanceof NonRetryableError ||
-        e instanceof Anthropic.BadRequestError ||
-        e instanceof Anthropic.AuthenticationError
-      ) {
-        throw e;
-      }
-      lastError = e;
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error("AI 호출에 실패했어요.");
-}
-
-/* ── 스키마 ────────────────────────────────────────────────
-   additionalProperties: false + required로 모양을 못박는다.
-   느슨하게 두면 모델이 필드를 덧붙여 파싱 이후 코드가 흔들린다.
-
-   ⚠️ **배열 개수는 스키마로 못 정한다.** 구조화 출력은 `minItems`를 0이나 1
-   외의 값으로 받지 않는다("For 'array' type, 'minItems' values other than
-   0 or 1 are not supported"). 개수는 프롬프트로 요청하고 **코드에서 맞춘다.**  */
-
-function obj(properties: Record<string, unknown>, required: string[]) {
-  return { type: "object", properties, required, additionalProperties: false };
-}
-
-const STR = { type: "string" } as const;
-const STR_ARRAY = { type: "array", items: STR } as const;
-
+/*
+  ⚠️ 스트리밍을 쓰는 스키마는 `reply`를 **첫 속성**으로 둔다 —
+  부분 JSON에서 가장 먼저 흘러나와야 화면에 글자를 띄울 수 있다 (client.ts).
+*/
 const GREETING_SCHEMA = obj({ reply: STR, topicSuggestions: STR_ARRAY }, [
   "reply",
   "topicSuggestions",
