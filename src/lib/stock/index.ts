@@ -30,15 +30,34 @@ export function isStockConfigured(): boolean {
 }
 
 type PexelsResponse = {
-  photos?: { src?: { large?: string; large2x?: string } }[];
+  photos?: {
+    url?: string; // 사진 페이지 (사진가 크레딧 링크의 목적지)
+    photographer?: string;
+    photographer_url?: string;
+    src?: { large?: string; large2x?: string };
+  }[];
 };
 
 /**
- * 검색어 하나로 사진 후보 URL을 받아온다. 못 찾으면 빈 배열.
+ * 고른 스톡 사진 하나.
+ *
+ * **URL만 들고 있으면 안 된다** — Pexels API 약관이 사진가 크레딧을 요구하므로
+ * 이름과 사진 페이지 주소를 함께 저장한다. 나중에 화면에서 표시하려면
+ * 그때 다시 조회할 방법이 없다.
+ */
+export type StockPhoto = {
+  imageUrl: string;
+  photographer: string;
+  /** 사진 페이지 — 크레딧 링크가 여기로 간다 */
+  sourceUrl: string;
+};
+
+/**
+ * 검색어 하나로 사진 후보를 받아온다. 못 찾으면 빈 배열.
  *
  * 던지지 않는다 — 스톡은 «있으면 좋은» 것이라 실패해도 카드 생성이 멈추면 안 된다.
  */
-async function search(query: string): Promise<string[]> {
+async function search(query: string): Promise<StockPhoto[]> {
   const key = process.env.PEXELS_API_KEY;
   if (!key || !query.trim()) return [];
 
@@ -48,9 +67,18 @@ async function search(query: string): Promise<string[]> {
     const res = await fetch(url, { headers: { Authorization: key } });
     if (!res.ok) return []; // 한도 초과·키 오류 — 조용히 넘어간다
     const data = (await res.json()) as PexelsResponse;
-    return (data.photos ?? [])
-      .map((p) => p.src?.large ?? p.src?.large2x)
-      .filter((u): u is string => Boolean(u));
+
+    return (data.photos ?? []).flatMap((p) => {
+      const imageUrl = p.src?.large ?? p.src?.large2x;
+      if (!imageUrl) return [];
+      return [
+        {
+          imageUrl,
+          photographer: p.photographer ?? "Pexels",
+          sourceUrl: p.url ?? "https://www.pexels.com",
+        },
+      ];
+    });
   } catch {
     return [];
   }
@@ -62,7 +90,9 @@ async function search(query: string): Promise<string[]> {
  * **같은 사진이 두 번 쓰이지 않게** 이미 고른 것은 건너뛴다 — 카드뉴스를 넘기다
  * 같은 사진이 또 나오면 성의 없어 보인다.
  */
-export async function pickStockPhotos(queries: string[]): Promise<(string | null)[]> {
+export async function pickStockPhotos(
+  queries: string[],
+): Promise<(StockPhoto | null)[]> {
   if (!isStockConfigured() || queries.length === 0) return queries.map(() => null);
 
   // 검색은 서로 독립이라 한꺼번에 — 순서대로 하면 슬라이드 수만큼 시간이 곱해진다
@@ -70,8 +100,8 @@ export async function pickStockPhotos(queries: string[]): Promise<(string | null
 
   const used = new Set<string>();
   return results.map((candidates) => {
-    const pick = candidates.find((u) => !used.has(u));
-    if (pick) used.add(pick);
+    const pick = candidates.find((p) => !used.has(p.imageUrl));
+    if (pick) used.add(pick.imageUrl);
     return pick ?? null;
   });
 }

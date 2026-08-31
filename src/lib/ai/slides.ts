@@ -5,7 +5,7 @@ import { toneDirective } from "../tone";
 import { isStockConfigured, pickStockPhotos } from "../stock";
 import { BASE_SYSTEM, STR, callJson, isClaudeConfigured, obj } from "./client";
 import { buildPreferenceDirective } from "./preferences";
-import type { LayoutId, Slide, VisualType } from "../../types/card";
+import type { LayoutId, Slide, StockCredit, VisualType } from "../../types/card";
 import type { ToneKey, User } from "../../types/user";
 
 /**
@@ -190,23 +190,31 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
     .map((s, i) => ({ i, query: s.imageQuery ?? "" }))
     .filter(({ i }) => IMAGE_LAYOUTS.includes(kept[i].layoutId as LayoutId));
 
-  const assigned = new Map<number, string>();
+  const assigned = new Map<number, { url: string; credit: StockCredit | null }>();
 
   if (photoCount > 0) {
     imageSlots.forEach((slot, n) => {
-      if (n < photoCount) assigned.set(slot.i, photos[n]);
+      // 사용자 사진은 출처가 본인이라 크레딧이 없다
+      if (n < photoCount) assigned.set(slot.i, { url: photos[n], credit: null });
     });
   } else if (stockAvailable && imageSlots.length > 0) {
     const found = await pickStockPhotos(imageSlots.map((s) => s.query));
     imageSlots.forEach((slot, n) => {
-      const url = found[n];
-      if (url) assigned.set(slot.i, url);
+      const photo = found[n];
+      if (photo) {
+        assigned.set(slot.i, {
+          url: photo.imageUrl,
+          // 약관이 요구하는 크레딧 — 지금 안 담아두면 나중에 알아낼 방법이 없다
+          credit: { photographer: photo.photographer, sourceUrl: photo.sourceUrl },
+        });
+      }
     });
   }
 
   const slides: Slide[] = kept.map((s, order) => {
     let layoutId = s.layoutId as LayoutId;
-    const imageUrl = assigned.get(order) ?? null;
+    const picked = assigned.get(order) ?? null;
+    const imageUrl = picked?.url ?? null;
 
     // 사진을 못 채운 이미지 레이아웃은 글자 쪽으로
     if (imageUrl === null && IMAGE_LAYOUTS.includes(layoutId)) {
@@ -220,7 +228,7 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
       if (allowed.includes(key) && typeof value === "string") texts[key] = value;
     }
 
-    return { order, layoutId, texts, imageUrl };
+    return { order, layoutId, texts, imageUrl, imageCredit: picked?.credit ?? null };
   });
 
   // 너무 적게 오면 화면이 허전하다 — 최소 장수를 못 채우면 샘플로 되돌린다

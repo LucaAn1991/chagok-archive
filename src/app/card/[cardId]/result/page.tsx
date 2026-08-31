@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged, type User as AuthUser } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
+import StockAttribution from "@/components/StockAttribution";
 import type { Card, Caption } from "@/types";
 
 /**
@@ -340,6 +341,7 @@ export default function CardResultPage() {
             {phase === "ready" && selectedSlide === null && (
               <p className="text-caption text-sub">슬라이드를 누르면 문구를 수정할 수 있어요.</p>
             )}
+            {phase === "ready" && card && <StockAttribution slides={card.slides} />}
           </>
         )}
 

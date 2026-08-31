@@ -62,6 +62,20 @@ export type Slide = {
   layoutId: LayoutId; // 레이아웃 6종 중 하나
   texts: Record<string, string>; // 레이아웃의 텍스트 슬롯별 내용. 글자 «내용»만 수정 가능
   imageUrl: string | null; // 'text-only'면 null
+  /**
+   * 스톡 사진을 쓴 슬라이드의 출처 (08-31).
+   *
+   * **Pexels API 약관이 사진가 크레딧을 요구한다.** 나중에 표시하려 할 때
+   * 다시 조회할 방법이 없으므로 생성 시점에 함께 저장한다.
+   * 사용자 사진이거나 사진이 없으면 null.
+   */
+  imageCredit?: StockCredit | null;
+};
+
+/** 스톡 사진 출처 — 사진가 이름과 사진 페이지 주소 */
+export type StockCredit = {
+  photographer: string;
+  sourceUrl: string;
 };
 
 /**
