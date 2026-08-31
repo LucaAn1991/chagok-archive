@@ -13,7 +13,17 @@ import { THEMES, THEME_ORDER, resolveTheme } from "@/lib/render/themes";
 import { LAYOUT_LABELS, layoutOptionsFor } from "@/lib/slide-layout";
 import { CARD_TEMPLATES, TEMPLATE_ORDER, worksWithoutPhotos } from "@/lib/card-templates";
 import SlotToolbar from "@/components/SlotToolbar";
-import type { Card, Caption, LayoutId, SlotStyle, ThemeId, TemplateId } from "@/types";
+import SlideEditor from "@/components/SlideEditor";
+import { bakeToElements } from "@/lib/free-layout";
+import type {
+  Card,
+  Caption,
+  LayoutId,
+  SlideElement,
+  SlotStyle,
+  ThemeId,
+  TemplateId,
+} from "@/types";
 
 /**
  * 제작 결과 (F7·F8) — 슬라이드 · 캡션 · 부분 수정.
@@ -77,6 +87,8 @@ export default function CardResultPage() {
   const [slideDraft, setSlideDraft] = useState<Record<string, string> | null>(null);
   /** 슬롯별 글자 조절 초안 (08-31). 문구와 함께 저장된다 */
   const [styleDraft, setStyleDraft] = useState<Record<string, SlotStyle>>({});
+  /** 자유 편집 중 고른 요소 (08-31) */
+  const [selectedElId, setSelectedElId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -97,6 +109,12 @@ export default function CardResultPage() {
     card?.caption && captionDraft
       ? JSON.stringify(card.caption) !== JSON.stringify(captionDraft)
       : false;
+
+  /** 이 슬라이드가 자유 배치로 전환돼 있는가 */
+  const freeMode = Boolean(
+    selectedSlide !== null &&
+      card?.slides.find((s) => s.order === selectedSlide)?.elements?.length,
+  );
 
   const editingSlide =
     selectedSlide !== null && card
@@ -335,8 +353,28 @@ export default function CardResultPage() {
 
   async function saveSlideTexts() {
     if (selectedSlide === null || !slideDraft) return;
+    /*
+      자유 배치 중이면 요소의 글자도 같이 고친다 (08-31).
+      요소가 `slot`을 들고 있어서 어느 입력칸이 어느 상자인지 알 수 있다.
+      안 이으면 «문구를 고쳤는데 그림이 그대로»가 된다.
+    */
+    const elements = freeMode
+      ? editingSlide?.elements?.map((el) =>
+          el.slot && slideDraft[el.slot] !== undefined
+            ? { ...el, text: slideDraft[el.slot], style: styleDraft[el.slot] }
+            : el,
+        )
+      : undefined;
+
     const next = await saveContent({
-      slides: [{ order: selectedSlide, texts: slideDraft, styleOverrides: styleDraft }],
+      slides: [
+        {
+          order: selectedSlide,
+          texts: slideDraft,
+          styleOverrides: styleDraft,
+          ...(elements ? { elements } : {}),
+        },
+      ],
     });
     if (!next) return;
 
@@ -478,18 +516,50 @@ export default function CardResultPage() {
     }
   }
 
+  /**
+   * 자유 배치 저장 (08-31 · 편집기).
+   *
+   * 손을 뗄 때마다 부른다. 저장하고 **그 슬라이드만** 다시 그린다 —
+   * 렌더링이 5~10ms라 바탕 PNG가 거의 즉시 새것으로 바뀐다.
+   * `elements: null`이면 자유 배치를 끄고 레이아웃으로 돌아간다.
+   */
+  async function saveElements(next: SlideElement[] | null) {
+    if (selectedSlide === null) return;
+    const updated = await saveContent({
+      slides: [{ order: selectedSlide, elements: next }],
+    });
+    if (!updated) return;
+
+    const user = userRef.current;
+    if (!user) return;
+    try {
+      const url = await fetchSlideImage(selectedSlide, await user.getIdToken(), true);
+      setSlideUrls((prev) =>
+        prev.map((u, i) => {
+          if (i !== selectedSlide) return u;
+          URL.revokeObjectURL(u);
+          return url;
+        }),
+      );
+    } catch {
+      /* 저장은 됐다 — 다음 진입 때 맞춰진다 */
+    }
+  }
+
   function selectSlide(order: number) {
     if (!card) return;
     if (selectedSlide === order) {
       setSelectedSlide(null);
       setSlideDraft(null);
       setStyleDraft({});
+      setSelectedElId(null);
       return;
     }
     const slide = card.slides.find((s) => s.order === order);
     setSelectedSlide(order);
     setSlideDraft({ ...slide?.texts });
     setStyleDraft({ ...(slide?.styleOverrides ?? {}) });
+    setSelectedElId(null);
   }
 
   function addHashtag() {
@@ -729,9 +799,61 @@ export default function CardResultPage() {
         {/* 선택한 슬라이드 문구 편집 */}
         {selectedSlide !== null && slideDraft && (
           <div className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-5">
-            <h2 className="text-body font-semibold text-ink">
-              슬라이드 {selectedSlide + 1} 수정
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-body font-semibold text-ink">
+                슬라이드 {selectedSlide + 1} 수정
+              </h2>
+              {/*
+                자유 편집 켜고 끄기 (08-31).
+                켜면 이 슬라이드만 좌표로 그려지고, 끄면 레이아웃으로 돌아간다 —
+                레이아웃·테마·구성은 그대로 살아 있다.
+              */}
+              {editingSlide &&
+                (freeMode ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm("옮겨둔 배치가 사라지고 원래 레이아웃으로 돌아가요.")) {
+                        saveElements(null);
+                      }
+                    }}
+                    disabled={saving}
+                    className="text-caption text-sub underline underline-offset-4 hover:text-ink"
+                  >
+                    레이아웃으로 되돌리기
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => saveElements(bakeToElements(editingSlide))}
+                    disabled={saving}
+                    className="h-9 rounded-md border-2 border-berry bg-surface px-3 text-caption font-semibold text-berry"
+                  >
+                    자유롭게 옮기기
+                  </button>
+                ))}
+            </div>
+
+            {/*
+              편집기 — 바탕은 «진짜 결과물» PNG다. 브라우저에서 흉내 내지 않아서
+              미리보기와 내려받을 이미지가 어긋날 수가 없다.
+            */}
+            {freeMode && editingSlide?.elements && (
+              <div className="flex flex-col gap-2">
+                <SlideEditor
+                  imageUrl={slideUrls[selectedSlide] ?? null}
+                  elements={editingSlide.elements}
+                  selectedId={selectedElId}
+                  onSelect={setSelectedElId}
+                  disabled={saving}
+                  onCommit={(next) => saveElements(next)}
+                />
+                <p className="text-caption text-sub">
+                  끌어서 옮기고, 모서리 점으로 크기를 바꿔요. 상자를 고른 뒤 방향키로도
+                  움직일 수 있어요.
+                </p>
+              </div>
+            )}
 
             {/*
               레이아웃 고르기 (08-31) — 이 «한 장»에만 걸린다. 그래서 카드 전체에
@@ -742,7 +864,8 @@ export default function CardResultPage() {
             */}
             {(() => {
               const currentSlide = card?.slides.find((s) => s.order === selectedSlide);
-              if (!currentSlide) return null;
+              // 자유 배치로 옮긴 슬라이드는 레이아웃을 고를 수 없다 — 좌표가 무의미해진다
+              if (!currentSlide || freeMode) return null;
               // 판정 기준은 «지금 편집칸에 있는 문구»다 — 저장 전 내용까지 반영한다
               const options = layoutOptionsFor({ ...currentSlide, texts: slideDraft });
 
