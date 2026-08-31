@@ -421,7 +421,7 @@ function NewPlanScreen() {
                      대비 #444 on #EDEDED ≈ 8.2:1 (AA 통과). 주 버튼과 무관한 독립 스타일 */
                   className="flex h-[30px] items-center rounded-pill border border-[#DCDCDC] bg-[#EDEDED] px-3 text-[13px] font-medium text-[#444444] transition-colors duration-200 hover:bg-[#E4E4E4] active:bg-[#E4E4E4] disabled:opacity-50"
                 >
-                  새 기획
+                  다시 시작
                 </button>
               }
             />
@@ -567,7 +567,7 @@ function NewPlanScreen() {
           className="fixed inset-x-0 bottom-32 z-30 flex justify-center px-4 md:bottom-24"
         >
           <div className="flex items-center gap-3 rounded-md bg-ink px-4 py-3 text-body text-white shadow-lg">
-            새 기획으로 넘어왔어요
+            다시 시작했어요
             <button
               type="button"
               onClick={undoNewPlan}
