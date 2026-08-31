@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import BrandStyleSection from "@/components/BrandStyleSection";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
@@ -13,7 +14,7 @@ import BackLink from "@/components/BackLink";
 import SettingsTabs from "@/components/SettingsTabs";
 // 말투 정의는 lib/tone.ts가 단일 출처 — AI 프롬프트도 같은 값을 쓴다
 import { TONES } from "@/lib/tone";
-import type { ToneKey, User } from "@/types";
+import type { Brand, FontId, ToneKey, User } from "@/types";
 
 /**
  * 설정 — 콘텐츠 (PLAN.md §4 · 「콘텐츠 설정 수정」).
@@ -48,6 +49,10 @@ export default function ContentSettingsPage() {
   const [tone, setTone] = useState<ToneKey | null>(null);
   const [avoid, setAvoid] = useState<string[]>([]);
   const [avoidDraft, setAvoidDraft] = useState("");
+  /** 「내 스타일」은 저장 흐름이 달라(폰트 업로드가 낀다) 별도 컴포넌트가 든다 */
+  const [brand, setBrand] = useState<Brand | null>(null);
+  /** 파일이 실제로 있는 폰트만 고르게 한다 — 서버만 아는 값이라 물어본다 */
+  const [fontIds, setFontIds] = useState<FontId[]>([]);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +77,14 @@ export default function ContentSettingsPage() {
         setDays(data.uploadDays ?? []);
         setTone(data.tone ?? null);
         setAvoid(data.avoidExpressions ?? []);
+        setBrand(data.brand ?? null);
         setPhase("ready");
+
+        // 폰트 목록은 화면을 막지 않는다 — 실패하면 내장 폰트 없이 «올리기»만 뜬다
+        fetch("/api/fonts")
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d: { fontIds?: FontId[] } | null) => setFontIds(d?.fontIds ?? []))
+          .catch(() => setFontIds([]));
       } catch {
         setPhase("error");
       }
@@ -376,6 +388,16 @@ export default function ContentSettingsPage() {
                 })}
               </div>
             </section>
+
+            {/* 내 카드 스타일 — 저장이 독립적이라 아래 «저장» 버튼과 무관하다 */}
+            <BrandStyleSection
+              initial={brand}
+              availableFontIds={fontIds}
+              onSaved={(next) => {
+                setBrand(next);
+                setSaved((prev) => (prev ? { ...prev, brand: next } : prev));
+              }}
+            />
 
             {/* 피할 표현 */}
             <section className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-6">

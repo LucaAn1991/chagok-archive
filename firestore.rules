@@ -31,8 +31,11 @@ service cloud.firestore {
 
       // 설정(활동 분야·빈도·말투·피할 표현)만 클라이언트가 고칠 수 있다.
       // onboardedAt은 라우트 가드의 근거라 클라이언트가 임의로 못 쓴다 (§7 메모)
+      // brand(내 스타일)도 서버만 — 색 형식·폰트 값을 검증해야 한다 (08-31, §7 ⑩)
       allow update: if isOwner(uid)
-        && !changedKeys().hasAny(['uid', 'email', 'onboardedAt', 'createdAt'].toSet());
+        && !changedKeys().hasAny(
+          ['uid', 'email', 'onboardedAt', 'createdAt', 'brand'].toSet()
+        );
 
       // 탈퇴는 서버가 처리한다 (DELETE /api/users/me)
       allow delete: if false;

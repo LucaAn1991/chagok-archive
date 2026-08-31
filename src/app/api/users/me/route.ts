@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { verifyRequest } from "@/lib/server/request-auth";
-import type { ToneKey } from "@/types";
+import type { Brand, FontId, ToneKey } from "@/types";
+import { isHexColor } from "@/lib/render/themes";
+import { BUILT_IN_FONTS } from "@/lib/render/font-registry";
 import { STYLE_EXAMPLES, STYLE_EXAMPLE_IDS } from "@/lib/style-examples";
 
 /**
@@ -20,6 +22,41 @@ import { STYLE_EXAMPLES, STYLE_EXAMPLE_IDS } from "@/lib/style-examples";
  */
 
 const TONE_KEYS: ToneKey[] = ["friendly", "calm", "energetic", "professional"];
+
+const FONT_IDS: FontId[] = [...BUILT_IN_FONTS.map((f) => f.id), "custom"];
+
+/**
+ * 「내 스타일」 검증 (08-31).
+ *
+ * **글자색은 받지 않는다** — 배경 명도로 계산한다(DESIGN.md §12).
+ * 색은 `#RRGGBB`만 받는다. 세 자리 축약이나 `red` 같은 이름을 허용하면
+ * 렌더러에서 명도 계산이 깨진다.
+ */
+function parseBrand(raw: unknown): Brand | null | undefined {
+  if (raw === null) return null; // 「기본으로 되돌리기」
+  if (typeof raw !== "object") return undefined;
+
+  const b = raw as Record<string, unknown>;
+  if (!isHexColor(b.bg) || !isHexColor(b.accent)) return undefined;
+  if (typeof b.fontId !== "string" || !FONT_IDS.includes(b.fontId as FontId)) return undefined;
+
+  const brand: Brand = {
+    bg: b.bg.toUpperCase(),
+    accent: b.accent.toUpperCase(),
+    fontId: b.fontId as FontId,
+  };
+
+  // 올린 폰트를 고른 경우에만 주소를 함께 둔다 — 안 그러면 지워진 파일을 계속 가리킨다
+  if (brand.fontId === "custom") {
+    if (typeof b.customFontUrl !== "string" || !b.customFontUrl.startsWith("https://")) {
+      return undefined;
+    }
+    brand.customFontUrl = b.customFontUrl;
+    brand.customFontName = typeof b.customFontName === "string" ? b.customFontName : null;
+  }
+
+  return brand;
+}
 
 export async function PATCH(request: Request) {
   const session = await verifyRequest(request);
@@ -98,6 +135,14 @@ export async function PATCH(request: Request) {
         contentFormats: picked.map((e) => e.contentFormat),
       };
     }
+  }
+
+  if (body.brand !== undefined) {
+    const brand = parseBrand(body.brand);
+    if (brand === undefined) {
+      return NextResponse.json({ error: "스타일 값이 올바르지 않아요." }, { status: 400 });
+    }
+    updates.brand = brand;
   }
 
   if (body.tone !== undefined) {
