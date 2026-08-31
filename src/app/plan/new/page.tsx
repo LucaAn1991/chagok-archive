@@ -416,9 +416,11 @@ function NewPlanScreen() {
                       sending ||
                       confirming
                     }
-                    /* 회색 칩 (08-31) — 시스템 안내 말풍선과 같은 토큰(--surface-muted)·반경.
-                       주 버튼처럼 보이면 안 되므로 브랜드색·테두리를 쓰지 않는다 */
-                    className="flex h-[30px] items-center rounded-md bg-surface-muted px-3 text-[13px] text-ink transition-colors duration-200 hover:bg-line active:bg-line disabled:opacity-50"
+                    /* 중성 회색 알약 칩 (08-31 확정 지시 — 말풍선과 색·형태 모두 구분).
+                       값은 지시서의 고정 색(#EDEDED/#DCDCDC/#444444, hover #E4E4E4) —
+                       DESIGN §2 팔레트 밖이라 토큰 승격은 DESIGN 반영과 함께 필요 (보고됨).
+                       대비 #444 on #EDEDED ≈ 8.2:1 (AA 통과). 주 버튼과 무관한 독립 스타일 */
+                    className="flex h-[30px] items-center rounded-pill border border-[#DCDCDC] bg-[#EDEDED] px-3 text-[13px] font-medium text-[#444444] transition-colors duration-200 hover:bg-[#E4E4E4] active:bg-[#E4E4E4] disabled:opacity-50"
                   >
                     새 기획
                   </button>
