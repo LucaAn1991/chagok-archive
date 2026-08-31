@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { ChevronLeft } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import type { Card, CardStatus } from "@/types";
 
@@ -147,6 +148,16 @@ export default function CardDetailPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-6 p-4 pb-16 pt-8">
+      {/* 뒤로 — 진입 경로가 여럿(캘린더·홈·놓친 카드)이라 브라우저 히스토리를 따른다 */}
+      <button
+        type="button"
+        onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))}
+        aria-label="뒤로 가기"
+        className="-mb-3 -ml-2 flex size-11 items-center justify-center self-start rounded-md text-sub hover:bg-surface-muted"
+      >
+        <ChevronLeft size={20} aria-hidden />
+      </button>
+
       {/* 상태 + 주제 */}
       <header className="flex flex-col gap-3">
         <span className="flex items-center gap-2 self-start rounded-pill border border-line bg-surface px-3 py-1 text-caption font-semibold text-ink">

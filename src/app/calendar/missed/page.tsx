@@ -11,11 +11,11 @@ import {
   getDocs,
   orderBy,
   query,
-  serverTimestamp,
+  Timestamp,
   updateDoc,
   where,
 } from "firebase/firestore";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Trash2 } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
@@ -37,6 +37,14 @@ function toDateKey(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+const DAY_HEADS = ["일", "월", "화", "수", "목", "금", "토"];
+
+/** '2026-08-28' → '8월 28일 (금)' — 놓친 카드는 최근이라 연도는 뺀다 */
+function formatDayLabel(key: string): string {
+  const [y, m, d] = key.split("-").map(Number);
+  return `${m}월 ${d}일 (${DAY_HEADS[new Date(y, m - 1, d).getDay()]})`;
 }
 
 export default function MissedPage() {
@@ -81,6 +89,11 @@ function MissedView({ uid }: { uid: string }) {
   // 날짜 재지정 — 어떤 카드의 날짜 입력이 열려 있나
   const [rescheduleId, setRescheduleId] = useState<string | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState("");
+  // 올렸어요 — 실제 올린 날짜를 물어본다 (08-31 요청)
+  const [publishId, setPublishId] = useState<string | null>(null);
+  const [publishDate, setPublishDate] = useState("");
+  // 버리기 확인 모달 — 되돌릴 수 없으므로 (PLAN §2 · 카드 상세와 동일)
+  const [discardTarget, setDiscardTarget] = useState<Card | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -168,16 +181,21 @@ function MissedView({ uid }: { uid: string }) {
     });
   }
 
-  /** 올렸어요 — F9와 동일한 규칙 (published는 publishedAt 필수) */
+  /** 올렸어요 — 실제 올린 날짜를 받아 기록한다 (F9: published는 publishedAt 필수) */
   async function markPublished(card: Card) {
+    if (!publishDate) return;
     setBusyId(card.id);
     try {
+      const [y, m, d] = publishDate.split("-").map(Number);
       await updateDoc(doc(db, "cards", card.id), {
         status: "published",
         publishIntent: "yes",
-        publishedAt: serverTimestamp(),
+        // 정오로 만든다 — 자정은 UTC 표기에서 하루 밀릴 수 있다
+        publishedAt: Timestamp.fromDate(new Date(y, m - 1, d, 12)),
+        scheduledDate: publishDate, // 캘린더에도 실제 올린 날로 보이게
       });
       removeCard(card.id);
+      setPublishId(null);
       showNotice("발행 완료로 기록했어요.");
     } catch {
       showNotice("저장하지 못했어요. 잠시 후 다시 시도해주세요.");
@@ -281,29 +299,64 @@ function MissedView({ uid }: { uid: string }) {
                     return (
                       <li
                         key={card.id}
-                        className="rounded-lg border border-line bg-surface p-3"
+                        className="rounded-lg border border-line bg-surface p-4 md:p-5"
                       >
-                        <div className="flex items-center gap-3">
-                          <Link href={`/card/${card.id}`} className="min-w-0 flex-1">
-                            <span className="block truncate text-body font-semibold text-ink hover:underline">
+                        {/* 정보는 한 줄씩 내려 쓴다 — 카드가 화면을 채우게 (08-31 피드백) */}
+                        <div className="flex items-start justify-between gap-3">
+                          <Link href={`/card/${card.id}`} className="min-w-0">
+                            <span className="block text-body-l font-semibold text-ink hover:underline">
                               {card.title}
-                            </span>
-                            <span className="mt-0.5 block text-caption text-sub">
-                              {card.scheduledDate} 예정이었어요 · {card.audience}
                             </span>
                           </Link>
                           <StatusBadge status={card.status} />
                         </div>
+                        <p className="mt-2 text-body text-sub">
+                          {formatDayLabel(card.scheduledDate)} 예정이었어요
+                        </p>
+                        <p className="mt-1 text-body text-sub">{card.audience}</p>
 
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void markPublished(card)}
-                            className="h-9 rounded-md bg-berry px-3 text-body font-semibold text-white hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
-                          >
-                            올렸어요
-                          </button>
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                          {publishId === card.id ? (
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span className="text-body text-sub">언제 올리셨어요?</span>
+                              <input
+                                type="date"
+                                value={publishDate}
+                                min={card.scheduledDate}
+                                max={todayKey}
+                                onChange={(e) => setPublishDate(e.target.value)}
+                                className="h-9 rounded-md border border-line bg-surface px-2 text-body text-ink"
+                              />
+                              <button
+                                type="button"
+                                disabled={busy || !publishDate}
+                                onClick={() => void markPublished(card)}
+                                className="h-9 rounded-md bg-berry px-3 text-body font-semibold text-white hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+                              >
+                                확인
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPublishId(null)}
+                                className="text-body text-sub hover:text-ink"
+                              >
+                                취소
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => {
+                                setPublishId(card.id);
+                                setPublishDate(todayKey);
+                                setRescheduleId(null);
+                              }}
+                              className="h-9 rounded-md bg-berry px-3 text-body font-semibold text-white hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+                            >
+                              올렸어요
+                            </button>
+                          )}
 
                           {rescheduleId === card.id ? (
                             <span className="flex items-center gap-2">
@@ -337,6 +390,7 @@ function MissedView({ uid }: { uid: string }) {
                               onClick={() => {
                                 setRescheduleId(card.id);
                                 setRescheduleDate(todayKey);
+                                setPublishId(null);
                               }}
                               className="h-9 rounded-md border border-line bg-surface px-3 text-body font-semibold text-ink hover:bg-surface-muted disabled:text-sub"
                             >
@@ -344,14 +398,16 @@ function MissedView({ uid }: { uid: string }) {
                             </button>
                           )}
 
-                          {/* destructive — 투명 배경 + --warn (DESIGN §6) */}
+                          {/* destructive — 휴지통 아이콘 + 확인 모달 (되돌릴 수 없으므로, PLAN §2) */}
                           <button
                             type="button"
                             disabled={busy}
-                            onClick={() => void discard(card)}
-                            className="ml-auto h-9 rounded-md border border-warn px-3 text-body font-semibold text-warn hover:bg-surface-muted disabled:border-line disabled:text-sub"
+                            onClick={() => setDiscardTarget(card)}
+                            aria-label="버리기"
+                            title="버리기"
+                            className="ml-auto flex size-9 items-center justify-center rounded-md border border-warn text-warn hover:bg-surface-muted disabled:border-line disabled:text-sub"
                           >
-                            버리기
+                            <Trash2 size={16} aria-hidden />
                           </button>
                         </div>
                       </li>
@@ -360,6 +416,49 @@ function MissedView({ uid }: { uid: string }) {
                 </ul>
               </section>
             ))}
+
+          {/* 버리기 확인 모달 — 카드 상세와 같은 문구·패턴 (DESIGN §13) */}
+          {discardTarget && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="discard-title"
+              onClick={() => setDiscardTarget(null)}
+              className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="flex w-full max-w-[400px] flex-col gap-4 rounded-xl bg-surface p-6 shadow-lg"
+              >
+                <h2 id="discard-title" className="text-title font-bold text-ink">
+                  이 카드를 버릴까요?
+                </h2>
+                <p className="text-body text-sub">
+                  버린 카드는 되돌릴 수 없어요. 삭제되는 건 아니고, 계획했던 기록으로 남아요.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setDiscardTarget(null)}
+                    className="h-11 flex-1 rounded-md border border-line bg-surface text-body font-semibold text-ink"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = discardTarget;
+                      setDiscardTarget(null);
+                      void discard(target);
+                    }}
+                    className="h-11 flex-1 rounded-md border border-warn bg-transparent text-body font-semibold text-warn"
+                  >
+                    버리기
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {notice && (
             <div
