@@ -20,7 +20,9 @@ const STATUS_COLOR: Record<CardStatus, string> = {
   discarded: "var(--st-discarded)",
 };
 
-export default function StatusBadge({ status }: { status: CardStatus }) {
+export default function StatusBadge({ status: rawStatus }: { status: CardStatus }) {
+  // 과도기 방어 — DB에 남은 옛 'crafted' 값은 pending으로 보여준다 (08-31 상태 개편)
+  const status: CardStatus = STATUS_LABEL[rawStatus] ? rawStatus : "pending";
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill bg-surface-muted px-2.5 py-1 text-caption font-medium text-sub">
       {status === "published" ? (

@@ -27,12 +27,12 @@ import type { Card, CardStatus } from "@/types";
  * 캘린더 — 월간·주간 (DESIGN.md §8 · PLAN §4 · 08-31 시안 반영).
  *
  * «Gallery가 아니라 콘텐츠 운영 계획을 한눈에 파악하는 공간이다.»
- * - Desktop 칸: 썸네일 금지 · `▌` 상태색 + shortTitle · 월간 2건 + «+N건»
- * - 주간은 시간축이 아니다 — 카드에 시간이 없다(scheduledDate = 날짜뿐).
- *   같은 칸을 세로로 넓게 써서 하루 8건까지 보여주는 뷰다.
- * - Desktop(≥1200)은 선택 날짜의 카드 미리보기를 오른쪽 패널로,
- *   그보다 좁으면 격자 아래 리스트로 — 썸네일은 패널·리스트에서만 (§8 Mobile)
- * - Mobile 칸: 상태색 점만 — 데스크톱의 축소판을 만들지 않는다
+ * - 월간 = 흐름 파악: 칸 썸네일 금지, 미니 카드는 상태 dot(범례 색) + 제목 2줄,
+ *   칸당 2건 + «+N건» (08-31 v2 — 제목 2줄 허용은 DESIGN §8 shortTitle 규칙의 개정 대기)
+ * - 주간 = 실행 관리: 시간축이 아니라(카드에 시간이 없다) 콘텐츠 카드가 주인공인
+ *   weekly board. 빈 세로 박스를 그리지 않고, 빈 날은 «예정 없음»만 약하게
+ * - 카드 클릭 = 선택. CTA는 오른쪽 패널에서만 강하게 — 화면 곳곳에 버튼을 반복하지 않는다
+ * - Desktop(≥1200)은 오른쪽 패널, 그보다 좁으면 아래 리스트 (썸네일은 §8 Mobile 규칙)
  * - 드래그로 예정일 변경 — 실패 시 원위치 + 안내 (PLAN §3-1)
  *
  * 조회는 홈과 같은 클라이언트 SDK 쿼리 — 인덱스 (userId, scheduledDate).
@@ -118,6 +118,15 @@ function weekTitle(startKey: string, endKey: string): string {
   return `${sy}년 ${sm}월 ${sd}일 – ${ed}일`;
 }
 
+/**
+ * 과도기 방어 (08-31 상태 개편) — 옛 코드가 쓴 'crafted'는 pending으로 읽는다.
+ * 팀원 브랜치가 개편 커밋을 pull하면 더는 생기지 않는다. @TODO: 정착 후 제거
+ */
+function normalizeCard(data: Omit<Card, "id">, id: string): Card {
+  const status = (data.status as string) === "crafted" ? "pending" : data.status;
+  return { ...data, status, id };
+}
+
 /** '2026-09-05' → '9월 5일 (토)' */
 function formatDayLabel(key: string): string {
   return `${Number(key.slice(5, 7))}월 ${Number(key.slice(8, 10))}일 (${DAY_HEADS[parseDateKey(key).getDay()]})`;
@@ -200,16 +209,18 @@ function CalendarView({ uid }: { uid: string }) {
           ),
         );
         const cards = rangeSnap.docs
-          .map((d) => ({ ...(d.data() as Omit<Card, "id">), id: d.id }))
+          .map((d) => normalizeCard(d.data() as Omit<Card, "id">, d.id))
           .filter((c) => c.status !== "discarded");
 
-        // 놓친 카드 수 — scheduledDate < 오늘 && 미발행 (PLAN §3 overdue 정의)
+        // 놓친 카드 수 — scheduledDate < 오늘 && 미발행 (PLAN §3 overdue 정의).
+        // 날짜가 빈 카드(기획 도중의 미완성 데이터)는 «놓친» 게 아니다 — 제외
         const overdueSnap = await getDocs(
           query(cardsRef, where("userId", "==", uid), where("scheduledDate", "<", todayKey)),
         );
         const overdueCount = overdueSnap.docs.filter((d) => {
-          const s = d.data().status as CardStatus;
-          return s !== "published" && s !== "discarded";
+          const data = d.data();
+          const s = data.status as CardStatus;
+          return data.scheduledDate !== "" && s !== "published" && s !== "discarded";
         }).length;
 
         if (cancelled) return;
@@ -511,7 +522,6 @@ function CalendarView({ uid }: { uid: string }) {
                             onSelect={() => setSelectedDate(dateKey)}
                             onDragStartCard={setDraggingId}
                             onDropCard={(cardId) => handleDrop(cardId, dateKey)}
-                            onOpenCard={(id) => router.push(`/card/${id}`)}
                           />
                         ),
                       )}
@@ -542,7 +552,6 @@ function CalendarView({ uid }: { uid: string }) {
                           onSelect={() => setSelectedDate(dateKey)}
                           onDragStartCard={setDraggingId}
                           onDropCard={(cardId) => handleDrop(cardId, dateKey)}
-                          onPublish={openPublish}
                         />
                       ))}
                     </div>
@@ -568,7 +577,6 @@ function CalendarView({ uid }: { uid: string }) {
                             onSelect={() => setSelectedDate(dateKey)}
                             onDragStartCard={setDraggingId}
                             onDropCard={(cardId) => handleDrop(cardId, dateKey)}
-                            onOpenCard={(id) => router.push(`/card/${id}`)}
                           />
                         ))}
                       </div>
@@ -768,7 +776,6 @@ function DayCell({
   onSelect,
   onDragStartCard,
   onDropCard,
-  onOpenCard,
 }: {
   dateKey: string;
   cards: Card[];
@@ -778,7 +785,6 @@ function DayCell({
   onSelect: () => void;
   onDragStartCard: (id: string | null) => void;
   onDropCard: (cardId: string) => void;
-  onOpenCard: (id: string) => void;
 }) {
   const dayNum = Number(dateKey.slice(8, 10));
   const [over, setOver] = useState(false);
@@ -826,7 +832,8 @@ function DayCell({
         ))}
       </span>
 
-      {/* Desktop — Compact 카드: ▌상태색 + shortTitle (DESIGN §8) */}
+      {/* Desktop — 미니 카드: 상태 dot(범례와 같은 색) + 제목 2줄 (08-31 v2).
+          클릭은 칸 선택으로 흘러간다 — 상세 이동은 패널의 몫 */}
       <span className="mt-1 hidden flex-col gap-1 md:flex">
         {cards.slice(0, maxDesktop).map((card) => (
           <button
@@ -838,22 +845,21 @@ function DayCell({
               onDragStartCard(card.id);
             }}
             onDragEnd={() => onDragStartCard(null)}
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenCard(card.id);
-            }}
-            className="flex w-full items-center gap-1 overflow-hidden rounded-sm bg-surface-muted px-1 py-0.5 text-left hover:bg-berry-tint"
+            className="flex w-full items-start gap-1.5 overflow-hidden rounded-sm bg-surface-muted px-1.5 py-1 text-left hover:bg-berry-tint"
             title={card.title}
           >
-            {/* w-1(4px) — 3px로는 상태색이 안 읽힌다는 지적 반영 (08-31) */}
-            <span
-              aria-hidden
-              className="h-3 w-1 shrink-0 rounded-pill"
-              style={{ background: STATUS_COLOR[card.status] }}
-            />
-            <span className="truncate text-caption text-ink">
-              {card.shortTitle || card.title}
-            </span>
+            {card.status === "published" ? (
+              <span aria-hidden className="shrink-0 text-caption font-semibold leading-tight text-sub">
+                ✓
+              </span>
+            ) : (
+              <span
+                aria-hidden
+                className="mt-[3px] h-2 w-2 shrink-0 rounded-pill"
+                style={{ background: STATUS_COLOR[card.status] }}
+              />
+            )}
+            <span className="line-clamp-2 text-caption leading-tight text-ink">{card.title}</span>
           </button>
         ))}
         {cards.length > maxDesktop && (
@@ -864,7 +870,11 @@ function DayCell({
   );
 }
 
-/** 주간 플래너 컬럼 — 실행 관리 뷰: 카드가 크게, 상태·CTA가 보인다 (08-31 재설계) */
+/**
+ * 주간 보드 컬럼 — 빈 세로 박스를 그리지 않는다. 콘텐츠 카드가 주인공이고
+ * 날짜는 위의 얇은 라벨, 빈 날은 «예정 없음»을 아주 약하게 (08-31 v2).
+ * CTA는 여기 없다 — 카드를 클릭하면 선택되고, 행동은 오른쪽 패널이 맡는다.
+ */
 function WeekColumn({
   dateKey,
   cards,
@@ -874,7 +884,6 @@ function WeekColumn({
   onSelect,
   onDragStartCard,
   onDropCard,
-  onPublish,
 }: {
   dateKey: string;
   cards: Card[];
@@ -884,16 +893,10 @@ function WeekColumn({
   onSelect: () => void;
   onDragStartCard: (id: string | null) => void;
   onDropCard: (cardId: string) => void;
-  onPublish: (card: Card) => void;
 }) {
   const [over, setOver] = useState(false);
   const dayNum = Number(dateKey.slice(8, 10));
   const dow = DAY_HEADS[parseDateKey(dateKey).getDay()];
-
-  // CTA는 outline — primary(솔리드)는 화면에 1개 원칙 (DESIGN §6), 컬럼마다 반복되므로
-  const ctaClass =
-    "flex h-8 w-full items-center justify-center rounded-md border-2 border-berry bg-surface " +
-    "text-caption font-semibold text-berry hover:bg-berry-light hover:text-berry-dark";
 
   return (
     <div
@@ -911,58 +914,43 @@ function WeekColumn({
         if (cardId) onDropCard(cardId);
       }}
       className={[
-        "flex min-h-72 cursor-pointer flex-col gap-2 rounded-md border p-2",
-        isSelected ? "border-berry" : "border-line",
-        over && dragging ? "bg-berry-tint" : "bg-surface",
+        // 박스 없이 — 드롭 대상으로 살아 있도록 최소 높이와 hover 배경만
+        "flex min-h-32 cursor-pointer flex-col gap-2 rounded-md p-1",
+        over && dragging ? "bg-berry-tint" : "",
       ].join(" ")}
     >
-      <div className="flex items-center gap-1.5">
+      {/* 날짜 라벨 — 카드보다 약하게 */}
+      <div className="flex items-center gap-1.5 px-1">
         <span
           className={[
-            "flex size-6 items-center justify-center rounded-pill text-caption",
-            isToday ? "bg-berry font-bold text-white" : "text-sub",
+            "text-caption",
+            isToday || isSelected ? "font-bold text-berry-dark" : "text-sub",
           ].join(" ")}
         >
-          {dayNum}
+          {dayNum} {dow}
         </span>
-        <span className="text-caption text-sub">{dow}</span>
+        {isToday && (
+          <span className="rounded-pill bg-berry-light px-1.5 text-caption font-semibold text-berry-dark">
+            오늘
+          </span>
+        )}
       </div>
 
       {cards.length === 0 ? (
-        <p className="mt-4 text-center text-caption text-sub/50">예정 없음</p>
+        <p className="px-1 text-caption text-sub/40">예정 없음</p>
       ) : (
         cards.map((card) => (
           <CardTile
             key={card.id}
             card={card}
             variant="tile"
+            selected={isSelected}
+            onClick={onSelect}
             onDragStart={(e) => {
               e.dataTransfer.setData("text/card-id", card.id);
               onDragStartCard(card.id);
             }}
             onDragEnd={() => onDragStartCard(null)}
-            action={
-              card.status === "planned" ? (
-                <Link
-                  href={`/card/${card.id}/result`}
-                  onClick={(e) => e.stopPropagation()}
-                  className={ctaClass}
-                >
-                  제작하기
-                </Link>
-              ) : card.status === "pending" ? (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onPublish(card);
-                  }}
-                  className={ctaClass}
-                >
-                  올렸어요
-                </button>
-              ) : undefined
-            }
           />
         ))
       )}
@@ -1012,72 +1000,54 @@ function DayPanel({
         <ul className="mt-3 flex flex-col gap-3">
           {cards.map((card) => (
             <li key={card.id}>
-              <article className="overflow-hidden rounded-lg border border-line">
-                {card.photoUrls?.[0] && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={card.photoUrls[0]}
-                    alt=""
-                    className="aspect-video w-full object-cover"
-                  />
-                )}
-                <div className="p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="min-w-0 text-body font-semibold text-ink">{card.title}</h3>
-                    <StatusBadge status={card.status} />
-                  </div>
-                  <p className="mt-0.5 text-caption text-sub">
-                    {card.audience}
-                    {card.scheduledDate < todayKey && card.status !== "published" && (
-                      <span className="ml-1.5">· 예정일 지남</span>
-                    )}
-                  </p>
-
-                  {/* 캡션 미리보기 — 있을 때만 */}
-                  {card.caption && (
-                    <p className="mt-2 line-clamp-3 text-caption text-sub">
-                      {card.caption.hook} {card.caption.body}
-                    </p>
+              {/* 딱 필요한 것만 — 제목·상태·대상·안내·CTA·상세 (08-31 v2, 사진·캡션 제외) */}
+              <article className="flex flex-col items-start gap-2 rounded-lg border border-line p-3">
+                <h3 className="text-body font-semibold text-ink">{card.title}</h3>
+                <StatusBadge status={card.status} />
+                <p className="text-caption text-sub">
+                  {card.audience}
+                  {card.scheduledDate < todayKey && card.status !== "published" && (
+                    <span className="ml-1.5">· 예정일 지남</span>
                   )}
+                </p>
 
-                  {/* 다음 할 일 — 상태가 곧 다음 행동. 상세 보기는 보조로 (08-31) */}
-                  <div className="mt-3 flex flex-col gap-2">
-                    {card.status === "planned" && (
-                      <>
-                        <p className="text-caption text-sub">아직 콘텐츠를 만들지 않았어요.</p>
-                        <Link
-                          href={`/card/${card.id}/result`}
-                          className="flex h-9 items-center justify-center rounded-md bg-berry text-body font-semibold text-white hover:bg-berry-dark"
-                        >
-                          제작하기
-                        </Link>
-                      </>
-                    )}
-                    {card.status === "pending" && (
-                      <>
-                        <p className="text-caption text-sub">
-                          다 만들어졌어요 — 올린 뒤에 기록해주세요.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => onPublish(card)}
-                          className="flex h-9 items-center justify-center rounded-md bg-berry text-body font-semibold text-white hover:bg-berry-dark"
-                        >
-                          올렸어요 기록
-                        </button>
-                      </>
-                    )}
-                    {card.status === "published" && (
-                      <p className="text-caption text-sub">✓ 발행을 마친 콘텐츠예요.</p>
-                    )}
+                {card.status === "planned" && (
+                  <>
+                    <p className="mt-1 text-caption text-sub">아직 콘텐츠를 만들지 않았어요.</p>
                     <Link
-                      href={`/card/${card.id}`}
-                      className="self-start text-caption font-semibold text-berry-dark underline underline-offset-2"
+                      href={`/card/${card.id}/result`}
+                      className="flex h-9 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white hover:bg-berry-dark"
                     >
-                      상세 보기 →
+                      제작하기
                     </Link>
-                  </div>
-                </div>
+                  </>
+                )}
+                {card.status === "pending" && (
+                  <>
+                    <p className="mt-1 text-caption text-sub">
+                      콘텐츠 제작이 완료됐어요.
+                      <br />
+                      업로드했다면 기록해주세요.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => onPublish(card)}
+                      className="flex h-9 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white hover:bg-berry-dark"
+                    >
+                      올렸어요 기록
+                    </button>
+                  </>
+                )}
+                {card.status === "published" && (
+                  <p className="mt-1 text-caption text-sub">✓ 발행을 마친 콘텐츠예요.</p>
+                )}
+
+                <Link
+                  href={`/card/${card.id}`}
+                  className="text-caption font-semibold text-berry-dark underline underline-offset-2"
+                >
+                  상세 보기 →
+                </Link>
               </article>
             </li>
           ))}

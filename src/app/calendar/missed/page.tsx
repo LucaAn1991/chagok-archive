@@ -121,8 +121,17 @@ function MissedView({ uid }: { uid: string }) {
           ),
         );
         const cards = snap.docs
-          .map((d) => ({ ...(d.data() as Omit<Card, "id">), id: d.id }))
-          .filter((c) => c.status !== "published" && c.status !== "discarded");
+          .map((d) => {
+            const data = d.data() as Omit<Card, "id">;
+            // 과도기 방어 — 옛 코드의 'crafted'는 pending으로 읽는다 (08-31 상태 개편)
+            const status = (data.status as string) === "crafted" ? "pending" : data.status;
+            return { ...data, status, id: d.id };
+          })
+          .filter(
+            (c) =>
+              // 날짜가 빈 카드(기획 도중 미완성 데이터)는 «놓친» 게 아니다
+              c.scheduledDate !== "" && c.status !== "published" && c.status !== "discarded",
+          );
 
         // plan.seriesTitle로 묶는다 (PLAN §3 F14) — plan이 없으면 카드 제목으로
         const planIds = [...new Set(cards.map((c) => c.planId))];
