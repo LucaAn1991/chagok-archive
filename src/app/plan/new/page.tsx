@@ -429,9 +429,10 @@ function NewPlanScreen() {
 
           {/* 2열 (08-31 최종) — 좌 대화 5 : 우 기획안 박스 7, 간격 24px.
               1024px 미만은 1열 세로 누적(대화 → 기획안 박스) */}
-          <div className="mt-3 flex flex-1 flex-col gap-[var(--plan-gap)] lg:grid lg:min-h-0 lg:grid-cols-12">
+          {/* 좌: 남는 폭 전부(flex:1 1 auto, min-w 0) · 우: 고정 420px (08-31 확정 — 비율 지정 폐기) */}
+          <div className="mt-3 flex flex-1 flex-col gap-[var(--plan-gap)] lg:min-h-0 lg:flex-row">
             {/* 좌 — 대화만 (말풍선 + 추천 칩). 사진·버튼은 오른쪽 박스로 옮겼다 (§3) */}
-            <section className="flex min-w-0 flex-col lg:col-span-5 lg:min-h-0">
+            <section className="flex min-w-0 flex-1 flex-col lg:min-h-0">
               <div className="flex flex-col gap-4 [scrollbar-gutter:stable] lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
                 {restored && <RestoreBanner />}
 
@@ -522,7 +523,7 @@ function NewPlanScreen() {
             {/* 우 — 기획안 박스: 주제·대상 + 사진 그리드 + 버튼 전부 (§2).
                 sticky·자체 스크롤 — 왼쪽 스크롤에 따라 움직이지 않는다 */}
             {ready && (
-              <aside className="min-h-0 lg:col-span-7 lg:h-full">
+              <aside className="min-h-0 lg:h-full lg:w-[420px] lg:flex-none">
                 <div className="lg:sticky lg:top-0 lg:h-full">
                   <PlanBox
                     summary={summary}

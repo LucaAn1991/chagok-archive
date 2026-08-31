@@ -82,7 +82,8 @@ export default function PlanPhotoPicker({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const hasUserPhotos = userPhotos.length > 0;
   // wrap 모드(모바일 펼침)에서는 타일이 셀 폭을 채운다 — 기본은 기존 반응형 그대로
-  const tileSize = wrap ? "h-20 w-full" : "h-20 w-16 lg:h-20 lg:w-full";
+  // wrap: 타일 폭 = (박스 안쪽 폭 − 간격 2개) / 3 이 그리드에서 자동 계산 — 정사각 유지
+  const tileSize = wrap ? "aspect-square w-full" : "h-20 w-16 lg:h-20 lg:w-full";
   const cellWidth = wrap ? "w-full" : "lg:w-full";
 
   return (
