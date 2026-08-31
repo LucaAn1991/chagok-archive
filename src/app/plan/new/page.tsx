@@ -85,7 +85,6 @@ function NewPlanScreen() {
   const [planId, setPlanId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [topicSuggestions, setTopicSuggestions] = useState<string[] | null>(null); // ① 후보
-  const [topicPick, setTopicPick] = useState<string | null>(null); // ① 단일 선택 — 하나만
   const [proposal, setProposal] = useState<Proposal | null>(null); // ② 후보
   const [summary, setSummary] = useState<PlanSummary>({
     topic: "",
@@ -119,8 +118,6 @@ function NewPlanScreen() {
   const [focusToken, setFocusToken] = useState(0); // 올리면 입력창에 포커스
 
   // 기획안 완성 후에는 입력창을 숨기고 [수정하기]를 눌렀을 때만 연다 —
-  // CTA와 입력창이 동시에 보이면 다음 행동이 흐려진다 (DESIGN §16, 08-27 피드백)
-  const [chatMode, setChatMode] = useState(false);
 
   /*
    * [새 기획] 되돌리기 (08-31) — 되돌릴 수 없는 동작이라 확인 모달 대신 5초 복구를 준다.
@@ -174,14 +171,7 @@ function NewPlanScreen() {
         setSummary(data.summary as PlanSummary);
       }
       if (payload.kind !== "update") {
-        // 주제 칩 목록은 지우지 않는다 (08-31) — 세션 시작(init)에서만 비우고,
-        // 그 외에는 새 세트가 왔을 때만 교체한다. 선택 표시가 계속 보여야 한다
-        if (payload.kind === "init") {
-          setTopicSuggestions((data.topicSuggestions as string[] | null) ?? null);
-          setTopicPick(null);
-        } else if (data.topicSuggestions) {
-          setTopicSuggestions(data.topicSuggestions as string[]);
-        }
+        setTopicSuggestions((data.topicSuggestions as string[] | null) ?? null);
         if (data.topicSuggestions && window.matchMedia("(min-width: 768px)").matches) {
           // ① 단계 — 입력창이 주인공이므로 커서를 먼저 준다 (모바일은 키보드가 화면을 덮어 제외)
           setFocusToken((k) => k + 1);
@@ -194,7 +184,6 @@ function NewPlanScreen() {
       }
       setReady(Boolean(data.readyToConfirm));
       setIsMock(Boolean(data.isMock));
-      setChatMode(false); // 응답이 오면 액션 바로 되돌린다
     } catch {
       if (payload.kind === "resume") {
         // 초안이 더 이상 유효하지 않다(확정됨·삭제됨) — 조용히 비우고 새로 시작
@@ -269,7 +258,6 @@ function NewPlanScreen() {
     setPicked([]);
     setProposal(null);
     setTopicSuggestions(null);
-    setTopicPick(null);
     setReady(false);
     setPlanId(null);
     setChatText("");
@@ -400,7 +388,7 @@ function NewPlanScreen() {
     },
   };
   // 기획안이 준비됐고 조용한 상태 → 다음 행동은 [이대로 카드 만들기] 하나다
-  const showActionBar = ready && !chatMode && !sending && !failed;
+  
 
   return (
     <div className="flex flex-1">
@@ -459,21 +447,15 @@ function NewPlanScreen() {
                         }
                       />
                     )}
-                    {/* ① 주제 후보 — 첫 안내 말풍선 아래 고정, 선택 상태 유지 (08-31) */}
-                    {i === 0 && topicSuggestions && !failed && (
+                    {/* ① 주제 후보 — 대상 질문과 같은 흐름 (08-31 확정):
+                        고르면 목록 전체가 사라지고, 값은 사용자 말풍선으로만 남는다 */}
+                    {i === 0 && topicSuggestions && !sending && !failed && (
                       <TopicSuggestionPicker
                         suggestions={topicSuggestions}
-                        picked={topicPick}
-                        onToggle={(t) => {
+                        onPick={(t) => {
                           dismissBanner();
-                          if (topicPick === t) {
-                            setTopicPick(null);
-                            if (chatText === t) setChatText("");
-                          } else {
-                            setTopicPick(t);
-                            setChatText(t);
-                            setFocusToken((k) => k + 1);
-                          }
+                          setTopicSuggestions(null);
+                          sendText(t);
                         }}
                       />
                     )}
@@ -524,16 +506,13 @@ function NewPlanScreen() {
                 <div ref={bottomRef} className="scroll-mb-40 md:scroll-mb-32 lg:scroll-mb-2" />
               </div>
 
-              {/* 좌측 하단 — 대화 입력만. ready 상태의 버튼은 오른쪽 박스에 있다 (§2) */}
-              {(!ready || chatMode) && (
+              {/* 좌측 하단 — 대화 입력. ready 후 수정은 박스 연필 하나로만 (08-31) */}
+              {!ready && (
                 <ChatInputBar
                   disabled={sending || !planId}
                   value={chatText}
                   onChange={setChatText}
                   focusToken={focusToken}
-                  placeholder={
-                    ready ? "바꾸고 싶은 부분을 알려주세요 (예: 대상을 직장인으로)" : undefined
-                  }
                   onSend={sendText}
                 />
               )}
@@ -551,10 +530,6 @@ function NewPlanScreen() {
                     onConfirm={() => void confirmPlan()}
                     confirming={confirming}
                     confirmError={confirmError}
-                    onEditByChat={() => {
-                      setChatMode(true);
-                      setFocusToken((k) => k + 1);
-                    }}
                   />
                 </div>
               </aside>
@@ -600,7 +575,6 @@ function PlanBox({
   onConfirm,
   confirming,
   confirmError,
-  onEditByChat,
 }: {
   summary: PlanSummary;
   photos: {
@@ -614,7 +588,6 @@ function PlanBox({
   onConfirm: () => void;
   confirming: boolean;
   confirmError: boolean;
-  onEditByChat: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [topicDraft, setTopicDraft] = useState("");
@@ -716,12 +689,7 @@ function PlanBox({
 
       {/* 버튼 — 박스 맨 아래, 안쪽 폭 전체 (§2) */}
       <div className="mt-4">
-        <ReadyActionBar
-          onConfirm={onConfirm}
-          confirming={confirming}
-          error={confirmError}
-          onEditByChat={onEditByChat}
-        />
+        <ReadyActionBar onConfirm={onConfirm} confirming={confirming} error={confirmError} />
       </div>
     </div>
   );
@@ -761,12 +729,10 @@ function ReadyActionBar({
   onConfirm,
   confirming,
   error,
-  onEditByChat,
 }: {
   onConfirm: () => void;
   confirming: boolean;
   error: boolean;
-  onEditByChat: () => void;
 }) {
   return (
     <div>
@@ -788,21 +754,10 @@ function ReadyActionBar({
             >
               이대로 카드 만들기
             </button>
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={onEditByChat}
-                className="flex h-11 items-center px-2 text-body font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
-              >
-                수정하기
-              </button>
-              {/* 에러는 인라인 · 빨간색 금지 — 글자는 --ink (DESIGN §2 하단) */}
-              {error && (
-                <p className="text-caption text-ink">
-                  카드를 만들지 못했어요 — 한 번 더 눌러주세요.
-                </p>
-              )}
-            </div>
+            {/* 에러는 인라인 · 빨간색 금지 — 글자는 --ink (DESIGN §2 하단) */}
+            {error && (
+              <p className="text-caption text-ink">카드를 만들지 못했어요 — 한 번 더 눌러주세요.</p>
+            )}
           </>
         )}
       </div>
@@ -830,19 +785,17 @@ function RestoreBanner() {
 
 function TopicSuggestionPicker({
   suggestions,
-  picked,
-  onToggle,
+  onPick,
 }: {
   suggestions: string[];
-  picked: string | null;
-  onToggle: (topic: string) => void;
+  onPick: (topic: string) => void;
 }) {
-  // 대상 칩과 **같은 Chip 컴포넌트** — 스타일이 두 벌로 갈라지지 않게 (08-31).
-  // 차이는 단일 선택뿐: 다른 칩을 누르면 앞의 선택이 풀린다
+  // 대상 질문과 **같은 Chip 컴포넌트·같은 흐름** (08-31 확정) —
+  // 고르는 즉시 전송되고 목록은 사라진다. 값은 사용자 말풍선으로 남는다
   return (
     <div className="flex flex-wrap gap-2">
       {suggestions.map((t) => (
-        <Chip key={t} label={t} selected={picked === t} onToggle={() => onToggle(t)} />
+        <Chip key={t} label={t} selected={false} onToggle={() => onPick(t)} />
       ))}
     </div>
   );
