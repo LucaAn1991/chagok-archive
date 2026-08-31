@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { PhotoContentType } from "../storage/limits";
+
 /**
  * AI 이미지 생성 — 이미지 폴백 사슬의 3순위 (DESIGN.md §12 · PRD F15).
  *
@@ -51,7 +53,7 @@ function authHeaders(): Record<string, string> {
 }
 
 /**
- * 프롬프트 하나로 이미지 1장을 만들어 **바이트로** 돌려준다.
+ * 프롬프트 하나로 이미지 1장을 만들어 **바이트와 형식으로** 돌려준다.
  *
  * 공급자 URL을 그대로 넘기지 않는 이유 — 그 주소의 수명이 문서에 없다.
  * 부르는 쪽이 우리 Storage에 저장하도록 바이트를 준다 (`saveServerImage`).
@@ -59,7 +61,31 @@ function authHeaders(): Record<string, string> {
  * 실패는 전부 `null`이다. 이미지는 «없으면 넘어가는» 재료라(DESIGN §12)
  * 여기서 던지면 카드 전체가 못 만들어진다.
  */
-export async function generateImage(prompt: string): Promise<Buffer | null> {
+/** 만들어진 이미지 한 장 — 바이트와 «무슨 형식인지» */
+export type GeneratedImage = {
+  bytes: Buffer;
+  contentType: PhotoContentType;
+};
+
+/**
+ * 받은 바이트가 무슨 형식인지 **직접 본다.**
+ *
+ * 문서에는 형식이 안 적혀 있고, 실측해보니 요청은 `size` 하나만 주는데
+ * **JPEG가 돌아온다**(08-31 확인). 응답 헤더를 믿지 않고 매직바이트를 읽는 이유는
+ * 형식을 잘못 저장하면 확장자·Content-Type이 내용과 어긋나 나중에 깨지기 때문이다.
+ * 모르는 형식이면 null — 안 쓰는 편이 낫다.
+ */
+function sniffContentType(b: Buffer): PhotoContentType | null {
+  if (b.length < 12) return null;
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])))
+    return "image/png";
+  if (b.subarray(0, 4).toString() === "RIFF" && b.subarray(8, 12).toString() === "WEBP")
+    return "image/webp";
+  return null;
+}
+
+export async function generateImage(prompt: string): Promise<GeneratedImage | null> {
   if (!isImageGenConfigured() || !prompt.trim()) return null;
 
   try {
@@ -102,7 +128,14 @@ export async function generateImage(prompt: string): Promise<Buffer | null> {
 
     const file = await fetch(imageUrl);
     if (!file.ok) return null;
-    return Buffer.from(await file.arrayBuffer());
+
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const contentType = sniffContentType(bytes);
+    if (!contentType) {
+      console.error("[imagegen] 알 수 없는 이미지 형식");
+      return null;
+    }
+    return { bytes, contentType };
   } catch (e) {
     console.error("[imagegen]", e);
     return null;

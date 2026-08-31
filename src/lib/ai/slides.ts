@@ -291,8 +291,9 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
       imageSlots.map((slot) => generateImage(imagePrompt(slot.query, input))),
     );
     const stored = await Promise.all(
-      made.map((bytes) =>
-        bytes ? saveServerImage("cards", input.cardId, bytes, "image/png") : null,
+      // 형식은 만들어진 것을 따른다 — 실측상 JPEG가 온다. 고정하면 내용과 어긋난다
+      made.map((img) =>
+        img ? saveServerImage("cards", input.cardId, img.bytes, img.contentType) : null,
       ),
     );
     imageSlots.forEach((slot, n) => {
