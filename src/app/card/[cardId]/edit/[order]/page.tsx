@@ -67,6 +67,13 @@ export default function SlideEditPage() {
   const [fontIds, setFontIds] = useState<FontId[]>([]);
 
   const userRef = useRef<AuthUser | null>(null);
+  /** 툴바 자동 저장 타이머 — 연달아 누르면 마지막 것만 보낸다 */
+  const styleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (styleTimer.current) clearTimeout(styleTimer.current);
+    };
+  }, []);
   const urlRef = useRef<string | null>(null);
   useEffect(() => {
     urlRef.current = imageUrl;
@@ -159,13 +166,35 @@ export default function SlideEditPage() {
   }
 
   /** 자유 배치일 때는 요소의 글자도 같이 고친다 — 안 그러면 그림이 안 바뀐다 */
-  function withElementText(): SlideElement[] | undefined {
+  function withElementText(styles = styleDraft): SlideElement[] | undefined {
     if (!freeMode || !slide?.elements) return undefined;
     return slide.elements.map((el) =>
       el.slot && textDraft[el.slot] !== undefined
-        ? { ...el, text: textDraft[el.slot], style: styleDraft[el.slot] }
+        ? { ...el, text: textDraft[el.slot], style: styles[el.slot] }
         : el,
     );
+  }
+
+  /**
+   * 툴바 조절은 **누르는 즉시 반영한다** (08-31 수정).
+   *
+   * 처음에는 로컬 상태만 바꾸고 「문구」 탭의 저장 버튼을 눌러야 그려졌는데,
+   * 툴바를 만지는 사람은 그 버튼을 볼 이유가 없어서 «아무 일도 안 일어난다»가 됐다.
+   *
+   * 연달아 누를 때(크기를 세 칸 키우는 등) 매번 저장하면 요청이 겹치므로
+   * 잠깐 모았다 보낸다. 렌더링이 5~10ms라 기다림은 거의 없다.
+   */
+  function applyStyle(next: Record<string, SlotStyle>) {
+    setStyleDraft(next);
+    if (styleTimer.current) clearTimeout(styleTimer.current);
+    styleTimer.current = setTimeout(() => {
+      const els = withElementText(next);
+      void save({
+        slides: [
+          { order, texts: textDraft, styleOverrides: next, ...(els ? { elements: els } : {}) },
+        ],
+      });
+    }, 250);
   }
 
   async function saveText() {
@@ -194,10 +223,8 @@ export default function SlideEditPage() {
     }
   }
 
-  const dirty =
-    slide &&
-    (JSON.stringify(slide.texts) !== JSON.stringify(textDraft) ||
-      JSON.stringify(slide.styleOverrides ?? {}) !== JSON.stringify(styleDraft));
+  /** 문구만 «저장 안 됨»으로 본다 — 툴바 조절은 알아서 반영되므로 (08-31) */
+  const dirty = Boolean(slide && JSON.stringify(slide.texts) !== JSON.stringify(textDraft));
 
   if (phase === "not-found") {
     return (
@@ -256,7 +283,7 @@ export default function SlideEditPage() {
             const merged = { ...styleDraft };
             if (next) merged[selectedSlot] = next;
             else delete merged[selectedSlot];
-            setStyleDraft(merged);
+            applyStyle(merged);
           }}
         />
       </div>
