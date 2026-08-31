@@ -15,7 +15,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plus } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
 import CardTile from "@/components/CardTile";
@@ -191,6 +191,8 @@ function CalendarView({ uid }: { uid: string }) {
   // 온보딩에서 고른 업로드 요일 (월=0…일=6)·주기 — 쉬는 날/채울 날 구분과 주간 헤더에 쓴다 (08-31)
   const [uploadDays, setUploadDays] = useState<number[] | null>(null);
   const [uploadFrequency, setUploadFrequency] = useState<number | null>(null);
+  // [실험] 아코디언 — 기본은 순수 월간. «주 펼치기»를 눌러야 그 주만 보드로 확장 (주 시작일 키)
+  const [expandedWeekKey, setExpandedWeekKey] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -260,11 +262,13 @@ function CalendarView({ uid }: { uid: string }) {
     const r = rangeFor(view, nextAnchor);
     setAnchor(nextAnchor);
     setSelectedDate(todayKey >= r.start && todayKey <= r.end ? todayKey : r.start);
+    setExpandedWeekKey(null); // 월·주 이동 시 기본(순수 월간)으로
     setState({ phase: "loading" });
   }
 
   function goToday() {
     setSelectedDate(todayKey);
+    setExpandedWeekKey(null);
     if (anchor !== todayKey) {
       setAnchor(todayKey);
       setState({ phase: "loading" });
@@ -276,7 +280,16 @@ function CalendarView({ uid }: { uid: string }) {
     if (next === view) return;
     setView(next);
     setAnchor(selectedDate);
+    setExpandedWeekKey(null);
     setState({ phase: "loading" });
+  }
+
+  /** 날짜 선택 — 패널만 갱신. 펼쳐진 주 밖을 고르면 접는다 (08-31 아코디언 v2) */
+  function selectDate(dateKey: string) {
+    setSelectedDate(dateKey);
+    if (expandedWeekKey && weekDates(dateKey)[0] !== expandedWeekKey) {
+      setExpandedWeekKey(null);
+    }
   }
 
   /** 드래그로 예정일 변경 — 실패 시 원위치 + 안내 (PLAN §3-1) */
@@ -521,74 +534,97 @@ function CalendarView({ uid }: { uid: string }) {
                       ))}
                     </div>
 
-                    {/* [실험] 아코디언 월간 — 선택한 날이 속한 주만 주간 보드로 확장 (08-31) */}
+                    {/* [실험] 아코디언 월간 v2 — 기본은 순수 월간. 날짜 클릭은 패널만 갱신하고,
+                        선택한 주 아래의 «주 펼치기»를 눌러야 그 주만 보드로 확장된다 (08-31) */}
                     <div className="flex flex-col gap-1">
                       {Array.from({ length: cells.length / 7 }, (_, wi) =>
                         cells.slice(wi * 7, wi * 7 + 7),
                       ).map((week, wi) => {
-                        const expanded = week.some(
-                          (d) => d !== null && weekDates(selectedDate).includes(d),
-                        );
+                        const days = week.filter((d): d is string => d !== null);
+                        const weekStart = days.length > 0 ? weekDates(days[0])[0] : null;
+                        const hasSelected = days.includes(selectedDate);
+                        const expanded = weekStart !== null && weekStart === expandedWeekKey;
+
                         if (!expanded) {
                           return (
-                            <div key={`w-${wi}`} className="grid grid-cols-7 gap-1">
+                            <div key={`w-${wi}`}>
+                              <div className="grid grid-cols-7 gap-1">
+                                {week.map((dateKey, i) =>
+                                  dateKey === null ? (
+                                    <div key={`empty-${wi}-${i}`} />
+                                  ) : (
+                                    <DayCell
+                                      key={dateKey}
+                                      dateKey={dateKey}
+                                      cards={byDate.get(dateKey) ?? []}
+                                      isToday={dateKey === todayKey}
+                                      isSelected={dateKey === selectedDate}
+                                      dragging={draggingId != null}
+                                      onSelect={() => selectDate(dateKey)}
+                                      onDragStartCard={setDraggingId}
+                                      onDropCard={(cardId) => handleDrop(cardId, dateKey)}
+                                      showPlus={
+                                        (byDate.get(dateKey) ?? []).length === 0 &&
+                                        dateKey >= todayKey &&
+                                        isUploadDayOf(uploadDays, dateKey) === true
+                                      }
+                                    />
+                                  ),
+                                )}
+                              </div>
+                              {/* 선택한 주에만 펼치기 초대장이 붙는다 */}
+                              {hasSelected && weekStart && (
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedWeekKey(weekStart)}
+                                  className="mt-0.5 flex h-6 w-full items-center justify-center gap-1 rounded-md text-caption text-sub hover:bg-surface-muted hover:text-berry-dark"
+                                >
+                                  <ChevronDown size={14} aria-hidden />
+                                  주 펼치기
+                                </button>
+                              )}
+                            </div>
+                          );
+                        }
+                        return (
+                          <div key={`w-${wi}`}>
+                            <div className="grid grid-cols-7 gap-2 rounded-lg bg-berry-tint p-1.5">
                               {week.map((dateKey, i) =>
                                 dateKey === null ? (
                                   <div key={`empty-${wi}-${i}`} />
                                 ) : (
-                                  <DayCell
+                                  <WeekColumn
                                     key={dateKey}
                                     dateKey={dateKey}
                                     cards={byDate.get(dateKey) ?? []}
                                     isToday={dateKey === todayKey}
                                     isSelected={dateKey === selectedDate}
                                     dragging={draggingId != null}
-                                    onSelect={() => setSelectedDate(dateKey)}
+                                    onSelect={() => selectDate(dateKey)}
                                     onDragStartCard={setDraggingId}
                                     onDropCard={(cardId) => handleDrop(cardId, dateKey)}
-                                    showPlus={
-                                      (byDate.get(dateKey) ?? []).length === 0 &&
-                                      dateKey >= todayKey &&
-                                      isUploadDayOf(uploadDays, dateKey) === true
+                                    emptyHint={
+                                      (byDate.get(dateKey) ?? []).length > 0
+                                        ? "none"
+                                        : isUploadDayOf(uploadDays, dateKey) === false
+                                          ? "rest"
+                                          : isUploadDayOf(uploadDays, dateKey) === true &&
+                                              dateKey >= todayKey
+                                            ? "invite"
+                                            : "none"
                                     }
                                   />
                                 ),
                               )}
                             </div>
-                          );
-                        }
-                        return (
-                          <div
-                            key={`w-${wi}`}
-                            className="grid grid-cols-7 gap-2 rounded-lg bg-berry-tint/30 p-1.5"
-                          >
-                            {week.map((dateKey, i) =>
-                              dateKey === null ? (
-                                <div key={`empty-${wi}-${i}`} />
-                              ) : (
-                                <WeekColumn
-                                  key={dateKey}
-                                  dateKey={dateKey}
-                                  cards={byDate.get(dateKey) ?? []}
-                                  isToday={dateKey === todayKey}
-                                  isSelected={dateKey === selectedDate}
-                                  dragging={draggingId != null}
-                                  onSelect={() => setSelectedDate(dateKey)}
-                                  onDragStartCard={setDraggingId}
-                                  onDropCard={(cardId) => handleDrop(cardId, dateKey)}
-                                  emptyHint={
-                                    (byDate.get(dateKey) ?? []).length > 0
-                                      ? "none"
-                                      : isUploadDayOf(uploadDays, dateKey) === false
-                                        ? "rest"
-                                        : isUploadDayOf(uploadDays, dateKey) === true &&
-                                            dateKey >= todayKey
-                                          ? "invite"
-                                          : "none"
-                                  }
-                                />
-                              ),
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => setExpandedWeekKey(null)}
+                              className="mt-0.5 flex h-6 w-full items-center justify-center gap-1 rounded-md text-caption text-sub hover:bg-surface-muted hover:text-berry-dark"
+                            >
+                              <ChevronUp size={14} aria-hidden />
+                              주 접기
+                            </button>
                           </div>
                         );
                       })}
