@@ -2,6 +2,7 @@ import "server-only";
 
 import { audiencePrompt } from "../audiences";
 import { toneDirective } from "../tone";
+import { isStockConfigured, pickStockPhotos } from "../stock";
 import { BASE_SYSTEM, STR, callJson, isClaudeConfigured, obj } from "./client";
 import { buildPreferenceDirective } from "./preferences";
 import type { LayoutId, Slide, VisualType } from "../../types/card";
@@ -87,8 +88,13 @@ const SLIDES_SCHEMA = obj(
             type: "array",
             items: obj({ key: STR, value: STR }, ["key", "value"]),
           },
+          /*
+            스톡 사진을 찾을 **영어** 검색어. 카드 제목은 한국어인데 스톡 검색은
+            영어가 훨씬 정확하다. 이미지 레이아웃이 아니면 빈 문자열이어도 된다.
+          */
+          imageQuery: STR,
         },
-        ["layoutId", "texts"],
+        ["layoutId", "texts", "imageQuery"],
       ),
     },
   },
@@ -110,10 +116,14 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
     return mockSlides(input);
   }
 
-  // 사진이 없으면 이미지 레이아웃을 고를 수 없다 (DESIGN §12 폴백 사슬)
+  /*
+    이미지 폴백 사슬 (DESIGN §12) — ① 사용자 사진 → ② 스톡 → ③ text-only.
+    ①이 있으면 ②는 쓰지 않는다. 둘을 섞으면 카드뉴스 안에서 톤이 튄다.
+  */
   const photos = input.photoUrls ?? [];
   const photoCount = input.visualType === "text_only" ? 0 : photos.length;
-  const usable = photoCount === 0 ? TEXT_ONLY_LAYOUTS : ALL_LAYOUTS;
+  const stockAvailable = photoCount === 0 && isStockConfigured();
+  const usable = photoCount === 0 && !stockAvailable ? TEXT_ONLY_LAYOUTS : ALL_LAYOUTS;
 
   const directives = [
     toneDirective(input.tone),
@@ -124,7 +134,11 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
   ].filter(Boolean);
 
   const result = await callJson<{
-    slides: { layoutId: string; texts: { key: string; value: string }[] }[];
+    slides: {
+      layoutId: string;
+      texts: { key: string; value: string }[];
+      imageQuery: string;
+    }[];
   }>({
     system: [BASE_SYSTEM, "", ...directives].join("\n"),
     user: [
@@ -145,8 +159,14 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
       "- 제목은 짧게(20자 안팎), 본문도 3~4줄을 넘기지 않는다. 화면이 정사각형이라 길면 잘린다.",
       "- 같은 레이아웃을 세 번 넘게 잇달아 쓰지 않는다.",
       photoCount > 0
-        ? `- **사진이 ${photoCount}장 있다.** \`image-top\`·\`image-full\`을 합쳐 **${photoCount}장까지만** 써라. 더 쓰면 사진 없는 빈 면이 된다.`
-        : "- 사진이 없다. `image-top`·`image-full`은 쓸 수 없다.",
+        ? `- **사용자 사진이 ${photoCount}장 있다.** \`image-top\`·\`image-full\`을 합쳐 **${photoCount}장까지만** 써라. 더 쓰면 사진 없는 빈 면이 된다.`
+        : stockAvailable
+          ? "- 사용자 사진은 없지만 **스톡 사진을 쓸 수 있다.** 이미지 레이아웃은 2장까지만 — 사진이 많으면 글이 밀린다."
+          : "- 사진이 없다. `image-top`·`image-full`은 쓸 수 없다.",
+      "",
+      "`imageQuery` — 이미지 레이아웃에는 그 자리에 어울릴 사진을 찾을 **영어 검색어**를 넣어라.",
+      "  낱말 2~4개로 장면을 묘사한다 (예: `morning run city street`, `person tying running shoes`).",
+      "  한국어·고유명사·추상어는 쓰지 마라. 이미지 레이아웃이 아니면 빈 문자열.",
     ]
       .filter(Boolean)
       .join("\n"),
@@ -154,40 +174,54 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
     effort: "medium", // 결과물로 남는다 (PLAN §9)
   });
 
-  /*
-    사진 배정 (F13 · DESIGN §12).
-    이미지 레이아웃에 **올린 순서대로** 한 장씩 넣는다. 사진이 모자라면 그 슬라이드는
-    글자 레이아웃으로 내려앉힌다 — 사진 없는 이미지 레이아웃은 회색 빈 면이 된다.
-    프롬프트에서 이미 장수를 알려주므로 보통은 여기까지 오지 않는다(안전망).
-  */
-  let nextPhoto = 0;
-
-  const slides: Slide[] = result.slides
+  const kept = result.slides
     // 렌더러가 모르는 레이아웃은 버린다 — 넣어봐야 빈 화면이 된다
     .filter((s) => usable.includes(s.layoutId as LayoutId))
-    .slice(0, MAX_SLIDES)
-    .map((s, order) => {
-      let layoutId = s.layoutId as LayoutId;
-      let imageUrl: string | null = null;
+    .slice(0, MAX_SLIDES);
 
-      if (IMAGE_LAYOUTS.includes(layoutId)) {
-        if (nextPhoto < photoCount) {
-          imageUrl = photos[nextPhoto];
-          nextPhoto++;
-        } else {
-          layoutId = DOWNGRADE[layoutId];
-        }
-      }
+  /*
+    사진 배정 (F13 · DESIGN §12).
+    ① 사용자 사진이 있으면 **올린 순서대로** 한 장씩.
+    ② 없으면 AI가 낸 영어 검색어로 스톡을 찾아 채운다.
+    ③ 그래도 못 채운 이미지 레이아웃은 글자 레이아웃으로 내려앉힌다 —
+       사진 없는 이미지 레이아웃은 회색 빈 면이 된다.
+  */
+  const imageSlots = kept
+    .map((s, i) => ({ i, query: s.imageQuery ?? "" }))
+    .filter(({ i }) => IMAGE_LAYOUTS.includes(kept[i].layoutId as LayoutId));
 
-      // 그 레이아웃이 읽지 않는 키는 버린다 — 남겨둬도 화면에 안 나오고 문서만 커진다
-      const allowed = ALLOWED_KEYS[layoutId];
-      const texts: Record<string, string> = {};
-      for (const { key, value } of s.texts ?? []) {
-        if (allowed.includes(key) && typeof value === "string") texts[key] = value;
-      }
+  const assigned = new Map<number, string>();
 
-      return { order, layoutId, texts, imageUrl };
+  if (photoCount > 0) {
+    imageSlots.forEach((slot, n) => {
+      if (n < photoCount) assigned.set(slot.i, photos[n]);
     });
+  } else if (stockAvailable && imageSlots.length > 0) {
+    const found = await pickStockPhotos(imageSlots.map((s) => s.query));
+    imageSlots.forEach((slot, n) => {
+      const url = found[n];
+      if (url) assigned.set(slot.i, url);
+    });
+  }
+
+  const slides: Slide[] = kept.map((s, order) => {
+    let layoutId = s.layoutId as LayoutId;
+    const imageUrl = assigned.get(order) ?? null;
+
+    // 사진을 못 채운 이미지 레이아웃은 글자 쪽으로
+    if (imageUrl === null && IMAGE_LAYOUTS.includes(layoutId)) {
+      layoutId = DOWNGRADE[layoutId];
+    }
+
+    // 그 레이아웃이 읽지 않는 키는 버린다 — 남겨둬도 화면에 안 나오고 문서만 커진다
+    const allowed = ALLOWED_KEYS[layoutId];
+    const texts: Record<string, string> = {};
+    for (const { key, value } of s.texts ?? []) {
+      if (allowed.includes(key) && typeof value === "string") texts[key] = value;
+    }
+
+    return { order, layoutId, texts, imageUrl };
+  });
 
   // 너무 적게 오면 화면이 허전하다 — 최소 장수를 못 채우면 샘플로 되돌린다
   return slides.length >= MIN_SLIDES ? slides : mockSlides(input);

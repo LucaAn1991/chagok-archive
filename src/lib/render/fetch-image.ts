@@ -15,7 +15,10 @@ import path from "node:path";
  */
 
 /** 사용자 사진이 사는 곳. 여기가 아니면 받아오지 않는다 */
-const ALLOWED_HOSTS = new Set(["firebasestorage.googleapis.com"]);
+const ALLOWED_HOSTS = new Set([
+  "firebasestorage.googleapis.com", // 사용자가 올린 사진 (F13)
+  "images.pexels.com", // 스톡 사진 (DESIGN §12 폴백 2순위)
+]);
 
 /** 슬라이드 한 장에 넣을 사진의 상한. 넘으면 렌더링이 느려지고 메모리를 먹는다 */
 const MAX_BYTES = 10 * 1024 * 1024;

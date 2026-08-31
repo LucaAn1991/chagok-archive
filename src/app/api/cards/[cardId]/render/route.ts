@@ -4,6 +4,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { getUidFromRequest } from "@/lib/api/auth";
 import { generateSlides } from "@/lib/ai/slides";
 import { isClaudeConfigured } from "@/lib/ai/caption";
+import { isStockConfigured } from "@/lib/stock";
 import type { Card, VisualType, User } from "@/types";
 
 /**
@@ -40,11 +41,17 @@ export async function POST(
 
   /*
     이미지 폴백 사슬 (DESIGN.md §12) — 어디서 멈춰도 완성된다.
-    ① 사용자 사진 → ② 무료 스톡 → ③ text_only
-    @TODO: ② 스톡 추천 — provider 미정 (PRD §9 미결 2). 지금은 ①→③으로 건너뛴다.
+    ① 사용자 사진 → ② 무료 스톡(Pexels, 08-31) → ③ text_only
+
+    여기서 정하는 건 «어느 단계까지 쓸 수 있는가»다. 실제로 스톡에서 사진을 못
+    찾으면 generateSlides가 그 슬라이드를 글자 레이아웃으로 내려앉힌다.
   */
   const visualType: VisualType =
-    card.photoUrls.length > 0 ? "user_photo_preferred" : "text_only";
+    card.photoUrls.length > 0
+      ? "user_photo_preferred"
+      : isStockConfigured()
+        ? "stock_recommended"
+        : "text_only";
 
   try {
     const slides = await generateSlides({
