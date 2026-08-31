@@ -423,33 +423,33 @@ function CalendarView({ uid }: { uid: string }) {
                 >
                   <ChevronRight size={20} aria-hidden />
                 </button>
+                {/* 오늘 — invisible 처리 (08-31 요청). 필요해지면 hidden만 지우면 된다 */}
                 <button
                   type="button"
                   onClick={goToday}
-                  className="ml-1 h-9 whitespace-nowrap rounded-md border border-line bg-surface px-3 text-body text-ink hover:bg-surface-muted"
+                  className="ml-1 hidden h-9 whitespace-nowrap rounded-md border border-line bg-surface px-3 text-body text-ink hover:bg-surface-muted"
                 >
                   오늘
                 </button>
-              </div>
 
-              {/* 월간/주간 — 박스 대신 밑줄 탭 (카카오 이모티콘 탭 문법, 08-31 v5).
-                  ‹ 화살표 시작선에 맞춰 왼쪽 정렬 */}
-              <div className="mt-1 flex gap-5">
-                {(["month", "week"] as const).map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => switchView(v)}
-                    className={[
-                      "relative h-9 text-body",
-                      view === v
-                        ? "font-semibold text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-[2px] after:rounded-pill after:bg-berry"
-                        : "text-sub hover:text-ink",
-                    ].join(" ")}
-                  >
-                    {v === "month" ? "월간" : "주간"}
-                  </button>
-                ))}
+                {/* 월간/주간 — 밑줄 탭, 오늘 버튼이 있던 자리 (08-31 v6) */}
+                <div className="ml-2 flex gap-5">
+                  {(["month", "week"] as const).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => switchView(v)}
+                      className={[
+                        "relative h-9 text-body",
+                        view === v
+                          ? "font-semibold text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-[2px] after:rounded-pill after:bg-berry"
+                          : "text-sub hover:text-ink",
+                      ].join(" ")}
+                    >
+                      {v === "month" ? "월간" : "주간"}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
