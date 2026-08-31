@@ -416,7 +416,9 @@ function NewPlanScreen() {
                       sending ||
                       confirming
                     }
-                    className="px-1 text-body font-semibold text-berry transition-colors duration-200 hover:text-berry-dark disabled:text-sub/50"
+                    /* 회색 칩 (08-31) — 시스템 안내 말풍선과 같은 토큰(--surface-muted)·반경.
+                       주 버튼처럼 보이면 안 되므로 브랜드색·테두리를 쓰지 않는다 */
+                    className="flex h-[30px] items-center rounded-md bg-surface-muted px-3 text-[13px] text-ink transition-colors duration-200 hover:bg-line active:bg-line disabled:opacity-50"
                   >
                     새 기획
                   </button>
