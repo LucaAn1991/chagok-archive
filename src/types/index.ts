@@ -15,4 +15,5 @@ export type {
   Slide,
   LayoutId,
   ThemeId,
+  TemplateId,
 } from "./card";

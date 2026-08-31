@@ -123,6 +123,7 @@ type Card = {
   publishIntent: PublishIntent;   // status와 별개 필드 (DESIGN.md §11)
 
   themeId: ThemeId;               // 산출물 테마. 카드 한 장 전체에 하나 (08-31)
+  templateId: TemplateId | null;  // 구성 템플릿. null이면 AI가 구성까지 정한다 (08-31)
   visualType: VisualType;         // 이미지 폴백 사슬의 판정 결과 (DESIGN.md §12)
   photoUrls: string[];            // 사용자가 올린 사진. 순서 = 배열 순서 (F13)
   extraNote: string;              // «이번에 꼭 넣을 내용» 자유 입력 (F13)
@@ -202,6 +203,32 @@ type ThemeId =
   | 'warm'        // 포근한 — 베이지 바탕 · 넉넉한 여백
   | 'editorial'   // 또렷한 — 흰 바탕 · 크고 굵은 제목
   | 'graphic';    // 글자 중심 — 글씨를 크게, 가운데로
+
+/**
+ * 구성 템플릿 4종 `[확정 08-31]`
+ *
+ * 레이아웃이 «한 장 안에 무엇을 어디에», 테마가 «어떤 색·글자 비율로»라면
+ * 템플릿은 **«몇 장을, 어떤 순서로, 각 장이 무슨 일을 하는가»**다.
+ *
+ * **더미 문구를 담지 않는다.** 캔바식 «껍데기를 주고 채우게 하기»는
+ * DESIGN.md §0의 «사용자가 빈칸부터 채우게 만든다» 금지에 걸린다.
+ * 틀과 각 장의 «할 일»만 담고 문구는 AI가 쓴다.
+ *
+ * **고르는 자리는 제작 «결과» 화면이다.** 기획 전에 갤러리를 두면
+ * «AI가 먼저 구조화 → 사용자가 확인·수정»(DESIGN.md §7)이 뒤집힌다.
+ *
+ * id는 `lib/style-examples.ts`의 ContentFormat과 같은 말을 쓴다 —
+ * 온보딩이 이미 형식 취향(`visualPreferences.contentFormats`)을 모으고 있다.
+ * 4종만 둔 이유는 08-28 취향 예시 재작업에서 살아남은 형식이기 때문.
+ * collage(사진 여러 장)·review(별점)는 레이아웃 6종으로 못 그린다.
+ *
+ * 실제 구성은 `lib/card-templates.ts`.
+ */
+type TemplateId =
+  | 'informational' // 정보 카드뉴스 — 5장. 결론 먼저 · 근거 목록 · 저장 유도
+  | 'diary'         // 기록 — 5장. 사진 중심
+  | 'statement'     // 한 문장 — 5장. 큰 한 마디
+  | 'editorial';    // 에세이 — 6장. 사진과 글을 번갈아
 ```
 
 ---
@@ -515,6 +542,9 @@ plans  (userId ASC, status ASC, confirmedAt DESC)      지난 기획 목록
    탈퇴 시 삭제는 서버(DELETE /api/users/me)가 한다 (08-27 확정)
 ⑧ themeId도 값 검증 — 정해진 3종만 (08-31). 색을 직접 실어 넣는 길을 서버 밖에서도
    막는다. 옛 카드엔 이 필드가 없으므로 «없으면 통과»를 함께 둔다
+⑨ templateId는 서버만 쓰기 — 구성이 바뀌면 slides가 통째로 새로 생성돼야 하는데,
+   클라이언트가 값만 바꾸면 «적힌 구성»과 «실제 슬라이드»가 어긋난다.
+   변경은 POST /api/cards/[cardId]/render 가 slides와 함께 쓴다 (08-31)
 ```
 
 ---
@@ -595,6 +625,7 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 | 날짜 | 변경 내용 | 이유 | 관련 섹션 |
 |---|---|---|---|
 | 2026-08-27 | 최초 작성 | PRD·IA·DESIGN 기준 기술 설계 수립 | 전체 |
+| 2026-08-31 | **구성 템플릿 4종 신설** — `Card.templateId` 추가(`null`=AI가 알아서). 템플릿은 장수·순서·각 장의 «할 일»만 담고 문구는 AI가 쓴다. 고르는 자리는 제작 «결과» 화면(「다른 구성으로」) | 캔바식 갤러리를 기획 앞에 두면 «AI가 먼저 구조화»(DESIGN §7)와 «빈칸부터 채우게 만들지 않는다»(§0)가 뒤집힌다. 4종은 08-28 취향 예시 재작업에서 살아남은 형식(diary·editorial·statement·informational) | §2-3 · §7 · §9 |
 | 2026-08-31 | **산출물 테마 3종 신설** — `Card.themeId` · `ThemeId` 추가. 렌더러의 고정 색·글자 상수를 `lib/render/themes.ts`로 분리하고, 기본값은 온보딩 취향(`users.visualPreferences.attributes`)에서 정한다. 제작 결과 화면에서 변경 가능 | 온보딩에서 취향을 모으고도 결과물에 닿지 않아 누가 무엇을 골랐든 카드가 똑같이 나왔다. 이름은 08-28 확정 direction 3종을 그대로 써 어휘를 하나로 유지 | §2-3 · §7 · §9 |
 | 2026-08-31 | §9 미결 9번 행의 표 칸 복구 — «해소» 설명이 새 칸으로 들어가 있던 것을 「항목」 칸 안으로 넣음 | 3칸 표에 4칸이라 마지막 「출처」(`PRD.md` §9 미결 2·3)가 렌더링 때 잘렸다. 내용은 그대로, 칸만 맞춤 | §9 |
 | 2026-08-31 | 카드 상태에서 'crafted' 제거 — 제작(F8) 완료 시 바로 'pending'. planned 라벨은 «제작 대기»로 | 상태 4→3단계로 단순화. crafted/pending 구분은 publishIntent와 중복이었다. 기존 crafted 문서는 pending으로 이전, 보안 규칙 enum도 축소 | §2-3 · §7 · §9 |

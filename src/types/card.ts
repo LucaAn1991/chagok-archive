@@ -21,6 +21,8 @@ export type Card = {
    * 생성 시 온보딩 취향에서 정해지고, 제작 결과 화면에서 바꿀 수 있다.
    */
   themeId: ThemeId;
+  /** 구성 템플릿 (08-31). null이면 AI가 장수·순서를 알아서 정한다 */
+  templateId: TemplateId | null;
   visualType: VisualType; // 이미지 폴백 사슬의 판정 결과 (DESIGN.md §12)
   photoUrls: string[]; // 사용자가 올린 사진. 순서 = 배열 순서 (F13)
   extraNote: string; // «이번에 꼭 넣을 내용» 자유 입력 (F13)
@@ -96,6 +98,17 @@ export type StockCredit = {
  * 실제 색·글자 값은 `lib/render/themes.ts`.
  */
 export type ThemeId = "warm" | "editorial" | "graphic";
+
+/**
+ * 카드뉴스 «구성» 템플릿 (08-31).
+ *
+ * 몇 장을 어떤 순서로, 각 장이 무슨 일을 하는지. `null`이면 **AI가 알아서 구성한다**
+ * (지금까지의 방식) — 옛 카드가 전부 여기 해당한다.
+ *
+ * id는 `lib/style-examples.ts`의 `ContentFormat`과 같은 말을 쓴다.
+ * 실제 구성은 `lib/card-templates.ts`.
+ */
+export type TemplateId = "informational" | "diary" | "statement" | "editorial";
 
 /**
  * 카드뉴스 레이아웃 6종 (PLAN.md §2-3, 08-27 확정).

@@ -5,6 +5,7 @@ import { toneDirective } from "../tone";
 import { isStockConfigured, pickStockPhotos } from "../stock";
 import { BASE_SYSTEM, STR, callJson, isClaudeConfigured, obj } from "./client";
 import { buildPreferenceDirective } from "./preferences";
+import { CARD_TEMPLATES, materializeTemplate, type TemplateSlide } from "../card-templates";
 import {
   ALL_LAYOUTS,
   DOWNGRADE,
@@ -12,7 +13,7 @@ import {
   LAYOUT_SLOTS,
   TEXT_ONLY_LAYOUTS,
 } from "../slide-layout";
-import type { LayoutId, Slide, StockCredit, VisualType } from "../../types/card";
+import type { LayoutId, Slide, StockCredit, TemplateId, VisualType } from "../../types/card";
 import type { ToneKey, User } from "../../types/user";
 
 /**
@@ -38,6 +39,11 @@ export type SlidesInput = {
   avoidExpressions: string[];
   /** 온보딩 게시물 취향 — 실호출 시 buildPreferenceDirective()로 프롬프트에 반영 (08-31) */
   visualPreferences?: User["visualPreferences"];
+  /**
+   * 구성 템플릿 (08-31). 주면 **장수·순서·레이아웃이 고정되고 AI는 문구만 쓴다.**
+   * null이면 지금까지처럼 AI가 구성까지 정한다.
+   */
+  templateId?: TemplateId | null;
   visualType: VisualType;
   /** 사용자가 올린 사진 (F13). 순서 = 배열 순서. 이미지 레이아웃에 이 순서대로 배정된다 */
   photoUrls: string[];
@@ -108,6 +114,18 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
   const stockAvailable = photoCount === 0 && isStockConfigured();
   const usable = photoCount === 0 && !stockAvailable ? TEXT_ONLY_LAYOUTS : ALL_LAYOUTS;
 
+  /*
+    구성 템플릿 (08-31). 주어지면 «몇 장·어떤 순서»가 여기서 확정되고
+    AI는 각 자리의 문구만 쓴다.
+
+    사진을 몇 장까지 쓸 수 있는지에 맞춰 이미지 레이아웃을 미리 내려앉힌다 —
+    스톡을 쓸 수 있으면 사진 수에 제한이 없으므로 템플릿을 그대로 둔다.
+  */
+  const template = input.templateId ? CARD_TEMPLATES[input.templateId] : null;
+  const plan: TemplateSlide[] | null = template
+    ? materializeTemplate(template, stockAvailable ? template.slides.length : photoCount)
+    : null;
+
   const directives = [
     toneDirective(input.tone),
     buildPreferenceDirective(input.visualPreferences),
@@ -131,13 +149,23 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
       input.intent ? `기획의도: ${input.intent}` : "",
       input.extraNote ? `**이번에 꼭 넣어야 하는 것: ${input.extraNote}**` : "",
       "",
-      `이 게시물의 카드뉴스를 ${MIN_SLIDES}~${MAX_SLIDES}장으로 구성해라. 넘겨보는 순서가 곧 이야기 흐름이다.`,
+      plan
+        ? `이 게시물의 카드뉴스는 **${plan.length}장으로 구성이 이미 정해져 있다.** 아래 순서를 그대로 지켜라 — 장수·순서·레이아웃을 바꾸지 마라. 네가 할 일은 각 자리에 들어갈 문구를 쓰는 것이다.`
+        : `이 게시물의 카드뉴스를 ${MIN_SLIDES}~${MAX_SLIDES}장으로 구성해라. 넘겨보는 순서가 곧 이야기 흐름이다.`,
       "",
-      "쓸 수 있는 레이아웃과 **정해진 텍스트 슬롯** (다른 키를 만들면 화면에서 사라진다):",
-      ...usable.map((id) => `- ${id}: ${slotLine(id)}`),
+      plan
+        ? "정해진 구성 (순서대로, 각 줄이 슬라이드 한 장):"
+        : "쓸 수 있는 레이아웃과 **정해진 텍스트 슬롯** (다른 키를 만들면 화면에서 사라집니다):",
+      ...(plan
+        ? plan.map(
+            (p, i) => `${i + 1}. ${p.layoutId} — ${p.purpose} / 슬롯: ${slotLine(p.layoutId)}`,
+          )
+        : usable.map((id) => `- ${id}: ${slotLine(id)}`)),
       "",
       "규칙:",
-      "- 첫 장은 반드시 `cover`, 마지막 장은 반드시 `closing`.",
+      plan
+        ? "- 위 순서와 레이아웃을 그대로 따른다. 장을 더하거나 빼지 않는다."
+        : "- 첫 장은 반드시 `cover`, 마지막 장은 반드시 `closing`.",
       "- 슬라이드 한 장에 담는 생각은 하나. 글자가 많으면 넘기지 않는다.",
       "- 제목은 짧게(20자 안팎), 본문도 3~4줄을 넘기지 않는다. 화면이 정사각형이라 길면 잘린다.",
       "- 같은 레이아웃을 세 번 넘게 잇달아 쓰지 않는다.",
@@ -157,10 +185,23 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
     effort: "medium", // 결과물로 남는다 (PLAN §9)
   });
 
-  const kept = result.slides
-    // 렌더러가 모르는 레이아웃은 버린다 — 넣어봐야 빈 화면이 된다
-    .filter((s) => usable.includes(s.layoutId as LayoutId))
-    .slice(0, MAX_SLIDES);
+  /*
+    템플릿이 있으면 **AI가 낸 layoutId를 쓰지 않는다.** 지시를 어기고 다른 걸
+    낼 수 있는데, 그러면 «구성이 정해진다»는 약속이 깨진다. 순서대로 짝지어
+    문구만 가져오고 레이아웃은 우리가 정한 것으로 덮는다.
+
+    모자라게 오면 그 자리는 빈 문구로 남는다 — 장수는 템플릿이 정한 대로 유지한다.
+  */
+  const kept = plan
+    ? plan.map((p, i) => ({
+        layoutId: p.layoutId as string,
+        texts: result.slides[i]?.texts ?? [],
+        imageQuery: result.slides[i]?.imageQuery ?? "",
+      }))
+    : result.slides
+        // 렌더러가 모르는 레이아웃은 버린다 — 넣어봐야 빈 화면이 된다
+        .filter((s) => usable.includes(s.layoutId as LayoutId))
+        .slice(0, MAX_SLIDES);
 
   /*
     사진 배정 (F13 · DESIGN §12).
@@ -218,8 +259,26 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
   return slides.length >= MIN_SLIDES ? slides : mockSlides(input);
 }
 
-/** 개발용 샘플 5장 — 레이아웃 6종 중 텍스트 계열로 구성 (visualType 반영 전) */
+/**
+ * 개발용 샘플 — 레이아웃 6종 중 텍스트 계열로 구성 (visualType 반영 전).
+ *
+ * 템플릿이 지정되면 **그 구성 그대로** 자리만 채운다. 안 그러면 API 키가 없는
+ * 개발 환경에서 「다른 구성으로」를 눌러도 아무 변화가 없어 보인다.
+ */
 function mockSlides(input: SlidesInput): Slide[] {
+  if (input.templateId) {
+    const template = CARD_TEMPLATES[input.templateId];
+    // 목 모드에는 사진이 없다 — 이미지 레이아웃은 전부 글자 쪽으로 내려앉는다
+    return materializeTemplate(template, 0).map((p, order) => {
+      const texts: Record<string, string> = {};
+      for (const [i, key] of LAYOUT_SLOTS[p.layoutId].entries()) {
+        // 첫 슬롯에만 주제를 넣고 나머지는 «무슨 자리인지»를 그대로 보여준다
+        texts[key] = i === 0 ? `(샘플) ${input.title}` : `[${p.purpose}]`;
+      }
+      return { order, layoutId: p.layoutId, texts, imageUrl: null, imageCredit: null };
+    });
+  }
+
   return [
     {
       order: 0,

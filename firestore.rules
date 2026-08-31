@@ -67,9 +67,11 @@ service cloud.firestore {
       // status는 정해진 4개 값만 (08-31: crafted 제거), published로 갈 때는 publishedAt이 함께 (원칙 ③)
       // themeId도 정해진 3종만 (08-31) — 색을 직접 실어 넣지 못하게 서버 밖에서도 막는다.
       //   옛 카드엔 themeId가 없다. 없으면 통과시켜야 「올렸어요」 같은 수정이 막히지 않는다.
+      // templateId는 서버만 — 구성만 바뀌고 slides가 그대로면 둘이 어긋난다 (08-31)
       allow update: if isOwner(resource.data.userId)
         && !changedKeys().hasAny(
-          ['userId', 'planId', 'slides', 'caption', 'intent', 'shortTitle', 'createdAt'].toSet()
+          ['userId', 'planId', 'slides', 'caption', 'intent', 'shortTitle', 'createdAt',
+           'templateId'].toSet()
         )
         && request.resource.data.status in ['planned', 'pending', 'published', 'discarded']
         && (!('themeId' in request.resource.data)

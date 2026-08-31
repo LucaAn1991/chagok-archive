@@ -11,8 +11,8 @@ import BackLink from "@/components/BackLink";
 import StockAttribution from "@/components/StockAttribution";
 import { THEMES, THEME_ORDER, resolveTheme } from "@/lib/render/themes";
 import { LAYOUT_LABELS, layoutOptionsFor } from "@/lib/slide-layout";
-import type { LayoutId } from "@/types";
-import type { Card, Caption, ThemeId } from "@/types";
+import { CARD_TEMPLATES, TEMPLATE_ORDER, worksWithoutPhotos } from "@/lib/card-templates";
+import type { Card, Caption, LayoutId, ThemeId, TemplateId } from "@/types";
 
 /**
  * 제작 결과 (F7·F8) — 슬라이드 · 캡션 · 부분 수정.
@@ -77,6 +77,7 @@ export default function CardResultPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -329,6 +330,54 @@ export default function CardResultPage() {
   }
 
   /**
+   * 다른 구성으로 다시 만들기 (08-31).
+   *
+   * **캡션은 건드리지 않는다.** 바뀌는 건 «몇 장을 어떤 순서로»이지 할 말이 아니다.
+   * 그래서 `generate()`와 달리 render만 다시 부른다.
+   *
+   * 되돌릴 수 없는 행동이라 먼저 확인을 받는다 (DESIGN.md §13) —
+   * 지금 슬라이드의 문구가 전부 새로 쓰인다.
+   */
+  async function rebuildWith(templateId: TemplateId) {
+    const user = userRef.current;
+    if (!user || regenerating) return;
+
+    const t = CARD_TEMPLATES[templateId];
+    const ok = window.confirm(
+      `「${t.label}」 구성으로 다시 만들까요?\n지금 슬라이드의 문구는 새로 쓰여요. (캡션은 그대로예요)`,
+    );
+    if (!ok) return;
+
+    setRegenerating(true);
+    setSelectedSlide(null);
+    setSlideDraft(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/cards/${cardId}/render`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error ?? "다시 만들지 못했어요.");
+      }
+      const data = (await res.json()) as { slides: unknown[] };
+
+      const snap = await getDoc(doc(db, "cards", cardId));
+      const fresh = snap.data() as Card | undefined;
+      if (fresh) setCard(fresh);
+
+      await fetchAllSlideImages(data.slides.length, token);
+      showToast(`「${t.label}」 구성으로 다시 만들었어요.`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "다시 만들지 못했어요.");
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
+  /**
    * 테마 변경 (08-31).
    *
    * 테마는 카드 전체에 걸리므로 **모든 슬라이드를 다시 그려야 한다.**
@@ -500,6 +549,64 @@ export default function CardResultPage() {
                   })}
                 </div>
                 <p className="text-caption text-sub">{resolveTheme(card.themeId).hint}</p>
+              </div>
+            )}
+
+            {/*
+              구성 바꾸기 (08-31) — «다른 구성으로».
+
+              **AI가 만든 결과를 본 뒤에** 고르게 한다. 기획 단계에 갤러리를 두면
+              빈 껍데기를 먼저 던지는 셈이라 «AI가 먼저 구조화»(DESIGN.md §7)와
+              «빈칸부터 채우게 만들지 않는다»(§0)를 둘 다 어긴다.
+
+              고르면 슬라이드 문구가 전부 새로 쓰인다 — 되돌릴 수 없어서 확인을 받는다.
+            */}
+            {phase === "ready" && card && (
+              <div className="flex flex-col gap-2">
+                <span className="text-label font-semibold text-sub">구성</span>
+                <div className="flex flex-wrap gap-2">
+                  {TEMPLATE_ORDER.map((id) => {
+                    const t = CARD_TEMPLATES[id];
+                    const active = card.templateId === id;
+                    // 사진도 스톡도 없으면 사진 중심 구성은 글자만 남아 밋밋해진다
+                    const noPhotos =
+                      card.visualType === "text_only" && !worksWithoutPhotos(t);
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        aria-pressed={active}
+                        disabled={regenerating || saving || noPhotos}
+                        title={noPhotos ? "사진이 없어 이 구성은 글자만 남아요" : undefined}
+                        onClick={() => rebuildWith(id)}
+                        className={`flex flex-col items-start rounded-md border px-3 py-2 text-left
+                                    disabled:opacity-60 ${
+                                      active
+                                        ? "border-berry bg-berry-light"
+                                        : "border-line bg-surface hover:border-berry"
+                                    }`}
+                      >
+                        <span
+                          className={`text-caption font-semibold ${
+                            active ? "text-berry-dark" : "text-ink"
+                          }`}
+                        >
+                          {t.label} · {t.slides.length}장
+                        </span>
+                        <span className="text-caption text-sub">
+                          {noPhotos ? "사진이 없어 고를 수 없어요" : t.hint}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-caption text-sub">
+                  {regenerating
+                    ? "다시 만드는 중이에요···"
+                    : card.templateId
+                      ? "다른 구성을 누르면 슬라이드를 다시 만들어요."
+                      : "지금은 차곡이 내용에 맞춰 구성했어요. 정해진 구성으로 바꿀 수 있어요."}
+                </p>
               </div>
             )}
 
