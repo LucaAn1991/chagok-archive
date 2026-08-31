@@ -24,6 +24,16 @@ export const FONT_IDS = [
  */
 
 export const SIZE_STEPS = ["xs", "s", "m", "l", "xl"] as const;
+
+/**
+ * px로 직접 넣을 때의 상·하한 (1080 캔버스 기준).
+ *
+ * 자유값이지만 **범위는 막는다.** 8px 제목은 안 읽히고 400px 본문은 화면을 넘긴다 —
+ * 되돌릴 수 없는 결과를 만들 자유까지 줄 이유는 없다.
+ */
+export const MIN_SIZE_PX = 12;
+export const MAX_SIZE_PX = 240;
+export const SIZE_PX_STEP = 2;
 export const WEIGHTS = ["regular", "bold"] as const;
 export const ALIGNS = ["left", "center", "right"] as const;
 export const COLORS = ["ink", "sub", "accent"] as const;
@@ -112,6 +122,7 @@ export type ResolvedSlotStyle = {
   strike: boolean;
   colorHex?: string;
   fontId?: SlotStyle["fontId"];
+  sizePx?: number;
 };
 
 export const DEFAULT_SLOT_STYLE: ResolvedSlotStyle = {
@@ -150,6 +161,9 @@ export function parseSlotStyle(raw: unknown): SlotStyle | null {
   const fontId = pick(r.fontId, FONT_IDS);
 
   if (size) out.size = size;
+  if (typeof r.sizePx === "number" && Number.isFinite(r.sizePx)) {
+    out.sizePx = Math.round(Math.min(Math.max(r.sizePx, MIN_SIZE_PX), MAX_SIZE_PX));
+  }
   if (weight) out.weight = weight;
   if (align) out.align = align;
   if (color) out.color = color;

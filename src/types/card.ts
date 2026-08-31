@@ -137,6 +137,11 @@ export type SlideElement = {
 /** 슬롯 하나의 조절값. 안 고른 항목은 없다 (undefined) */
 export type SlotStyle = {
   size?: "xs" | "s" | "m" | "l" | "xl";
+  /**
+   * 글자 크기를 px로 직접 (08-31). **있으면 `size` 단계를 이긴다.**
+   * 1080 캔버스 기준이라 «그려지는 그 크기»다 — 테마 배율도 곱하지 않는다.
+   */
+  sizePx?: number;
   weight?: "regular" | "bold";
   align?: "left" | "center" | "right";
   /** 역할 색 — 브랜드 색이 바뀌면 따라 바뀐다 */

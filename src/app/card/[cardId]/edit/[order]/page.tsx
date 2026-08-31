@@ -11,7 +11,13 @@ import BackLink from "@/components/BackLink";
 import SlotToolbar from "@/components/SlotToolbar";
 import SlideEditor from "@/components/SlideEditor";
 import CardPhotoUploader from "@/components/CardPhotoUploader";
-import { IMAGE_LAYOUTS, LAYOUT_LABELS, layoutOptionsFor } from "@/lib/slide-layout";
+import {
+  IMAGE_LAYOUTS,
+  LAYOUT_FONT_SIZE,
+  LAYOUT_LABELS,
+  layoutOptionsFor,
+} from "@/lib/slide-layout";
+import { DEFAULT_SLOT_STYLE, SIZE_SCALE } from "@/lib/slot-style";
 import { bakeToElements, newTextBox } from "@/lib/free-layout";
 import { Plus, Trash2 } from "lucide-react";
 import { MAX_PHOTOS_PER_CARD } from "@/lib/storage/limits";
@@ -103,6 +109,20 @@ export default function SlideEditPage() {
 
   /** 캔버스 색 — 렌더러와 같은 함수를 쓴다. 어긋나면 덮은 자리가 눈에 띈다 */
   const canvas = applyBrand(resolveTheme(card?.themeId), brand, card?.bgOverride);
+
+  /**
+   * 이 요소가 실제로 그려지는 글자 크기 (1080 기준 px) — 렌더러와 같은 식.
+   *
+   * 자유 배치는 상자 높이에서, 레이아웃 모드는 **레이아웃이 정한 기준 크기**에
+   * 테마 배율을 곱해 나온다. px로 직접 넣었으면 그 값이 그대로다.
+   */
+  function fontSizeFor(el: (typeof hitBoxes)[number]): number {
+    const o = { ...DEFAULT_SLOT_STYLE, ...(el.style ?? {}) };
+    if (o.sizePx) return o.sizePx;
+    if (freeMode) return Math.round(1080 * el.h * 0.42 * SIZE_SCALE[o.size]);
+    const base = slide ? (LAYOUT_FONT_SIZE[slide.layoutId]?.[el.slot ?? ""] ?? 40) : 40;
+    return Math.round(base * canvas.type.scale * SIZE_SCALE[o.size]);
+  }
 
   /**
    * 미리보기에서 상자를 골랐을 때 (08-31).
@@ -348,6 +368,12 @@ export default function SlideEditPage() {
                 : undefined
           }
           availableFontIds={fontIds}
+          currentSizePx={(() => {
+            const box = hitBoxes.find((b) =>
+              freeMode ? b.id === selectedElId : b.slot === selectedSlot,
+            );
+            return box ? fontSizeFor(box) : undefined;
+          })()}
           disabled={saving}
           onChange={(next) => {
             /*
@@ -383,6 +409,7 @@ export default function SlideEditPage() {
           ink={canvas.color.ink}
           tracking={canvas.type.tracking}
           family={brand?.fontId ?? "pretendard"}
+          fontSizeFor={fontSizeFor}
           onEditText={(id, text) => {
             /*
               그 자리에서 고친 글을 저장한다 (08-31).

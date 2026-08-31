@@ -6,7 +6,6 @@ import {
   DEFAULT_SLOT_STYLE,
   LINE_HEIGHT_VALUE,
   OPACITY_VALUE,
-  SIZE_SCALE,
   TRACKING_DELTA,
 } from "@/lib/slot-style";
 import type { SlideElement } from "@/types";
@@ -67,6 +66,14 @@ type Props = {
   tracking?: number;
   /** 브랜드가 고른 폰트 이름 — 요소가 따로 안 고르면 이걸 쓴다 */
   family?: string;
+  /**
+   * 이 요소가 **실제로 그려지는** 글자 크기 (1080 기준 px).
+   *
+   * 편집기가 직접 계산하지 않는다. 자유 배치는 상자 높이에서 뽑지만
+   * 레이아웃 모드는 레이아웃이 정한 고정 크기라 식이 다르고,
+   * 여기서 어림잡으면 «치는 동안»과 «그려진 뒤»가 어긋난다 (08-31).
+   */
+  fontSizeFor: (el: SlideElement) => number;
   /** 글자를 그 자리에서 고쳤을 때. 없으면 그 자리 편집이 꺼진다 */
   onEditText?: (id: string, text: string) => void;
   /** 손을 뗐을 때만 부른다 — 끄는 동안 저장하면 요청이 폭주한다 */
@@ -84,6 +91,7 @@ export default function SlideEditor({
   ink,
   tracking = 0,
   family,
+  fontSizeFor,
   onEditText,
   onCommit,
 }: Props) {
@@ -217,7 +225,7 @@ export default function SlideEditor({
       {shown.map((el) => {
         const active = el.id === selectedId;
         const o = { ...DEFAULT_SLOT_STYLE, ...(el.style ?? {}) };
-        const fontSize = Math.round(SLIDE_SIZE * el.h * 0.42 * SIZE_SCALE[o.size]);
+        const fontSize = fontSizeFor(el);
 
         /*
           그 자리 편집 — 밑에 깔린 PNG의 옛 글자를 배경색으로 덮고 그 위에 입력칸을 놓는다.

@@ -1,4 +1,6 @@
 import type { LayoutId } from "../../types/card";
+// 편집기와 같은 표를 본다 — 여기 숫자를 박아두면 편집칸 크기가 어긋난다
+import { LAYOUT_FONT_SIZE as F } from "../slide-layout";
 import { applyBrand, resolveTheme, type Theme } from "./themes";
 import type { Brand } from "../../types/user";
 import type { SlideElement, SlotStyle } from "../../types/card";
@@ -170,7 +172,8 @@ function text(
     "div",
     {
       display: "flex",
-      fontSize: Math.round(size * th.type.scale * SIZE_SCALE[o.size]),
+      // px로 직접 넣었으면 그 값 그대로 — 테마 배율도 곱하지 않는다 (08-31)
+      fontSize: o.sizePx ?? Math.round(size * th.type.scale * SIZE_SCALE[o.size]),
       // 볼드를 고르지 않았으면 레이아웃이 정한 굵기를 그대로 쓴다
       fontWeight: adjusted.weight ? (o.weight === "bold" ? 700 : 400) : weight,
       letterSpacing: th.type.tracking + TRACKING_DELTA[o.tracking],
@@ -240,8 +243,8 @@ function cover(ctx: Ctx, t: Record<string, string>): Node {
         ...alignStyle(ctx.th),
       },
       [
-        text(ctx, "title", t.title ?? "", 76, 700, { lineHeight: 1.3 }),
-        text(ctx, "subtitle", t.subtitle ?? "", 34, 400, { color: th.color.sub }),
+        text(ctx, "title", t.title ?? "", F.cover.title, 700, { lineHeight: 1.3 }),
+        text(ctx, "subtitle", t.subtitle ?? "", F.cover.subtitle, 400, { color: th.color.sub }),
       ],
     ),
   ]);
@@ -262,8 +265,8 @@ function textOnly(ctx: Ctx, t: Record<string, string>): Node {
         ...alignStyle(ctx.th),
       },
       [
-        text(ctx, "title", t.title ?? "", 52, 700),
-        text(ctx, "body", t.body ?? "", 36, 400, { lineHeight: th.type.lineHeight, color: th.color.ink }),
+        text(ctx, "title", t.title ?? "", F["text-only"].title, 700),
+        text(ctx, "body", t.body ?? "", F["text-only"].body, 400, { lineHeight: th.type.lineHeight, color: th.color.ink }),
       ],
     ),
   ]);
@@ -294,8 +297,8 @@ function imageTop(ctx: Ctx, t: Record<string, string>, imageUrl: string | null):
           gap: 28,
         },
         [
-          text(ctx, "title", t.title ?? "", 46, 700),
-          text(ctx, "body", t.body ?? "", 32, 400, { lineHeight: th.type.lineHeight }),
+          text(ctx, "title", t.title ?? "", F["image-top"].title, 700),
+          text(ctx, "body", t.body ?? "", F["image-top"].body, 400, { lineHeight: th.type.lineHeight }),
         ],
       ),
     ],
@@ -326,7 +329,7 @@ function imageFull(ctx: Ctx, t: Record<string, string>, imageUrl: string | null)
         backgroundColor: th.color.scrim,
       },
       // 사진 위 글자는 늘 흰색이다 — 테마 색을 쓰면 밝은 사진에서 읽히지 않는다
-      [text(ctx, "title", t.title ?? "", 52, 700, { color: "#FFFFFF", lineHeight: 1.35 })],
+      [text(ctx, "title", t.title ?? "", F["image-full"].title, 700, { color: "#FFFFFF", lineHeight: 1.35 })],
     ),
   ]);
 }
@@ -342,7 +345,7 @@ function list(ctx: Ctx, t: Record<string, string>): Node {
   const dot = Math.round(72 * th.type.scale);
 
   return root(ctx.th, [
-    text(ctx, "title", t.title ?? "", 48, 700, { marginBottom: 48 }),
+    text(ctx, "title", t.title ?? "", F.list.title, 700, { marginBottom: 48 }),
     el(
       "div",
       { display: "flex", flexDirection: "column", gap: 36 },
@@ -364,7 +367,7 @@ function list(ctx: Ctx, t: Record<string, string>): Node {
             },
             String(i + 1),
           ),
-          text(ctx, `item${i + 1}`, item, 34, 400, { lineHeight: 1.5, flexGrow: 1 }),
+          text(ctx, `item${i + 1}`, item, F.list.item1, 400, { lineHeight: 1.5, flexGrow: 1 }),
         ]),
       ),
     ),
@@ -386,8 +389,8 @@ function closing(ctx: Ctx, t: Record<string, string>): Node {
         gap: 40,
       },
       [
-        text(ctx, "message", t.message ?? "", 56, 700, { textAlign: "center", lineHeight: 1.4 }),
-        text(ctx, "cta", t.cta ?? "", 34, 600, { color: th.color.sub }),
+        text(ctx, "message", t.message ?? "", F.closing.message, 700, { textAlign: "center", lineHeight: 1.4 }),
+        text(ctx, "cta", t.cta ?? "", F.closing.cta, 600, { color: th.color.sub }),
       ],
     ),
   ]);
@@ -443,7 +446,7 @@ function freeform(ctx: Ctx, elements: SlideElement[]): Node {
           alignItems: "flex-start",
           justifyContent: JUSTIFY[o.align],
           // 상자 높이에 비례한 글자 크기 — 상자를 키우면 글자가 커진다
-          fontSize: Math.round(SLIDE_SIZE * e.h * 0.42 * SIZE_SCALE[o.size]),
+          fontSize: o.sizePx ?? Math.round(SLIDE_SIZE * e.h * 0.42 * SIZE_SCALE[o.size]),
           fontWeight: o.weight === "bold" ? 700 : 400,
           letterSpacing: th.type.tracking + TRACKING_DELTA[o.tracking],
           lineHeight: LINE_HEIGHT_VALUE[o.lineHeight],

@@ -23,8 +23,9 @@ import {
   LINE_HEIGHTS,
   LINE_HEIGHT_LABELS,
   OPACITIES,
-  SIZE_LABELS,
-  SIZE_STEPS,
+  MAX_SIZE_PX,
+  MIN_SIZE_PX,
+  SIZE_PX_STEP,
   TRACKINGS,
   TRACKING_LABELS,
   isAdjusted,
@@ -51,6 +52,11 @@ type Props = {
   onChange: (next: SlotStyle | undefined) => void;
   /** 파일이 실제로 있는 폰트만 — 없는 폰트를 고르면 기본으로 그려진다 */
   availableFontIds?: FontId[];
+  /**
+   * 지금 «실제로 그려지는» 글자 크기(px). px를 직접 안 넣었을 때 칸에 보여준다 —
+   * 빈 칸을 보여주면 «지금 몇인지» 모른 채로 고쳐야 한다.
+   */
+  currentSizePx?: number;
   disabled?: boolean;
 };
 
@@ -59,6 +65,7 @@ export default function SlotToolbar({
   value,
   onChange,
   availableFontIds = [],
+  currentSizePx,
   disabled,
 }: Props) {
   const v = value ?? {};
@@ -89,8 +96,14 @@ export default function SlotToolbar({
     if (next !== current) onChange({ ...v, [key]: next });
   }
 
-  const size = v.size ?? "m";
   const tracking = v.tracking ?? "normal";
+  const shownPx = v.sizePx ?? currentSizePx ?? 40;
+
+  /** px는 자유값이되 범위는 막는다 — 8px 제목은 안 읽힌다 */
+  function setPx(next: number) {
+    const clamped = Math.round(Math.min(Math.max(next, MIN_SIZE_PX), MAX_SIZE_PX));
+    onChange({ ...v, sizePx: clamped });
+  }
   const lineHeight = v.lineHeight ?? "normal";
   const opacity = v.opacity ?? "100";
   const fonts = BUILT_IN_FONTS.filter((f) => availableFontIds.includes(f.id));
@@ -122,13 +135,42 @@ export default function SlotToolbar({
       )}
 
       <Sep />
-      <Stepper
-        label="크기"
-        value={SIZE_LABELS[size]}
-        disabled={disabled}
-        onMinus={() => step("size", SIZE_STEPS, size, -1)}
-        onPlus={() => step("size", SIZE_STEPS, size, 1)}
-      />
+      {/* 크기는 px로 직접 (08-31). 캔버스 1080 기준이라 «그려지는 그 크기»다 */}
+      <span className="flex shrink-0 items-center gap-1" title="글자 크기(px)">
+        <button
+          type="button"
+          aria-label="글자 작게"
+          disabled={disabled}
+          onClick={() => setPx(shownPx - SIZE_PX_STEP)}
+          className="flex h-8 w-7 items-center justify-center rounded-md border border-line bg-surface text-sub hover:text-ink disabled:opacity-60"
+        >
+          <Minus size={14} aria-hidden />
+        </button>
+        <input
+          type="number"
+          aria-label="글자 크기(px)"
+          min={MIN_SIZE_PX}
+          max={MAX_SIZE_PX}
+          value={shownPx}
+          disabled={disabled}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            if (Number.isFinite(n)) setPx(n);
+          }}
+          className={`h-8 w-14 rounded-md border bg-surface px-1 text-center text-caption text-ink ${
+            v.sizePx ? "border-berry" : "border-line"
+          }`}
+        />
+        <button
+          type="button"
+          aria-label="글자 크게"
+          disabled={disabled}
+          onClick={() => setPx(shownPx + SIZE_PX_STEP)}
+          className="flex h-8 w-7 items-center justify-center rounded-md border border-line bg-surface text-sub hover:text-ink disabled:opacity-60"
+        >
+          <Plus size={14} aria-hidden />
+        </button>
+      </span>
 
       <Sep />
       {/* 색 — 역할 3종 + 직접 찍기 */}

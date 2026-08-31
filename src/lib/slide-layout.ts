@@ -33,6 +33,24 @@ export const LAYOUT_SLOTS: Record<LayoutId, string[]> = {
 
 export const ALL_LAYOUTS = Object.keys(LAYOUT_SLOTS) as LayoutId[];
 
+/**
+ * 레이아웃이 슬롯마다 정한 **기준 글자 크기** (1080 캔버스 기준, px).
+ *
+ * 렌더러(`lib/render/layouts.ts`)와 편집기가 **같은 표를 본다.**
+ * 전에는 렌더러 안에 숫자로 박혀 있어서, 편집칸이 상자 높이로 크기를 어림잡았고
+ * 레이아웃 모드에서 «치는 동안»과 «그려진 뒤»가 달라 보였다 (08-31).
+ *
+ * 실제로 그려지는 크기는 여기에 테마 배율과 슬롯 조절 배율이 곱해진 값이다.
+ */
+export const LAYOUT_FONT_SIZE: Record<LayoutId, Record<string, number>> = {
+  cover: { title: 76, subtitle: 34 },
+  "text-only": { title: 52, body: 36 },
+  "image-top": { title: 46, body: 32 },
+  "image-full": { title: 52 },
+  list: { title: 48, item1: 34, item2: 34, item3: 34, item4: 34 },
+  closing: { message: 56, cta: 34 },
+};
+
 /** 사진을 넣는 레이아웃 — 나머지는 사진이 있어도 자리가 없다 */
 export const IMAGE_LAYOUTS: LayoutId[] = ["image-top", "image-full"];
 
