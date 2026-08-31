@@ -25,10 +25,10 @@ export default function FeaturedContentCard({
   const thumbnail = card.photoUrls[0];
 
   return (
-    <section className="rounded-lg border border-line bg-surface p-5 md:p-6">
+    <section className="rounded-lg border border-line bg-surface p-4 md:p-6">
       <StatusBadge status={card.status} />
 
-      <div className="mt-4 flex items-start gap-4">
+      <div className="mt-3 flex items-start gap-4 md:mt-4">
         <div className="min-w-0 flex-1">
           <h2 className="text-h3 font-bold text-ink">{card.title}</h2>
           <p className="mt-1.5 text-body text-sub">
@@ -47,7 +47,7 @@ export default function FeaturedContentCard({
 
       <Link
         href={ctaHref}
-        className="mt-5 flex h-12 w-full items-center justify-center rounded-md bg-berry text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-berry-dark md:h-11"
+        className="mt-4 flex h-11 w-full md:mt-5 items-center justify-center rounded-md bg-berry text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-berry-dark md:h-11"
       >
         {ctaLabel}
       </Link>

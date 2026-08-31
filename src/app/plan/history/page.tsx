@@ -8,6 +8,7 @@ import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
+import PageHeader from "@/components/PageHeader";
 import PlanTabs from "@/components/PlanTabs";
 import type { Card, Plan } from "@/types";
 
@@ -94,6 +95,7 @@ export default function PlanHistoryPage() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <main className="mx-auto w-full max-w-[720px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
+          <PageHeader title="AI 기획" />
           <PlanTabs />
 
           {state.phase === "loading" && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut, type User as AuthUser } from "firebase/auth";
@@ -14,13 +14,15 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import { ArrowUp, CircleUserRound } from "lucide-react";
+import { ArrowUp, ChevronRight, CircleUserRound } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import FeaturedContentCard from "@/components/FeaturedContentCard";
+import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
-import { formatMonthDayWeekday } from "@/lib/format";
+import { audienceLine, formatMonthDayWeekday } from "@/lib/format";
+import { contentTypeForAudience } from "@/lib/audiences";
 import type { Card } from "@/types";
 
 /**
@@ -110,6 +112,7 @@ type HomeState =
       nextCard: Card | null; // 오늘 이후 가장 가까운 카드 (케이스 C)
       publishToday: boolean; // 오늘이 발행 요일인가 — user.uploadDays 기준 (케이스 B)
       weekCards: Card[];
+      futureCards: Card[]; // 이번 주 이후 — ③ 접힌 나머지 요약용
     };
 
 function Home({ uid }: { uid: string }) {
@@ -177,13 +180,14 @@ function Home({ uid }: { uid: string }) {
             where("userId", "==", uid),
             where("scheduledDate", ">", todayKey),
             orderBy("scheduledDate", "asc"),
-            limit(5),
+            limit(30),
           ),
         );
-        const nextCard =
-          nextSnap.docs
-            .map((d) => ({ ...(d.data() as Omit<Card, "id">), id: d.id }))
-            .find((c) => c.status !== "discarded") ?? null;
+        const upcoming = nextSnap.docs
+          .map((d) => ({ ...(d.data() as Omit<Card, "id">), id: d.id }))
+          .filter((c) => c.status !== "discarded");
+        const nextCard = upcoming[0] ?? null;
+        const futureCards = upcoming.filter((c) => c.scheduledDate > end); // 이번 주 밖
 
         if (cancelled) return; // 화면을 떠났으면 상태를 건드리지 않는다
         setState({
@@ -193,6 +197,7 @@ function Home({ uid }: { uid: string }) {
           nextCard,
           publishToday,
           weekCards,
+          futureCards,
         });
       } catch {
         if (!cancelled) setState({ phase: "error" });
@@ -227,7 +232,7 @@ function Home({ uid }: { uid: string }) {
         </header>
 
         {/* 홈 최대 폭 960 (DESIGN.md §4) · 하단 탭에 가리지 않게 모바일만 여유 패딩 */}
-        <main className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
+        <main className="mx-auto w-full max-w-[960px] flex-1 px-4 py-3 pb-20 md:p-6 md:pb-8 min-[1200px]:p-8">
           {state.phase === "loading" && <HomeSkeleton />}
           {state.phase === "error" && (
             <HomeError
@@ -280,12 +285,14 @@ function HomeReady({
   nextCard,
   publishToday,
   weekCards,
+  futureCards,
 }: {
   hasAnyCard: boolean;
   todayCard: Card | null;
   nextCard: Card | null;
   publishToday: boolean;
   weekCards: Card[];
+  futureCards: Card[];
 }) {
   const now = new Date();
   const todayKey = toDateKey(now);
@@ -299,7 +306,8 @@ function HomeReady({
         : ("D" as const);
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-4 md:gap-8">
+      <PageHeader />
       {/* 인사 한 줄 + 오늘 날짜 — 이모지 없음 (08-31) */}
       <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h1 className="text-h2 font-bold text-ink">{greetingForHour(now.getHours())}</h1>
@@ -309,7 +317,7 @@ function HomeReady({
       {situation === "A" && todayCard && (
         <section>
           <p className="text-body-l text-ink">오늘 올릴 콘텐츠에요! 바로 제작해볼까요?</p>
-          <div className="mt-4">
+          <div className="mt-3 md:mt-4">
             <FeaturedContentCard
               card={todayCard}
               ctaLabel="제작하기"
@@ -335,7 +343,7 @@ function HomeReady({
           <p className="text-body-l text-ink">
             {relativeDayLabel(nextCard.scheduledDate, todayKey)} 올릴 콘텐츠에요!
           </p>
-          <div className="mt-4">
+          <div className="mt-3 md:mt-4">
             <FeaturedContentCard
               card={nextCard}
               ctaLabel="미리 제작하기"
@@ -371,6 +379,7 @@ function HomeReady({
       )}
 
       <WeekSection weekCards={weekCards} />
+      <CollapsedFuture cards={futureCards} />
     </div>
   );
 }
@@ -417,48 +426,141 @@ function OneLineIdeaInput() {
   );
 }
 
-/* ============================================================
-   이번 주 예정 — 상태 B의 보조 영역 (DESIGN.md §9)
-   ============================================================ */
+/** 'YYYY-MM-DD' → '9/1 (월)' — 날짜 열 압축 표기 (2차 예시 형식) */
+function shortDateLabel(dateKey: string): string {
+  const [, m, d] = dateKey.split("-").map(Number);
+  const weekday = ["일", "월", "화", "수", "목", "금", "토"][
+    new Date(`${dateKey}T00:00:00`).getDay()
+  ];
+  return `${m}/${d} (${weekday})`;
+}
+
+/** 날짜 기준으로 묶는다 — 같은 날짜의 카드는 날짜를 한 번만 적기 위해 */
+function groupByDate(cards: Card[]): { dateKey: string; cards: Card[] }[] {
+  const groups: { dateKey: string; cards: Card[] }[] = [];
+  for (const card of cards) {
+    const last = groups[groups.length - 1];
+    if (last && last.dateKey === card.scheduledDate) last.cards.push(card);
+    else groups.push({ dateKey: card.scheduledDate, cards: [card] });
+  }
+  return groups;
+}
+
+/** 카드 한 행 — 제목 한 줄(말줄임) + 대상·유형 아랫줄 (한 줄에 병기하지 않는다) */
+function CardRow({ card }: { card: Card }) {
+  return (
+    <Link href={`/card/${card.id}`} className="block min-w-0 py-0.5">
+      <span className="block truncate text-body text-ink">{card.title}</span>
+      <span className="block truncate text-caption text-sub">
+        {audienceLine(card.audience)} · {contentTypeForAudience(card.audience)}
+      </span>
+    </Link>
+  );
+}
+
+/** 날짜 열(고정 폭) + 카드 열(남는 폭) — 날짜는 그룹 첫 행에만 */
+function DateGroupedList({ cards, todayKey }: { cards: Card[]; todayKey: string }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {groupByDate(cards).map((group) => (
+        <div key={group.dateKey} className="flex gap-3">
+          <span
+            className={[
+              "w-16 shrink-0 pt-1 text-caption",
+              group.dateKey === todayKey ? "font-semibold text-berry-dark" : "text-sub",
+            ].join(" ")}
+          >
+            {shortDateLabel(group.dateKey)}
+          </span>
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            {group.cards.map((card) => (
+              <CardRow key={card.id} card={card} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 이번 주 예정 — 가장 이른 4건까지만, 나머지는 렌더링하지 않는다 (08-31 2차).
+ * 화면에 표시하는 숫자는 「이번 주엔 N개 남아있어요」 하나뿐이다.
+ */
+const mediaSubscribe = (cb: () => void) => {
+  const mq = window.matchMedia("(max-width: 767px) and (max-height: 900px)");
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+};
 
 function WeekSection({ weekCards }: { weekCards: Card[] }) {
-  if (weekCards.length === 0) return null; // 빈 상황은 Hero(A·C)가 이미 말하고 있다
+  // 한 화면 규칙(08-31 2차) — 높이가 모자라는 모바일에서는 4건 → 3건으로 줄인다.
+  // 폰트를 깎아 맞추지 않는다
+  const compact = useSyncExternalStore(
+    mediaSubscribe,
+    () => window.matchMedia("(max-width: 767px) and (max-height: 900px)").matches,
+    () => false,
+  );
+  if (weekCards.length === 0) return null;
 
   const todayKey = toDateKey(new Date());
+  const remaining = weekCards.filter((c) => c.status !== "published").length;
+  const visible = weekCards.slice(0, compact ? 3 : 4);
+
+  return (
+    <section className="border-y border-line py-2.5">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-title font-bold text-ink">이번 주 예정</h2>
+        {/* 배정 카드 전체 목록은 캘린더가 담당 — 새 페이지를 만들지 않는다 */}
+        <Link
+          href="/calendar"
+          className="text-caption font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
+        >
+          전체보기
+        </Link>
+      </div>
+      <p className="mt-0.5 text-caption text-sub">이번 주엔 {remaining}개 남아있어요</p>
+
+      <div className="mt-2">
+        <DateGroupedList cards={visible} todayKey={todayKey} />
+      </div>
+    </section>
+  );
+}
+
+/**
+ * ③ 접힌 나머지 — 이번 주 밖 카드를 한 줄 요약 + 펼치기로만 (08-31 2차).
+ * 예: «9월에 쓸 거 2개 있어요»
+ */
+function CollapsedFuture({ cards }: { cards: Card[] }) {
+  const [open, setOpen] = useState(false);
+  if (cards.length === 0) return null;
+
+  const firstMonth = Number(cards[0].scheduledDate.split("-")[1]);
+  const countInMonth = cards.filter(
+    (c) => Number(c.scheduledDate.split("-")[1]) === firstMonth,
+  ).length;
 
   return (
     <section>
-      <h2 className="text-title font-bold text-ink">이번 주 예정</h2>
-      <ul className="mt-3 flex flex-col overflow-hidden rounded-lg border border-line bg-surface">
-        {weekCards.map((card) => {
-          const [, m, d] = card.scheduledDate.split("-").map(Number);
-          const weekday = ["일", "월", "화", "수", "목", "금", "토"][
-            new Date(card.scheduledDate + "T00:00:00").getDay()
-          ];
-          const isToday = card.scheduledDate === todayKey;
-          return (
-            <li key={card.id} className="border-b border-line last:border-b-0">
-              <Link
-                href={`/card/${card.id}`}
-                className="flex min-h-14 items-center gap-4 px-4 py-3 transition-colors duration-200 hover:bg-surface-muted"
-              >
-                <span
-                  className={[
-                    "w-14 shrink-0 text-caption",
-                    isToday ? "font-semibold text-berry" : "text-sub",
-                  ].join(" ")}
-                >
-                  {isToday ? "오늘" : `${m}.${d} (${weekday})`}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-body text-ink">
-                  {card.shortTitle || card.title}
-                </span>
-                <StatusBadge status={card.status} />
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex items-center gap-1 text-body text-sub transition-colors duration-200 hover:text-ink"
+      >
+        <ChevronRight
+          size={16}
+          aria-hidden
+          className={`transition-transform duration-200 ${open ? "rotate-90" : ""}`}
+        />
+        {firstMonth}월에 쓸 거 {countInMonth}개 있어요
+      </button>
+      {open && (
+        <div className="mt-2">
+          <DateGroupedList cards={cards} todayKey="" />
+        </div>
+      )}
     </section>
   );
 }

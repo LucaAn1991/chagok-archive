@@ -17,6 +17,7 @@ import PlanningSummaryPanel, {
   type PlanSummaryPatch,
 } from "@/components/PlanningSummaryPanel";
 import { STOCK_SUGGESTIONS } from "@/components/PlanPhotoPicker";
+import PageHeader from "@/components/PageHeader";
 import PlanTabs from "@/components/PlanTabs";
 
 /**
@@ -343,6 +344,7 @@ function NewPlanScreen() {
           <section className="flex min-w-0 flex-1 flex-col gap-4 min-[1280px]:min-w-[560px]">
             <header>
               {/* 탭 [새 기획]/[지난 기획] · 기본값 새 기획 (IA 2) */}
+              <PageHeader title="AI 기획" />
               <PlanTabs />
               {isMock && (
                 <p className="mt-2 text-caption text-sub">
