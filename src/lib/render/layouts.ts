@@ -465,6 +465,25 @@ function freeform(ctx: Ctx, elements: SlideElement[]): Node {
         return imageArea(th, e.imageUrl ?? null, { ...box, objectFit: "cover" });
       }
 
+      /*
+        도형 (08-31). 종류를 나누지 않고 «모서리 둥글기» 하나로 다룬다 —
+        0이면 사각형, 0.5면 원, 납작하게 줄이면 선이다.
+      */
+      if (e.kind === "shape") {
+        const so = { ...DEFAULT_SLOT_STYLE, ...(e.style ?? {}) };
+        const fill =
+          so.colorHex ??
+          (so.color === "accent" ? th.color.accent : so.color === "sub" ? th.color.sub : th.color.ink);
+        // 둥글기는 «짧은 변» 기준이라 납작한 도형도 예상대로 둥글어진다
+        const shortSide = Math.min(e.w, e.h) * SLIDE_SIZE;
+        return el("div", {
+          ...box,
+          backgroundColor: ctx.hit?.[e.id] ?? fill,
+          borderRadius: Math.round((e.radius ?? 0) * shortSide * 2),
+          ...(so.opacity !== "100" ? { opacity: OPACITY_VALUE[so.opacity] } : {}),
+        });
+      }
+
       const o = { ...DEFAULT_SLOT_STYLE, ...(e.style ?? {}) };
       const JUSTIFY = { left: "flex-start", center: "center", right: "flex-end" } as const;
 

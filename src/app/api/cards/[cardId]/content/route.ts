@@ -180,7 +180,7 @@ function parseElements(raw: unknown): SlideElement[] | null {
 
     if (typeof e.id !== "string" || !e.id || e.id.length > 40 || seen.has(e.id)) return null;
     seen.add(e.id);
-    if (e.kind !== "text" && e.kind !== "image") return null;
+    if (e.kind !== "text" && e.kind !== "image" && e.kind !== "shape") return null;
     const nums = [e.x, e.y, e.w, e.h, e.z];
     if (!nums.every((n) => typeof n === "number" && Number.isFinite(n))) return null;
 
@@ -198,6 +198,12 @@ function parseElements(raw: unknown): SlideElement[] | null {
       if (!isShortText(e.text)) return null;
       base.text = e.text;
       if (typeof e.slot === "string" && e.slot.length <= 20) base.slot = e.slot;
+      const st = parseSlotStyle(e.style);
+      if (st) base.style = st;
+    } else if (e.kind === "shape") {
+      // 둥글기는 0~0.5. 벗어난 값은 자르되 거절하지는 않는다 — 그려지긴 한다
+      const r = typeof e.radius === "number" && Number.isFinite(e.radius) ? e.radius : 0;
+      base.radius = Math.min(Math.max(r, 0), 0.5);
       const st = parseSlotStyle(e.style);
       if (st) base.style = st;
     } else {

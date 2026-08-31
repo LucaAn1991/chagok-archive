@@ -98,10 +98,25 @@ export function bakeToElements(slide: Slide): SlideElement[] {
   return out;
 }
 
+/**
+ * 요소 id.
+ *
+ * **시각만 쓰면 안 된다.** 같은 밀리초에 둘을 만들면 id가 겹치고,
+ * 서버가 중복 id를 거절해 저장이 조용히 실패한다 (08-31에 실제로 겹쳤다).
+ */
+function newId(prefix: string): string {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
 /** 0~1을 벗어나거나 뒤집힌 상자를 바로잡는다 — 화면 밖으로 나간 요소는 잡을 수 없다 */
 export function clampElement(e: SlideElement): SlideElement {
-  const w = Math.min(Math.max(e.w, 0.05), 1);
-  const h = Math.min(Math.max(e.h, 0.03), 1);
+  const w = Math.min(Math.max(e.w, 0.02), 1);
+  /*
+    최소 높이를 아주 얇게 둔다 — 선(납작한 도형)을 그리려면 필요하다.
+    너무 얇아 손으로 잡기 어려운 문제는 편집기가 «누를 수 있는 영역»을
+    따로 넓혀서 푼다 (SlideEditor).
+  */
+  const h = Math.min(Math.max(e.h, 0.008), 1);
   return {
     ...e,
     w,
@@ -120,7 +135,7 @@ export function clampElement(e: SlideElement): SlideElement {
 export function newTextBox(existing: SlideElement[]): SlideElement {
   const n = existing.length;
   return clampElement({
-    id: `box-${Date.now().toString(36)}`,
+    id: newId("box"),
     kind: "text",
     x: 0.1 + (n % 4) * 0.03,
     y: 0.14 + (n % 6) * 0.06,
@@ -128,5 +143,35 @@ export function newTextBox(existing: SlideElement[]): SlideElement {
     h: 0.1,
     z: Math.max(0, ...existing.map((e) => e.z)) + 1,
     text: "새 문구",
+  });
+}
+
+/**
+ * 새 도형 (08-31 · 편집기).
+ *
+ * 종류를 나누지 않고 «모서리 둥글기»만 다르게 준다 —
+ * 0이면 사각형, 0.5면 원, 납작하게 만들면 선이다.
+ */
+export function newShape(
+  existing: SlideElement[],
+  preset: "rect" | "circle" | "line",
+): SlideElement {
+  const n = existing.length;
+  const box =
+    preset === "circle"
+      ? { w: 0.24, h: 0.24, radius: 0.5 }
+      : preset === "line"
+        ? { w: 0.5, h: 0.012, radius: 0 }
+        : { w: 0.32, h: 0.18, radius: 0 };
+
+  return clampElement({
+    id: newId("shape"),
+    kind: "shape",
+    x: 0.12 + (n % 4) * 0.03,
+    y: 0.2 + (n % 6) * 0.05,
+    ...box,
+    // 새 도형은 강조색으로 — 배경과 같은 색이면 «안 생겼다»로 보인다
+    style: { color: "accent" },
+    z: Math.max(0, ...existing.map((e) => e.z)) + 1,
   });
 }

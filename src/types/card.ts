@@ -118,7 +118,7 @@ export type Slide = {
  */
 export type SlideElement = {
   id: string;
-  kind: "text" | "image";
+  kind: "text" | "image" | "shape";
   /** 0~1 비율. 왼쪽 위 기준 */
   x: number;
   y: number;
@@ -132,6 +132,16 @@ export type SlideElement = {
   style?: SlotStyle;
   /** kind가 'image'일 때. null이면 회색 면 */
   imageUrl?: string | null;
+  /**
+   * kind가 'shape'일 때의 모서리 둥글기 (08-31). 짧은 변 대비 0~0.5 비율.
+   *
+   * **도형 종류를 따로 두지 않는다.** 0이면 사각형, 0.5면 원, 그 사이면
+   * 둥근 사각형이고, 납작하게 줄이면 선이 된다. 종류를 나누면 «원을 타원으로»
+   * 같은 경우에 규칙이 하나 더 생긴다.
+   *
+   * 색·투명도는 `style`(colorHex·color·opacity)을 글자와 똑같이 쓴다.
+   */
+  radius?: number;
 };
 
 /** 슬롯 하나의 조절값. 안 고른 항목은 없다 (undefined) */

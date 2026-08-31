@@ -100,6 +100,7 @@ export default function SlideEditor({
   const [editText, setEditText] = useState("");
 
   function beginEdit(el: SlideElement) {
+    // 도형·사진에는 고칠 글자가 없다
     if (!onEditText || disabled || el.kind !== "text") return;
     setEditingId(el.id);
     setEditText(el.text ?? "");
@@ -300,6 +301,9 @@ export default function SlideEditor({
               top: `${el.y * 100}%`,
               width: `${el.w * 100}%`,
               height: `${el.h * 100}%`,
+              // 선처럼 얇은 도형도 손으로 잡을 수 있어야 한다 — 그리는 크기와 별개다
+              minWidth: 24,
+              minHeight: 24,
             }}
             className={`absolute rounded-sm border-2 ${
               mode === "edit" ? "cursor-move" : "cursor-pointer"

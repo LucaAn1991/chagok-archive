@@ -18,7 +18,7 @@ import {
   layoutOptionsFor,
 } from "@/lib/slide-layout";
 import { DEFAULT_SLOT_STYLE, SIZE_SCALE } from "@/lib/slot-style";
-import { bakeToElements, newTextBox } from "@/lib/free-layout";
+import { bakeToElements, newShape, newTextBox } from "@/lib/free-layout";
 import { Plus, Trash2 } from "lucide-react";
 import { MAX_PHOTOS_PER_CARD } from "@/lib/storage/limits";
 import { applyBrand, resolveTheme } from "@/lib/render/themes";
@@ -298,6 +298,13 @@ export default function SlideEditPage() {
     saveBoxes([...slide.elements, box]);
   }
 
+  function addShape(preset: "rect" | "circle" | "line") {
+    if (!slide?.elements) return;
+    const shape = newShape(slide.elements, preset);
+    setSelectedElId(shape.id);
+    saveBoxes([...slide.elements, shape]);
+  }
+
   function removeBox(id: string) {
     if (!slide?.elements) return;
     const next = slide.elements.filter((e) => e.id !== id);
@@ -567,9 +574,28 @@ export default function SlideEditPage() {
               텍스트 상자 추가
             </button>
 
-            {(slide.elements ?? [])
-              .filter((e) => e.kind === "text")
-              .map((e, i) => {
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  ["rect", "사각형"],
+                  ["circle", "원"],
+                  ["line", "선"],
+                ] as ["rect" | "circle" | "line", string][]
+              ).map(([preset, label]) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => addShape(preset)}
+                  disabled={saving}
+                  className="flex h-9 items-center gap-1 rounded-md border border-line bg-surface px-3 text-caption text-sub hover:text-ink disabled:opacity-60"
+                >
+                  <Plus size={14} aria-hidden />
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {(slide.elements ?? []).map((e, i) => {
                 const active = selectedElId === e.id;
                 return (
                   <div
@@ -584,11 +610,19 @@ export default function SlideEditPage() {
                       className="flex-1 truncate text-left text-body text-ink"
                     >
                       <span className="mr-2 text-caption text-sub">{i + 1}</span>
-                      {e.text?.trim() || "(빈 상자)"}
+                      {e.kind === "shape"
+                        ? e.radius && e.radius >= 0.4
+                          ? "원"
+                          : e.h < 0.03
+                            ? "선"
+                            : "사각형"
+                        : e.kind === "image"
+                          ? "사진"
+                          : e.text?.trim() || "(빈 상자)"}
                     </button>
                     <button
                       type="button"
-                      aria-label={`텍스트 상자 ${i + 1} 지우기`}
+                      aria-label={`${i + 1}번 요소 지우기`}
                       disabled={saving}
                       onClick={() => removeBox(e.id)}
                       className="flex size-9 items-center justify-center rounded-md text-sub hover:bg-surface-muted disabled:opacity-60"
@@ -600,7 +634,8 @@ export default function SlideEditPage() {
               })}
 
             <p className="text-caption text-sub">
-              글자는 위 미리보기에서 두 번 눌러 고쳐요. 여기서는 상자를 더하거나 지워요.
+              글자는 위 미리보기에서 두 번 눌러 고쳐요. 도형은 골라서 끌면 옮겨지고, 색은 위
+              툴바에서 바꿔요.
             </p>
           </>
         )}
