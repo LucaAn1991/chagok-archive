@@ -399,41 +399,41 @@ function CalendarView({ uid }: { uid: string }) {
       <div className="flex min-w-0 flex-1 flex-col">
         {/* 캘린더 최대 폭 1200 (DESIGN.md §4) */}
         <main className="mx-auto w-full max-w-[1200px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
-          {/* 헤더 — 이동 · 오늘 · 월간/주간 · 놓친 카드 */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => move(-1)}
-                aria-label={view === "month" ? "이전 달" : "이전 주"}
-                className="flex size-11 items-center justify-center rounded-md text-sub hover:bg-surface-muted"
-              >
-                <ChevronLeft size={20} aria-hidden />
-              </button>
-              {/* 주간 제목이 길다 — 모바일에서는 한 단계 작게 */}
-              <h1 className="text-center text-body font-bold text-ink md:min-w-[120px] md:text-title">
-                {title}
-              </h1>
-              <button
-                type="button"
-                onClick={() => move(1)}
-                aria-label={view === "month" ? "다음 달" : "다음 주"}
-                className="flex size-11 items-center justify-center rounded-md text-sub hover:bg-surface-muted"
-              >
-                <ChevronRight size={20} aria-hidden />
-              </button>
-              <button
-                type="button"
-                onClick={goToday}
-                className="ml-1 h-9 whitespace-nowrap rounded-md border border-line bg-surface px-3 text-body text-ink hover:bg-surface-muted"
-              >
-                오늘
-              </button>
-            </div>
+          {/* 헤더 — 이동·오늘 위, 월간/주간 토글은 제목 바로 아래 (08-31 v4) */}
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => move(-1)}
+                  aria-label={view === "month" ? "이전 달" : "이전 주"}
+                  className="flex size-11 items-center justify-center rounded-md text-sub hover:bg-surface-muted"
+                >
+                  <ChevronLeft size={20} aria-hidden />
+                </button>
+                {/* 주간 제목이 길다 — 모바일에서는 한 단계 작게 */}
+                <h1 className="text-center text-body font-bold text-ink md:min-w-[120px] md:text-title">
+                  {title}
+                </h1>
+                <button
+                  type="button"
+                  onClick={() => move(1)}
+                  aria-label={view === "month" ? "다음 달" : "다음 주"}
+                  className="flex size-11 items-center justify-center rounded-md text-sub hover:bg-surface-muted"
+                >
+                  <ChevronRight size={20} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={goToday}
+                  className="ml-1 h-9 whitespace-nowrap rounded-md border border-line bg-surface px-3 text-body text-ink hover:bg-surface-muted"
+                >
+                  오늘
+                </button>
+              </div>
 
-            <div className="flex items-center gap-2">
-              {/* 월간/주간 토글 */}
-              <div className="flex h-9 items-center rounded-md border border-line bg-surface p-0.5">
+              {/* 월간/주간 토글 — 제목 아래 정렬 */}
+              <div className="ml-11 mt-1.5 inline-flex h-9 items-center rounded-md border border-line bg-surface p-0.5">
                 {(["month", "week"] as const).map((v) => (
                   <button
                     key={v}
@@ -450,19 +450,19 @@ function CalendarView({ uid }: { uid: string }) {
                   </button>
                 ))}
               </div>
-
-              {state.phase === "ready" && state.overdueCount > 0 && (
-                <Link
-                  href="/calendar/missed"
-                  className="flex h-9 items-center gap-1.5 rounded-md border border-line bg-surface px-3 text-body text-ink hover:bg-surface-muted"
-                >
-                  놓친 카드
-                  <span className="rounded-pill bg-berry-light px-1.5 text-caption font-semibold text-berry-dark">
-                    {state.overdueCount}
-                  </span>
-                </Link>
-              )}
             </div>
+
+            {state.phase === "ready" && state.overdueCount > 0 && (
+              <Link
+                href="/calendar/missed"
+                className="flex h-9 items-center gap-1.5 rounded-md border border-line bg-surface px-3 text-body text-ink hover:bg-surface-muted"
+              >
+                놓친 카드
+                <span className="rounded-pill bg-berry-light px-1.5 text-caption font-semibold text-berry-dark">
+                  {state.overdueCount}
+                </span>
+              </Link>
+            )}
           </div>
 
           {state.phase === "loading" && (
@@ -496,34 +496,35 @@ function CalendarView({ uid }: { uid: string }) {
           )}
 
           {state.phase === "ready" && (
-            <div className="mt-4 flex gap-6">
+            <>
+              {/* 상태 범례 — 캘린더 오른편 정렬. desktop에서는 패널 폭(300)+간격(24)만큼
+                  안쪽으로 들여 격자의 오른끝과 맞춘다 (08-31 v4) */}
+              {view === "month" && (
+                <div className="mt-3 flex flex-wrap items-center justify-end gap-x-4 gap-y-1 desktop:pr-[324px]">
+                  {LEGEND.map(({ status, label }) => (
+                    <span key={status} className="flex items-center gap-1.5 text-caption text-sub">
+                      {status === "published" ? (
+                        <span aria-hidden className="font-semibold">
+                          ✓
+                        </span>
+                      ) : (
+                        <span
+                          aria-hidden
+                          className="h-2 w-2 rounded-pill"
+                          style={{ background: STATUS_COLOR[status] }}
+                        />
+                      )}
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+            <div className={view === "month" ? "mt-1 flex gap-6" : "mt-4 flex gap-6"}>
               {/* 격자 영역 */}
               <div className="min-w-0 flex-1">
                 {view === "month" ? (
                   <>
-                    {/* 월간 = 흐름 파악 — compact 유지 + 상태 범례 (08-31) */}
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pb-1">
-                      {LEGEND.map(({ status, label }) => (
-                        <span
-                          key={status}
-                          className="flex items-center gap-1.5 text-caption text-sub"
-                        >
-                          {status === "published" ? (
-                            <span aria-hidden className="font-semibold">
-                              ✓
-                            </span>
-                          ) : (
-                            <span
-                              aria-hidden
-                              className="h-2 w-2 rounded-pill"
-                              style={{ background: STATUS_COLOR[status] }}
-                            />
-                          )}
-                          {label}
-                        </span>
-                      ))}
-                    </div>
-
                     {/* 요일 헤더 */}
                     <div className="grid grid-cols-7">
                       {DAY_HEADS.map((d) => (
@@ -775,6 +776,7 @@ function CalendarView({ uid }: { uid: string }) {
                 />
               </aside>
             </div>
+            </>
           )}
 
           {/* 충돌 확인 팝업 — 이미 카드가 있는 날로 드롭했을 때만 (카드 상세 모달 패턴) */}
