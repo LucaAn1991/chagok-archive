@@ -859,7 +859,10 @@ function DayCell({
                 style={{ background: STATUS_COLOR[card.status] }}
               />
             )}
-            <span className="line-clamp-2 text-caption leading-tight text-ink">{card.title}</span>
+            {/* break-keep — 한국어를 단어 중간에서 끊지 않는다 (08-31) */}
+            <span className="line-clamp-2 break-keep text-caption leading-tight text-ink">
+              {card.title}
+            </span>
           </button>
         ))}
         {cards.length > maxDesktop && (
@@ -1002,7 +1005,7 @@ function DayPanel({
             <li key={card.id}>
               {/* 딱 필요한 것만 — 제목·상태·대상·안내·CTA·상세 (08-31 v2, 사진·캡션 제외) */}
               <article className="flex flex-col items-start gap-2 rounded-lg border border-line p-3">
-                <h3 className="text-body font-semibold text-ink">{card.title}</h3>
+                <h3 className="break-keep text-body font-semibold text-ink">{card.title}</h3>
                 <StatusBadge status={card.status} />
                 <p className="text-caption text-sub">
                   {card.audience}
@@ -1011,43 +1014,48 @@ function DayPanel({
                   )}
                 </p>
 
-                {card.status === "planned" && (
-                  <>
-                    <p className="mt-1 text-caption text-sub">아직 콘텐츠를 만들지 않았어요.</p>
-                    <Link
-                      href={`/card/${card.id}/result`}
-                      className="flex h-9 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white hover:bg-berry-dark"
-                    >
-                      제작하기
-                    </Link>
-                  </>
-                )}
-                {card.status === "pending" && (
-                  <>
-                    <p className="mt-1 text-caption text-sub">
-                      콘텐츠 제작이 완료됐어요.
-                      <br />
-                      업로드했다면 기록해주세요.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => onPublish(card)}
-                      className="flex h-9 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white hover:bg-berry-dark"
-                    >
-                      올렸어요 기록
-                    </button>
-                  </>
-                )}
-                {card.status === "published" && (
-                  <p className="mt-1 text-caption text-sub">✓ 발행을 마친 콘텐츠예요.</p>
-                )}
+                {/* 다음 할 일 — 정보(위)와 안내(아래)를 선·색으로 구분한다 (08-31) */}
+                <div className="mt-1 flex w-full flex-col items-start gap-2 border-t border-line pt-2.5">
+                  {card.status === "planned" && (
+                    <>
+                      <p className="break-keep text-caption text-ink">
+                        아직 콘텐츠를 만들지 않았어요.
+                      </p>
+                      <Link
+                        href={`/card/${card.id}/result`}
+                        className="flex h-9 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white hover:bg-berry-dark"
+                      >
+                        제작하기
+                      </Link>
+                    </>
+                  )}
+                  {card.status === "pending" && (
+                    <>
+                      <p className="break-keep text-caption text-ink">
+                        콘텐츠 제작이 완료됐어요.
+                        <br />
+                        업로드했다면 기록해주세요.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => onPublish(card)}
+                        className="flex h-9 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white hover:bg-berry-dark"
+                      >
+                        올렸어요
+                      </button>
+                    </>
+                  )}
+                  {card.status === "published" && (
+                    <p className="break-keep text-caption text-ink">✓ 발행을 마친 콘텐츠예요.</p>
+                  )}
 
-                <Link
-                  href={`/card/${card.id}`}
-                  className="text-caption font-semibold text-berry-dark underline underline-offset-2"
-                >
-                  상세 보기 →
-                </Link>
+                  <Link
+                    href={`/card/${card.id}`}
+                    className="text-caption font-semibold text-berry-dark underline underline-offset-2"
+                  >
+                    상세 보기 →
+                  </Link>
+                </div>
               </article>
             </li>
           ))}

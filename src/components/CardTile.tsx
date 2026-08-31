@@ -73,7 +73,10 @@ export default function CardTile({
         <img src={card.photoUrls[0]} alt="" className="aspect-video w-full object-cover" />
       )}
       <div className="flex flex-col items-start gap-1.5 p-2">
-        <span className="line-clamp-2 text-caption font-semibold text-ink">{card.title}</span>
+        {/* break-keep — 한국어를 단어 중간에서 끊지 않는다. 2줄 넘으면 … (08-31) */}
+        <span className="line-clamp-2 break-keep text-caption font-semibold text-ink">
+          {card.title}
+        </span>
         <StatusBadge status={card.status} />
       </div>
     </article>
