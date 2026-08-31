@@ -29,6 +29,8 @@ export type SlideContent = {
    * 계정 톤이 테마 3종보다 우선한다 (DESIGN.md §12).
    */
   brand?: Brand | null;
+  /** 이 카드만의 배경색 (08-31). 계정 스타일보다 우선 */
+  bgOverride?: string | null;
   /** 슬롯별 글자 조절 (08-31). 없는 슬롯은 레이아웃·테마 그대로 */
   styleOverrides?: Record<string, SlotStyle>;
   /**
@@ -407,7 +409,7 @@ function freeform(ctx: Ctx, elements: SlideElement[]): Node {
 
 export function buildLayout(content: SlideContent): Node {
   const { layoutId, texts, imageUrl } = content;
-  const th = applyBrand(resolveTheme(content.themeId), content.brand);
+  const th = applyBrand(resolveTheme(content.themeId), content.brand, content.bgOverride);
   const ctx: Ctx = { th, ov: content.styleOverrides ?? {} };
 
   // 자유 배치로 전환한 슬라이드는 레이아웃을 거치지 않는다 (08-31)

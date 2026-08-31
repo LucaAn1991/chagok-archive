@@ -21,6 +21,13 @@ export type Card = {
    * 생성 시 온보딩 취향에서 정해지고, 제작 결과 화면에서 바꿀 수 있다.
    */
   themeId: ThemeId;
+  /**
+   * 이 카드만의 배경색 (08-31). `#RRGGBB` · 없으면 계정의 「내 스타일」을 따른다.
+   *
+   * 계정 스타일이 기본이고 이건 예외다 — 「이번 건만 어둡게」 같은 경우를 위해 둔다.
+   * **글자색은 여기서도 저장하지 않는다.** 배경 명도로 계산한다 (DESIGN.md §12).
+   */
+  bgOverride?: string | null;
   /** 구성 템플릿 (08-31). null이면 AI가 장수·순서를 알아서 정한다 */
   templateId: TemplateId | null;
   visualType: VisualType; // 이미지 폴백 사슬의 판정 결과 (DESIGN.md §12)

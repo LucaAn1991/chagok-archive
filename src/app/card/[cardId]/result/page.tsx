@@ -9,12 +9,15 @@ import { auth, db } from "@/lib/firebase/client";
 import AppShell from "@/components/AppShell";
 import BackLink from "@/components/BackLink";
 import StockAttribution from "@/components/StockAttribution";
-import { THEMES, THEME_ORDER, resolveTheme } from "@/lib/render/themes";
+import { THEMES, THEME_ORDER, isHexColor, resolveTheme } from "@/lib/render/themes";
 import { LAYOUT_LABELS, layoutOptionsFor } from "@/lib/slide-layout";
 import { CARD_TEMPLATES, TEMPLATE_ORDER, worksWithoutPhotos } from "@/lib/card-templates";
 import SlotToolbar from "@/components/SlotToolbar";
 import SlideEditor from "@/components/SlideEditor";
 import { bakeToElements } from "@/lib/free-layout";
+import CardPhotoUploader from "@/components/CardPhotoUploader";
+import { IMAGE_LAYOUTS } from "@/lib/slide-layout";
+import { MAX_PHOTOS_PER_CARD } from "@/lib/storage/limits";
 import type {
   Card,
   Caption,
@@ -33,8 +36,8 @@ import type {
  * - 수정은 «부분 수정이 기본»(PRD §5-7) — 캡션·슬라이드 문구를 인라인으로 고쳐
  *   PATCH .../content 로 저장한다. 글자 «내용»만 수정 가능 (DESIGN.md §12)
  *
- * @TODO: 슬라이드 순서·개수 변경, 사진 교체 — 다음 단계
- *   (레이아웃 선택·테마 선택은 08-31 구현)
+ * @TODO: 슬라이드 순서·개수 변경 — 다음 단계
+ *   (레이아웃·테마·구성·내 스타일·줄 조절·자유 배치·사진 교체는 08-31 구현)
  * @TODO: 발행 의향 팝업(F9) 연결 — 발행 상태 관리 구현 시
  */
 
@@ -89,6 +92,10 @@ export default function CardResultPage() {
   const [styleDraft, setStyleDraft] = useState<Record<string, SlotStyle>>({});
   /** 자유 편집 중 고른 요소 (08-31) */
   const [selectedElId, setSelectedElId] = useState<string | null>(null);
+  /** 툴바가 지금 조절 중인 줄 — 화면에 툴바를 하나만 두려고 (08-31) */
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  /** 이 카드만의 배경색 입력 (08-31). 빈 문자열이면 «계정 스타일 따르기» */
+  const [bgDraft, setBgDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -295,6 +302,7 @@ export default function CardResultPage() {
         }
         setCard(data);
         setCaptionDraft(data.caption);
+        setBgDraft(data.bgOverride ?? "");
 
         if (data.slides.length > 0 && data.caption) {
           setPhase("ready");
@@ -445,6 +453,60 @@ export default function CardResultPage() {
   }
 
   /**
+   * 이 카드만의 배경색 (08-31).
+   *
+   * 계정 스타일(설정)이 기본이고 이건 예외다 — 「이번 건만 어둡게」 같은 경우.
+   * 테마와 마찬가지로 카드 전체에 걸리므로 모든 슬라이드를 다시 그린다.
+   */
+  /**
+   * 이 슬라이드의 사진 교체 (08-31 · DESIGN.md §12 「사진 교체」).
+   *
+   * 카드가 가진 사진(`card.photoUrls`) 중에서 고른다 — 새로 올리는 것도
+   * 「재료 추가」와 같은 경로로 그 목록에 더해진다.
+   * 서버가 «이 카드의 사진인지»를 다시 확인한다.
+   */
+  async function replacePhoto(next: string | null) {
+    if (selectedSlide === null || saving) return;
+    const updated = await saveContent({ slides: [{ order: selectedSlide, imageUrl: next }] });
+    if (!updated) return;
+
+    const user = userRef.current;
+    if (!user) return;
+    try {
+      const url = await fetchSlideImage(selectedSlide, await user.getIdToken(), true);
+      setSlideUrls((prev) =>
+        prev.map((u, i) => {
+          if (i !== selectedSlide) return u;
+          URL.revokeObjectURL(u);
+          return url;
+        }),
+      );
+    } catch {
+      /* 저장은 됐다 — 다음 진입 때 맞춰진다 */
+    }
+  }
+
+  async function saveCardBg(next: string | null) {
+    if (!card || saving) return;
+    const updated = await saveContent({ bgOverride: next });
+    if (!updated) return;
+
+    const user = userRef.current;
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      const urls = await Promise.all(
+        updated.slides.map((s) => fetchSlideImage(s.order, token, true)),
+      );
+      const stale = urlsRef.current;
+      setSlideUrls(urls);
+      stale.forEach((u) => URL.revokeObjectURL(u));
+    } catch {
+      showToast("색은 바뀌었어요. 미리보기는 잠시 후 반영돼요.");
+    }
+  }
+
+  /**
    * 테마 변경 (08-31).
    *
    * 테마는 카드 전체에 걸리므로 **모든 슬라이드를 다시 그려야 한다.**
@@ -553,6 +615,7 @@ export default function CardResultPage() {
       setSlideDraft(null);
       setStyleDraft({});
       setSelectedElId(null);
+      setSelectedSlot(null);
       return;
     }
     const slide = card.slides.find((s) => s.order === order);
@@ -560,6 +623,7 @@ export default function CardResultPage() {
     setSlideDraft({ ...slide?.texts });
     setStyleDraft({ ...(slide?.styleOverrides ?? {}) });
     setSelectedElId(null);
+    setSelectedSlot(null);
   }
 
   function addHashtag() {
@@ -665,6 +729,52 @@ export default function CardResultPage() {
                   })}
                 </div>
                 <p className="text-caption text-sub">{resolveTheme(card.themeId).hint}</p>
+
+                {/*
+                  이 카드만의 배경색 (08-31). 비우면 설정의 「내 스타일」을 따른다 —
+                  계정 톤이 기본이고 이건 «이번 건만» 예외다.
+                */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-2">
+                    <span className="text-caption text-sub">이 카드 배경색</span>
+                    <input
+                      value={bgDraft}
+                      onChange={(e) => setBgDraft(e.target.value.trim())}
+                      placeholder="#FBF7F2"
+                      aria-invalid={bgDraft !== "" && !isHexColor(bgDraft)}
+                      className="h-9 w-28 rounded-md border border-line bg-surface px-2 text-caption text-ink"
+                    />
+                  </label>
+                  <span
+                    aria-hidden
+                    className="h-6 w-6 rounded-pill border border-line"
+                    style={{ background: isHexColor(bgDraft) ? bgDraft : "transparent" }}
+                  />
+                  <button
+                    type="button"
+                    disabled={saving || !isHexColor(bgDraft) || bgDraft === (card.bgOverride ?? "")}
+                    onClick={() => saveCardBg(bgDraft)}
+                    className="h-9 rounded-md border-2 border-berry bg-surface px-3 text-caption font-semibold text-berry disabled:opacity-60"
+                  >
+                    적용
+                  </button>
+                  {card.bgOverride && (
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => {
+                        setBgDraft("");
+                        saveCardBg(null);
+                      }}
+                      className="text-caption text-sub underline underline-offset-4 hover:text-ink"
+                    >
+                      내 스타일로 되돌리기
+                    </button>
+                  )}
+                </div>
+                <p className="text-caption text-sub">
+                  비워두면 설정의 「내 카드 스타일」을 따라요. 글자색은 자동으로 맞춰져요.
+                </p>
               </div>
             )}
 
@@ -915,31 +1025,95 @@ export default function CardResultPage() {
               캔버스에서 요소를 클릭해 잡는 대신, 이미 이름으로 나뉜 슬롯을 쓴다 —
               무엇을 조절하는지가 분명하고 히트 테스트가 필요 없다.
             */}
-            {Object.entries(slideDraft).map(([key, value]) => (
-              <div key={key} className="flex flex-col gap-1">
-                <label className="flex flex-col gap-1">
-                  <span className="text-label font-semibold text-sub">
+            {/*
+              툴바는 «고른 줄 하나»에만 붙는다 (08-31 수정).
+              처음에는 줄마다 뒀는데, 번호 목록처럼 줄이 다섯이면 툴바가 다섯 벌
+              펼쳐져 편집 패널이 칩으로 도배됐다.
+            */}
+            {/*
+              사진 교체 (08-31). 사진을 쓰는 레이아웃일 때만 보여준다 —
+              글자만 있는 레이아웃에 사진 고르기가 뜨면 무엇에 쓰이는지 알 수 없다.
+            */}
+            {editingSlide && IMAGE_LAYOUTS.includes(editingSlide.layoutId) && card && (
+              <div className="flex flex-col gap-2">
+                <span className="text-label font-semibold text-sub">사진</span>
+                {card.photoUrls.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {card.photoUrls.map((url) => {
+                      const active = editingSlide.imageUrl === url;
+                      return (
+                        <button
+                          key={url}
+                          type="button"
+                          aria-pressed={active}
+                          aria-label="이 사진으로 바꾸기"
+                          disabled={saving}
+                          onClick={() => replacePhoto(url)}
+                          className={`h-16 w-16 overflow-hidden rounded-md border-2 disabled:opacity-60 ${
+                            active ? "border-berry" : "border-line hover:border-berry"
+                          }`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element -- Storage 주소는 next/image 대상이 아니다 */}
+                          <img src={url} alt="" className="h-full w-full object-cover" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-caption text-sub">
+                    아직 올린 사진이 없어요. 아래에서 올리면 여기서 고를 수 있어요.
+                  </p>
+                )}
+
+                <CardPhotoUploader
+                  cardId={cardId}
+                  photoUrls={card.photoUrls}
+                  maxPhotos={MAX_PHOTOS_PER_CARD}
+                  getToken={async () => {
+                    const user = userRef.current;
+                    if (!user) throw new Error("로그인이 필요해요.");
+                    return user.getIdToken();
+                  }}
+                  onChange={(urls) =>
+                    setCard((prev) => (prev ? { ...prev, photoUrls: urls } : prev))
+                  }
+                />
+              </div>
+            )}
+
+            <SlotToolbar
+              slotLabel={selectedSlot ? (SLOT_LABELS[selectedSlot] ?? selectedSlot) : null}
+              value={selectedSlot ? styleDraft[selectedSlot] : undefined}
+              disabled={saving}
+              onChange={(next) => {
+                if (!selectedSlot) return;
+                const merged = { ...styleDraft };
+                if (next) merged[selectedSlot] = next;
+                else delete merged[selectedSlot];
+                setStyleDraft(merged);
+              }}
+            />
+
+            {Object.entries(slideDraft).map(([key, value]) => {
+              const active = selectedSlot === key;
+              return (
+                <label key={key} className="flex flex-col gap-1">
+                  <span
+                    className={`text-label font-semibold ${active ? "text-berry-dark" : "text-sub"}`}
+                  >
                     {SLOT_LABELS[key] ?? key}
                   </span>
                   <textarea
                     value={value}
                     rows={value.length > 40 ? 3 : 1}
+                    // 누르거나 탭으로 들어오면 그 줄이 툴바의 대상이 된다
+                    onFocus={() => setSelectedSlot(key)}
                     onChange={(e) => setSlideDraft({ ...slideDraft, [key]: e.target.value })}
-                    className={inputClass}
+                    className={`${inputClass} ${active ? "border-berry" : ""}`}
                   />
                 </label>
-                <SlotToolbar
-                  value={styleDraft[key]}
-                  disabled={saving}
-                  onChange={(next) => {
-                    const merged = { ...styleDraft };
-                    if (next) merged[key] = next;
-                    else delete merged[key];
-                    setStyleDraft(merged);
-                  }}
-                />
-              </div>
-            ))}
+              );
+            })}
             <div className="flex items-center gap-3">
               <button
                 type="button"

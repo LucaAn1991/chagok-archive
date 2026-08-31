@@ -209,10 +209,17 @@ function softFor(bg: string, ink: string): string {
  * **글자 비율(크기·자간·여백·정렬)은 테마 것을 그대로 둔다** — 브랜드가 정하는 건
  * 색과 폰트지 레이아웃 감각이 아니다. 브랜드가 없으면 테마가 그대로 쓰인다.
  */
-export function applyBrand(theme: Theme, brand?: Brand | null): Theme {
-  if (!brand || !isHexColor(brand.bg)) return theme;
+export function applyBrand(
+  theme: Theme,
+  brand?: Brand | null,
+  /** 이 카드만의 배경색 — 계정 스타일보다 우선한다 (08-31) */
+  bgOverride?: string | null,
+): Theme {
+  const override = isHexColor(bgOverride) ? bgOverride : null;
+  if (!brand && !override) return theme;
+  if (brand && !isHexColor(brand.bg) && !override) return theme;
 
-  const bg = brand.bg;
+  const bg = override ?? (brand!.bg as string);
   const ink = inkFor(bg);
   return {
     ...theme,
@@ -225,7 +232,7 @@ export function applyBrand(theme: Theme, brand?: Brand | null): Theme {
       scrim: "rgba(0,0,0,0.45)",
       // 강조색은 사용자가 고른 것을 그대로 쓴다. 작은 면에만 쓰이므로
       // 배경과 붙어도 §15의 «텍스트 대비»를 크게 해치지 않는다
-      accent: isHexColor(brand.accent) ? brand.accent : theme.color.accent,
+      accent: brand && isHexColor(brand.accent) ? brand.accent : theme.color.accent,
     },
   };
 }

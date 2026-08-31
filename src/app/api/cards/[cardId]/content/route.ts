@@ -12,6 +12,7 @@ import {
 } from "@/lib/slide-layout";
 import { parseSlotStyle } from "@/lib/slot-style";
 import { clampElement } from "@/lib/free-layout";
+import { isHexColor } from "@/lib/render/themes";
 import type { LayoutId, SlideElement, SlotStyle } from "@/types";
 
 /**
@@ -21,8 +22,11 @@ import type { LayoutId, SlideElement, SlotStyle } from "@/types";
  * «부분 수정이 기본»(PRD §5-7)을 이 라우트가 담당한다.
  *
  * 편집 범위(DESIGN.md §12)를 서버에서 강제한다 —
- * 슬라이드는 **texts(글자 내용)와 layoutId**만 바꿀 수 있고,
- * imageUrl·order는 요청에 무엇이 오든 기존 값을 유지한다.
+ * 슬라이드는 **texts · layoutId · styleOverrides · imageUrl**을 바꿀 수 있고,
+ * order는 요청에 무엇이 오든 기존 값을 유지한다.
+ *
+ * **imageUrl은 «이 카드가 가진 사진» 중에서만 받는다** (08-31). 아무 주소나
+ * 허용하면 남의 Storage나 외부 이미지를 슬라이드에 심을 수 있다.
  *
  * 슬롯 조절(`styleOverrides`)도 마찬가지다 — **정해진 단계 값만** 받는다.
  * 자유값(픽셀·색상 코드)을 실어 보내는 요청은 형식 자체가 없다 (DESIGN.md §0).
@@ -39,6 +43,8 @@ type PatchBody = {
   caption?: unknown;
   slides?: unknown;
   themeId?: unknown;
+  /** null이면 «계정 스타일 따르기»로 되돌린다 */
+  bgOverride?: unknown;
 };
 
 const MAX_TEXT = 2000; // 필드당 글자 상한 — 문서 크기 방어
@@ -78,7 +84,12 @@ export async function PATCH(
   }
 
   if (body.slides !== undefined) {
-    const merged = mergeSlideTexts(card.slides, body.slides);
+    // 이미 슬라이드에 붙어 있던 사진도 허용한다 — 그대로 두는 요청이 막히면 안 된다
+    const allowedPhotos = new Set<string>([
+      ...(card.photoUrls ?? []),
+      ...card.slides.map((s) => s.imageUrl).filter((u): u is string => Boolean(u)),
+    ]);
+    const merged = mergeSlideTexts(card.slides, body.slides, allowedPhotos);
     if (!merged) {
       return NextResponse.json({ error: "슬라이드 형식이 올바르지 않아요." }, { status: 400 });
     }
@@ -92,6 +103,16 @@ export async function PATCH(
     updates.themeId = body.themeId as ThemeId;
   }
 
+  if (body.bgOverride !== undefined) {
+    if (body.bgOverride === null) {
+      updates.bgOverride = null; // 계정 스타일로 되돌리기
+    } else if (isHexColor(body.bgOverride)) {
+      updates.bgOverride = body.bgOverride.toUpperCase();
+    } else {
+      return NextResponse.json({ error: "색상 코드를 확인해주세요." }, { status: 400 });
+    }
+  }
+
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: "수정할 내용이 없어요." }, { status: 400 });
   }
@@ -103,6 +124,8 @@ export async function PATCH(
     caption: (updates.caption as Caption | undefined) ?? card.caption,
     slides: (updates.slides as Slide[] | undefined) ?? card.slides,
     themeId: (updates.themeId as ThemeId | undefined) ?? card.themeId,
+    bgOverride:
+      updates.bgOverride !== undefined ? (updates.bgOverride as string | null) : card.bgOverride,
   });
 }
 
@@ -128,6 +151,8 @@ function parseCaption(raw: unknown): Caption | null {
 
 type SlideEdit = {
   texts?: Record<string, string>;
+  /** null이면 사진 빼기 */
+  imageUrl?: string | null;
   layoutId?: LayoutId;
   styleOverrides?: Record<string, SlotStyle>;
   /** null이면 «자유 배치 끄기» — 레이아웃으로 돌아간다 */
@@ -197,13 +222,18 @@ function withOverrides(ov: Record<string, SlotStyle> | undefined) {
  * 사용자가 문구를 고치는 도중에 레이아웃을 바꾸면, 고치던 문구가 옮겨져야지
  * 저장돼 있던 옛 문구가 옮겨지면 안 된다.
  */
-function mergeSlideTexts(current: Slide[], raw: unknown): Slide[] | null {
+function mergeSlideTexts(
+  current: Slide[],
+  raw: unknown,
+  /** 이 카드가 가진 사진 주소 — 여기 없는 주소는 받지 않는다 */
+  allowedPhotos: Set<string>,
+): Slide[] | null {
   if (!Array.isArray(raw)) return null;
 
   const edits = new Map<number, SlideEdit>();
   for (const item of raw) {
     if (typeof item !== "object" || item === null) return null;
-    const { order, texts, layoutId, styleOverrides, elements } = item as Record<
+    const { order, texts, layoutId, styleOverrides, elements, imageUrl } = item as Record<
       string,
       unknown
     >;
@@ -235,6 +265,17 @@ function mergeSlideTexts(current: Slide[], raw: unknown): Slide[] | null {
       edit.styleOverrides = parsed;
     }
 
+    if (imageUrl !== undefined) {
+      if (imageUrl === null) {
+        edit.imageUrl = null;
+      } else if (typeof imageUrl === "string" && allowedPhotos.has(imageUrl)) {
+        edit.imageUrl = imageUrl;
+      } else {
+        // 이 카드에 없는 사진은 거절한다 — 남의 파일을 심는 길을 막는다
+        return null;
+      }
+    }
+
     if (elements !== undefined) {
       if (elements === null) {
         edit.elements = null; // 자유 배치 끄기
@@ -249,7 +290,8 @@ function mergeSlideTexts(current: Slide[], raw: unknown): Slide[] | null {
       edit.texts === undefined &&
       edit.layoutId === undefined &&
       edit.styleOverrides === undefined &&
-      edit.elements === undefined
+      edit.elements === undefined &&
+      edit.imageUrl === undefined
     ) {
       return null;
     }
@@ -264,8 +306,9 @@ function mergeSlideTexts(current: Slide[], raw: unknown): Slide[] | null {
       continue;
     }
 
-    // imageUrl·order는 건드리지 않는다 (DESIGN.md §12)
+    // order는 건드리지 않는다 (DESIGN.md §12)
     const texts = edit.texts ?? slide.texts;
+    const nextImage = edit.imageUrl !== undefined ? edit.imageUrl : slide.imageUrl;
     const overrides = edit.styleOverrides ?? slide.styleOverrides;
 
     if (edit.layoutId === undefined || edit.layoutId === slide.layoutId) {
@@ -276,6 +319,9 @@ function mergeSlideTexts(current: Slide[], raw: unknown): Slide[] | null {
       merged.push({
         ...rest,
         texts,
+        imageUrl: nextImage,
+        // 사진을 뺐으면 스톡 크레딧도 함께 뗀다 — 없는 사진의 출처가 남으면 안 된다
+        ...(nextImage === slide.imageUrl ? {} : { imageCredit: null }),
         ...withOverrides(overrides),
         ...(nextEls && nextEls.length > 0 ? { elements: nextEls } : {}),
       });
@@ -289,7 +335,7 @@ function mergeSlideTexts(current: Slide[], raw: unknown): Slide[] | null {
     */
 
     // 사진이 없는데 사진 레이아웃 — 회색 빈 면이 된다 (DESIGN §12 폴백 사슬)
-    if (IMAGE_LAYOUTS.includes(edit.layoutId) && !slide.imageUrl) return null;
+    if (IMAGE_LAYOUTS.includes(edit.layoutId) && !nextImage) return null;
 
     // 문구가 갈 곳이 없으면 거부한다. 조용히 지우지 않는다
     const moved = remapTexts(slide.layoutId, edit.layoutId, texts);
@@ -303,6 +349,8 @@ function mergeSlideTexts(current: Slide[], raw: unknown): Slide[] | null {
       ...rest,
       layoutId: edit.layoutId,
       texts: moved,
+      imageUrl: nextImage,
+      ...(nextImage === slide.imageUrl ? {} : { imageCredit: null }),
       ...withOverrides(movedOv),
     });
   }

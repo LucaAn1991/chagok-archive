@@ -48,6 +48,7 @@ export async function GET(
       // 테마는 카드 전체가 하나를 공유한다 (08-31). 옛 카드엔 없어서 기본값으로 그려진다
       themeId: card.themeId,
       brand,
+      bgOverride: card.bgOverride,
       styleOverrides: slide.styleOverrides,
       elements: slide.elements,
       texts: slide.texts,
