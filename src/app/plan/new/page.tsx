@@ -118,7 +118,7 @@ function NewPlanScreen() {
   const [chatText, setChatText] = useState("");
   const [focusToken, setFocusToken] = useState(0); // 올리면 입력창에 포커스
 
-  // 기획안 완성 후에는 입력창을 숨기고 [말로 수정하기]를 눌렀을 때만 연다 —
+  // 기획안 완성 후에는 입력창을 숨기고 [수정하기]를 눌렀을 때만 연다 —
   // CTA와 입력창이 동시에 보이면 다음 행동이 흐려진다 (DESIGN §16, 08-27 피드백)
   const [chatMode, setChatMode] = useState(false);
 
@@ -628,7 +628,7 @@ function ReadyActionBar({
                 onClick={onEditByChat}
                 className="flex h-11 items-center px-2 text-body font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
               >
-                말로 수정하기
+                수정하기
               </button>
               {/* 에러는 인라인 · 빨간색 금지 — 글자는 --ink (DESIGN §2 하단) */}
               {error && (
@@ -852,7 +852,7 @@ function ChatInputBar({
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // 칩 선택·[말로 수정하기]·① 단계 진입 시 입력창에 커서를 준다
+  // 칩 선택·[수정하기]·① 단계 진입 시 입력창에 커서를 준다
   useEffect(() => {
     if (focusToken > 0) {
       const el = textareaRef.current;
