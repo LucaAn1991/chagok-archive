@@ -126,9 +126,18 @@ Primary 버튼은 **`--berry` 단색.**
 ## 3. 타이포
 
 ```css
---font: 'Pretendard', -apple-system, BlinkMacSystemFont,
+--font: 'NanumSquare Neo', -apple-system, BlinkMacSystemFont,
         'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
 ```
+
+**나눔스퀘어 네오 가변 폰트 1개 파일**로 굵기 100~900을 모두 낸다.
+`next/font/local`이 우리 도메인에서 직접 내보내므로 CDN에 의존하지 않는다.
+
+> ⚠️ **가변축 기본값이 100(Light)이다.** 굵기를 지정하지 않으면 본문이 지나치게 얇게
+> 나온다. `globals.css`의 `body`가 400을 못박고 있으니 지우지 말 것.
+
+> **카드뉴스 산출물(F8)은 아직 Pretendard다.** 렌더러(satori)는 `.ttf`를 요구하는데
+> 지금 가진 나눔스퀘어 네오는 `.woff2`뿐이다. 통일하려면 TTF가 필요하다.
 
 | Style | Size | Weight | Line-height |
 |---|---:|---:|---:|
@@ -587,7 +596,7 @@ Fast 150ms · Default 200ms · Slow 250ms
 UI는 자극하기보다 **결정을 덜어주고, 오늘 할 일을 명확히 보여주고, 콘텐츠가 차곡차곡 쌓이는 느낌**을 만든다.
 
 ```
-Font    Pretendard
+Font    NanumSquare Neo (카드뉴스 산출물은 Pretendard)
 Icon    Lucide (예외: 로고)
 Spacing 4px base
 Radius  8 / 12 / 16 / 20 / pill

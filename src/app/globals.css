@@ -4,11 +4,10 @@
   이 파일의 값은 전부 DESIGN.md에서 온다. 여기서 값을 새로 만들지 않는다.
   색을 바꿔야 하면 DESIGN.md를 먼저 고치고 그 결과를 여기 옮긴다.
 
-  Pretendard — SIL Open Font License 1.1 (상업적 사용 가능)
-  dynamic-subset은 화면에 실제로 쓰인 글자만 내려받는다. 한글 전체 폰트는 1MB가
-  넘어서, 통째로 받으면 첫 로딩이 눈에 띄게 느려진다.
+  나눔스퀘어 네오 — 네이버 나눔글꼴 라이선스 (상업적 사용 가능)
+  폰트 로딩은 layout.tsx의 next/font/local이 맡는다. 여기서는 그 결과로 생긴
+  CSS 변수(--font-nanum-square-neo)를 받아 쓰기만 한다.
 */
-@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css");
 @import "tailwindcss";
 
 /* ============================================================
@@ -115,7 +114,8 @@
   --text-label:                 0.75rem;  /* 12 */
   --text-label--line-height:    1.40;
 
-  --font-sans: 'Pretendard Variable', Pretendard, -apple-system,
+  /* 폴백 스택은 layout.tsx의 localFont가 이 변수 안에 함께 넣어준다 */
+  --font-sans: var(--font-nanum-square-neo), -apple-system,
                BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR',
                sans-serif;
 }
@@ -136,6 +136,11 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
+  /*
+    나눔스퀘어 네오는 가변축 기본값이 100(Light)이다. 굵기를 지정하지 않으면
+    본문이 지나치게 얇게 나오므로 여기서 400을 못박는다.
+  */
+  font-weight: 400;
   /* DESIGN.md §3 — 본문 기본값 Body 14 / 1.60 */
   font-size: var(--text-body);
   line-height: 1.6;

@@ -1,14 +1,33 @@
 import type { Metadata } from "next";
+import localFont from "next/font/local";
 import "./globals.css";
 
 /*
-  Pretendard는 Google Fonts에 없어서 next/font/google을 쓸 수 없다.
-  globals.css에서 dynamic-subset CDN을 불러온다 — 화면에 실제로 쓰인 글자만
-  내려받으므로 한글 전체(1MB+)를 받는 것보다 훨씬 가볍다.
+  나눔스퀘어 네오 — 가변 폰트 1개 파일로 굵기 100~900을 모두 낸다.
 
-  CDN이 죽어도 DESIGN.md §3의 폰트 스택이 -apple-system → Apple SD Gothic Neo →
-  Noto Sans KR 순으로 받아내므로 글자가 안 보이는 일은 없다.
+  next/font/local이 폰트를 우리 도메인에서 직접 내보낸다. CDN을 타지 않으므로
+  외부 서비스가 죽어도 글자가 바뀌지 않고, 빌드 때 미리 불러오기가 걸려
+  첫 화면에서 글자가 한 번 튀는 현상(FOUT)이 없다.
+
+  기본 굵기가 100(Light)인 폰트라 weight 범위를 명시한다. 빠뜨리면
+  본문이 지나치게 얇게 나온다.
+
+  CDN이 아니라 우리 파일이지만, 그래도 폴백 스택은 남겨둔다 —
+  파일을 못 받는 상황에서도 글자는 보여야 한다.
 */
+const nanumSquareNeo = localFont({
+  src: "./fonts/NanumSquareNeo-Variable.woff2",
+  weight: "100 900",
+  display: "swap",
+  variable: "--font-nanum-square-neo",
+  fallback: [
+    "-apple-system",
+    "system-ui",
+    "Apple SD Gothic Neo",
+    "Noto Sans KR",
+    "sans-serif",
+  ],
+});
 
 export const metadata: Metadata = {
   title: "차곡",
@@ -18,7 +37,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="ko" className="h-full antialiased">
+    <html
+      lang="ko"
+      className={`${nanumSquareNeo.variable} h-full antialiased`}
+    >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

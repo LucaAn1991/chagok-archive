@@ -503,7 +503,7 @@ plans  (userId ASC, status ASC, confirmedAt DESC)      지난 기획 목록
 | **스토리지** | Firebase Storage — 사용자 사진 업로드용. **08-28 구성 완료** — 버킷 `chagok-aa563.firebasestorage.app` (asia-northeast3, Standard, 균일 접근제어) · 규칙 배포 · CORS 설정. Blaze 전환 완료. 버킷이 없는 환경에서는 업로드 API가 503 + `storage_not_configured`로 답하고 화면은 「준비 중」으로 내려앉는다 |
 | **배포** | Firebase App Hosting — GitHub push 자동 배포 · Secret Manager. **TODO: Blaze 업그레이드 필요** |
 | **스타일** | Tailwind CSS 4 + `DESIGN.md` 토큰 (`globals.css`) |
-| **폰트** | Pretendard 단일. **UI는 dynamic-subset CDN, 렌더러는 `.ttf` 파일 직접 포함** — satori는 시스템 폰트를 읽지 못하고 폰트 버퍼를 넘겨받는다 |
+| **폰트** | **UI는 나눔스퀘어 네오** — 가변 woff2 1개를 `next/font/local`로 자체 서빙(08-31 교체, CDN 의존 제거). **렌더러는 Pretendard `.ttf` 직접 포함** — satori는 시스템 폰트를 못 읽고 폰트 버퍼를 넘겨받으며 `.woff2`도 못 읽는다. **TODO: 나눔스퀘어 네오 TTF 확보 시 렌더러도 통일** |
 | **아이콘** | lucide-react. **TODO: 아직 미설치** |
 | **AI** | **Anthropic Claude `claude-opus-5`** · `@anthropic-ai/sdk`. **TODO: 패키지 미설치 — 착수 시점에 허락을 구한다** |
 | **상태 관리** | 별도 라이브러리 없이 React 내장 + Firestore 실시간 구독으로 시작. 부족해지면 재검토 |
@@ -603,6 +603,7 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 | 2026-08-28 | ② 「직접 쓰기」 기본 접힘(입력창 이중 노출 제거) · 커스텀 대상 칩 점선 구분 · 커스텀 대상 전용 생성 지시(`audiencePrompt`) · 커스텀 대상 localStorage 보관(후보 확장 판단 데이터) | 찬영 확정 지시 | §3-1 |
 | 2026-08-28 | 사진 업로드(F13) 구현 — 서명 URL 방식 확정 · Storage 경로·보안 규칙(`storage.rules`)·CORS 설정 신설 | 파일이 앱 서버를 거치지 않게 해 메모리·시간 부담을 없앤다. 버킷 생성에 Blaze가 필요함을 CLI로 확인했으나(§8), 사진은 «있으면 쓰는» 재료라(DESIGN §12) 버킷 없이도 화면이 동작하도록 503 폴백을 넣고 코드를 먼저 완성(승인받음) | §7 · §8 |
 | 2026-08-28 | Blaze 전환 · Storage 버킷 생성(asia-northeast3) · 규칙 배포 · CORS 적용 — **F13 사진 업로드 실동작 확인** | 위 TODO 해소. 업로드→저장→재읽기와 접근 제어(토큰 없이 403·목록 조회 403)를 실측 검증 | §8 · §12 |
+| 2026-08-31 | UI 폰트 Pretendard → **나눔스퀘어 네오**(가변 woff2, `next/font/local` 자체 서빙) | 사용자 요청. CDN 의존이 사라져 외부 장애에 영향받지 않고 FOUT도 없다. 렌더러는 `.woff2`를 못 읽어 Pretendard 유지 — TTF 확보 시 통일 | §8 |
 
 > **코딩 중 이 문서를 수정하게 되면 반드시 이 표에 기록한다.** (`CLAUDE.md` 「우선순위 및 충돌 처리」 3번)
 
