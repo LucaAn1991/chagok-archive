@@ -47,7 +47,9 @@ export async function GET(
         "Cache-Control": "private, max-age=300",
       },
     });
-  } catch {
+  } catch (err) {
+    // 사용자에겐 한국어 안내만, 원인은 서버 로그로 — 침묵 catch는 디버깅을 막는다 (08-31)
+    console.error(`[slides/image] 렌더 실패 card=${cardId} order=${order}:`, err);
     return NextResponse.json(
       { error: "이미지를 그리지 못했어요. 다시 시도해주세요." },
       { status: 502 },
