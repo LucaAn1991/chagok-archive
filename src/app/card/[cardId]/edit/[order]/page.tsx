@@ -74,6 +74,13 @@ export default function SlideEditPage() {
   const [selectedElId, setSelectedElId] = useState<string | null>(null);
   /** 파일이 실제로 있는 폰트만 툴바에 띄운다 — 서버만 아는 값이라 물어본다 */
   const [fontIds, setFontIds] = useState<FontId[]>([]);
+  /**
+   * 각 줄이 «실제로» 그려지는 상자 (08-31). 서버가 재서 준다.
+   *
+   * flexbox 배치 결과를 satori가 안 알려줘서 전에는 손으로 적은 근사 좌표를 썼는데,
+   * 목록 항목은 12%나 어긋나 엉뚱한 자리를 가리켰다.
+   */
+  const [measured, setMeasured] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({});
 
   const userRef = useRef<AuthUser | null>(null);
   /** 툴바 자동 저장 타이머 — 연달아 누르면 마지막 것만 보낸다 */
@@ -105,7 +112,18 @@ export default function SlideEditPage() {
     (`bakeToElements`). 위치가 100% 정확하진 않지만 **글자를 눌러 그 줄을 고르는 데는
     충분하다** — 아래 입력칸을 찾아 누르지 않아도 된다 (08-31).
   */
-  const hitBoxes = slide ? (freeMode ? (slide.elements ?? []) : bakeToElements(slide)) : [];
+  /*
+    자유 배치는 저장된 좌표를 그대로 쓰고, 레이아웃 모드는 **서버가 잰 실제 좌표**를 쓴다.
+    아직 못 받았으면 근사 좌표(`bakeToElements`)로 그린다 — 잠깐 어긋나도 눌리긴 한다.
+  */
+  const hitBoxes = !slide
+    ? []
+    : freeMode
+      ? (slide.elements ?? [])
+      : bakeToElements(slide).map((e) => {
+          const m = e.slot ? measured[e.slot] : undefined;
+          return m ? { ...e, x: m.x, y: m.y, w: m.w, h: m.h } : e;
+        });
 
   /** 캔버스 색 — 렌더러와 같은 함수를 쓴다. 어긋나면 덮은 자리가 눈에 띈다 */
   const canvas = applyBrand(resolveTheme(card?.themeId), brand, card?.bgOverride);
@@ -152,6 +170,25 @@ export default function SlideEditPage() {
       : null;
 
   /** 이 슬라이드 PNG를 받아 화면에 건다. `fresh`면 캐시를 지나친다 */
+  /** 실제 좌표를 받아 온다. 못 받으면 근사 좌표로 내려앉는다 — 편집이 막히진 않는다 */
+  const loadBoxes = useCallback(
+    async (token: string) => {
+      try {
+        const res = await fetch(`/api/cards/${cardId}/slides/${order}/boxes`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const d = (await res.json()) as {
+          boxes: { key: string; x: number; y: number; w: number; h: number }[];
+        };
+        setMeasured(Object.fromEntries(d.boxes.map((b) => [b.key, b])));
+      } catch {
+        setMeasured({});
+      }
+    },
+    [cardId, order],
+  );
+
   const loadImage = useCallback(
     async (token: string, fresh = false) => {
       const res = await fetch(`/api/cards/${cardId}/slides/${order}/image`, {
@@ -194,13 +231,15 @@ export default function SlideEditPage() {
           .then((r) => (r.ok ? r.json() : null))
           .then((d: { fontIds?: FontId[] } | null) => setFontIds(d?.fontIds ?? []))
           .catch(() => setFontIds([]));
-        await loadImage(await user.getIdToken());
+        const token = await user.getIdToken();
+        await loadImage(token);
+        void loadBoxes(token);
       } catch {
         setPhase("not-found");
       }
     });
     return unsubscribe;
-  }, [cardId, order, router, loadImage]);
+  }, [cardId, order, router, loadImage, loadBoxes]);
 
   /** 저장 공통 — 저장하고 그 자리에서 다시 그린다 */
   async function save(patch: Record<string, unknown>): Promise<Card["slides"] | null> {
@@ -225,6 +264,7 @@ export default function SlideEditPage() {
       if (fresh?.elements) {
       }
       await loadImage(token, true);
+      void loadBoxes(token);
       setSavedAt(true);
       setTimeout(() => setSavedAt(false), 1500);
       return data.slides;

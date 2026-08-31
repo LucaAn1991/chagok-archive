@@ -43,6 +43,15 @@ export type SlideContent = {
    * 자유 배치 요소 (08-31 · 편집기). **있으면 레이아웃 대신 이걸로 그린다.**
    */
   elements?: SlideElement[];
+  /**
+   * «어느 줄이 어디에 그려지는지»를 알아내려고 색 사각형으로 그리는 모드 (08-31).
+   *
+   * 키는 슬롯 이름(또는 요소 id), 값은 그 자리에 칠할 색이다.
+   * 글자는 투명하게 만들고 상자만 칠해서, 나온 그림의 픽셀을 훑으면
+   * **실제 좌표를 정확히** 알 수 있다 — flexbox가 어디에 놓았는지는
+   * satori가 알려주지 않기 때문이다 (`lib/render/hit-boxes.ts`).
+   */
+  hitColors?: Record<string, string>;
   /** 레이아웃별 텍스트 슬롯. @TODO: 슬롯 키는 시안 확정 시 재정의 (아래 통상값) */
   texts: Record<string, string>;
   /** @TODO: 골격 단계에서는 data URI만 지원. 원격 URL 페치는 render API에서 처리 */
@@ -100,6 +109,8 @@ type Ctx = {
   ov: Record<string, SlotStyle>;
   /** 요소가 폰트를 따로 안 고르면 쓸 이름 */
   family: string;
+  /** 좌표를 재는 중이면 슬롯별 색 (08-31) */
+  hit?: Record<string, string>;
 };
 
 /**
@@ -164,6 +175,15 @@ function text(
   const styled = styleOf(ctx, o);
 
   /*
+    좌표 재는 모드 — 글자를 투명하게 하고 상자만 칠한다.
+    글자를 지우면 줄바꿈이 달라져 상자 크기가 바뀌므로 «투명»이어야 한다.
+  */
+  const hitColor = ctx.hit?.[slot];
+  const hitStyle = hitColor
+    ? { backgroundColor: hitColor, color: "transparent", borderBottom: "none" }
+    : {};
+
+  /*
     취소선은 글자 «가운데»를 지나야 해서 테두리로는 안 된다.
     글자 위에 얇은 면을 겹쳐 놓는다 — 상자가 글자에 맞아야 길이가 맞으므로
     `alignSelf: flex-start`로 폭을 좁힌 뒤 그 안에 절대 위치로 얹는다.
@@ -188,8 +208,9 @@ function text(
         ? { justifyContent: JUSTIFY[o.align], width: "100%", textAlign: o.align }
         : {}),
       ...(o.strike ? { position: "relative" } : {}),
+      ...hitStyle,
     },
-    o.strike
+    hitColor ? value : o.strike
       ? [
           value,
           el("div", {
@@ -439,10 +460,12 @@ function freeform(ctx: Ctx, elements: SlideElement[]): Node {
       const o = { ...DEFAULT_SLOT_STYLE, ...(e.style ?? {}) };
       const JUSTIFY = { left: "flex-start", center: "center", right: "flex-end" } as const;
 
+      const hitColor = ctx.hit?.[e.id];
       return el(
         "div",
         {
           ...box,
+          ...(hitColor ? { backgroundColor: hitColor, color: "transparent" } : {}),
           alignItems: "flex-start",
           justifyContent: JUSTIFY[o.align],
           // 상자 높이에 비례한 글자 크기 — 상자를 키우면 글자가 커진다
@@ -469,6 +492,7 @@ export function buildLayout(content: SlideContent): Node {
     th,
     ov: content.styleOverrides ?? {},
     family: baseFamily(content.brand),
+    hit: content.hitColors,
   };
 
   // 자유 배치로 전환한 슬라이드는 레이아웃을 거치지 않는다 (08-31)
