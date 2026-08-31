@@ -505,7 +505,7 @@ plans  (userId ASC, status ASC, confirmedAt DESC)      지난 기획 목록
 | **스타일** | Tailwind CSS 4 + `DESIGN.md` 토큰 (`globals.css`) |
 | **폰트** | **UI는 나눔스퀘어 네오** — 가변 woff2 1개를 `next/font/local`로 자체 서빙(08-31 교체, CDN 의존 제거). **렌더러는 Pretendard `.ttf` 직접 포함** — satori는 시스템 폰트를 못 읽고 폰트 버퍼를 넘겨받으며 `.woff2`도 못 읽는다. **TODO: 나눔스퀘어 네오 TTF 확보 시 렌더러도 통일** |
 | **아이콘** | lucide-react. **TODO: 아직 미설치** |
-| **AI** | **Anthropic Claude `claude-opus-5`** · `@anthropic-ai/sdk`. **08-31 기획 대화(F2·F3) 실연동 완료** — `lib/ai/claude.ts`. `ANTHROPIC_API_KEY`가 없으면 모의 AI(`lib/ai/mock.ts`)로 자동 폴백하므로 키 없이도 전 화면이 돈다. **캡션(F7)·슬라이드(F8)는 아직 목 모드** |
+| **AI** | **Anthropic Claude `claude-opus-5`** · `@anthropic-ai/sdk`. **08-31 전 기능 실연동 완료** — 기획(F2·F3) `lib/ai/claude.ts` · 캡션(F7) `lib/ai/caption.ts` · 슬라이드(F8) `lib/ai/slides.ts`. 호출 규칙(재시도·구조화 출력·거부 처리)은 `lib/ai/client.ts` 한 곳. `ANTHROPIC_API_KEY`가 없으면 목 모드로 자동 폴백하므로 키 없이도 전 화면이 돈다 |
 | **상태 관리** | 별도 라이브러리 없이 React 내장 + Firestore 실시간 구독으로 시작. 부족해지면 재검토 |
 | **결제 연동** | 없음 — v1 결제 제외 |
 | **카드뉴스 렌더링** | **satori** (HTML→SVG) + **sharp** (SVG→PNG). App Hosting 안에서 실행 · 배포 대상 1개 유지. **TODO: 두 패키지 미설치 — `CLAUDE.md` 「의존성」 규칙에 따라 F8 착수 시점에 허락을 구한다** |
@@ -608,6 +608,8 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 | 2026-08-31 | **Claude 기획 대화 실연동**(`claude-opus-5`) — 구조화 출력·자동 1회 재시도·노력 수준 분리. 키 없으면 모의 AI 폴백 | PLAN §9 설계 그대로 구현. 실호출 검증에서 대상별로 글이 실제로 갈라지는 것 확인(검색 유입용은 목록·키워드, 첫 방문자용은 훅 문장) | §8 · §9 |
 | 2026-08-31 | **대화 턴 스트리밍 도입**(NDJSON) · 노력 수준 대화 `low` / 카드 `medium` 확정 — §12 TODO 3-1 해소 | 실측 결과 완료 5~11초 · **첫 글자 1.2~2.6초.** 기다렸다 한 번에 주면 그 차이가 통째로 대기 시간이 된다 (PRD 위험 3) | §9 · §12 |
 | 2026-08-31 | 구조화 출력 스키마에서 `minItems` 제거 — 배열 개수는 코드에서 강제 | 실호출에서 API가 거부("`minItems` values other than 0 or 1 are not supported"). 설계 문서에 없던 제약이라 기록 | §9 |
+| 2026-08-31 | **캡션(F7)·슬라이드(F8) 실연동** · 호출 계층을 `lib/ai/client.ts`로 공용화 · 말투 정의를 `lib/tone.ts` 단일 출처로(설정 화면과 프롬프트가 같은 값을 본다) | 재시도·구조화 출력·거부 처리를 기능마다 따로 쓰면 어긋난다. 말투도 화면과 프롬프트에 따로 적으면 갈라진다 — `audiences.ts`와 같은 구조 | §8 · §9 |
+| 2026-08-31 | 슬라이드 `texts`를 **키·값 배열**로 받도록 스키마 변경 | 구조화 출력이 «임의 키를 가진 객체»를 거부한다("`additionalProperties: object` is not supported"). 레이아웃마다 슬롯이 달라 고정 속성으로도 못 적는다 | §9 |
 
 > **코딩 중 이 문서를 수정하게 되면 반드시 이 표에 기록한다.** (`CLAUDE.md` 「우선순위 및 충돌 처리」 3번)
 
