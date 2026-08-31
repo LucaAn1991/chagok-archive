@@ -193,3 +193,35 @@ export function newShape(
     z: Math.max(0, ...existing.map((e) => e.z)) + 1,
   });
 }
+
+/**
+ * 요소 복제 (08-31).
+ *
+ * **조금 어긋나게 놓는다.** 정확히 겹쳐 놓으면 복제됐는지 알 수가 없다.
+ * 맨 위로 올려서 방금 만든 것이 가려지지 않게 한다.
+ */
+export function duplicateElement(el: SlideElement, existing: SlideElement[]): SlideElement {
+  return clampElement({
+    ...el,
+    id: newId(el.kind === "shape" ? "shape" : "box"),
+    x: el.x + 0.02,
+    y: el.y + 0.02,
+    z: Math.max(0, ...existing.map((e) => e.z)) + 1,
+  });
+}
+
+/**
+ * 겹침 순서 — 맨 앞/맨 뒤로 보낸다.
+ *
+ * z 값을 다시 매기지 않고 끝값만 밀어낸다. 매번 정리하면 다른 요소의 순서까지
+ * 바뀌어 «왜 저게 움직이지»가 된다.
+ */
+export function reorder(
+  elements: SlideElement[],
+  id: string,
+  to: "front" | "back",
+): SlideElement[] {
+  const zs = elements.map((e) => e.z);
+  const next = to === "front" ? Math.max(...zs) + 1 : Math.min(...zs) - 1;
+  return elements.map((e) => (e.id === id ? { ...e, z: next } : e));
+}

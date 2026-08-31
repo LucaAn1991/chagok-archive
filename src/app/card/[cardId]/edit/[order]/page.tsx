@@ -4,7 +4,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged, type User as AuthUser } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import { ChevronLeft, ChevronRight, Undo2 } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  SendToBack,
+  BringToFront,
+  Trash2,
+  Undo2,
+} from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import AppShell from "@/components/AppShell";
 import BackLink from "@/components/BackLink";
@@ -18,8 +26,14 @@ import {
   layoutOptionsFor,
 } from "@/lib/slide-layout";
 import { DEFAULT_SLOT_STYLE, SIZE_SCALE } from "@/lib/slot-style";
-import { bakeToElements, newShape, newTextBox } from "@/lib/free-layout";
-import { Plus, Trash2 } from "lucide-react";
+import {
+  bakeToElements,
+  duplicateElement,
+  newShape,
+  newTextBox,
+  reorder,
+} from "@/lib/free-layout";
+import { Plus } from "lucide-react";
 import { MAX_PHOTOS_PER_CARD } from "@/lib/storage/limits";
 import { applyBrand, resolveTheme } from "@/lib/render/themes";
 import type { Card, FontId, LayoutId, Slide, SlideElement, SlotStyle } from "@/types";
@@ -354,27 +368,46 @@ export default function SlideEditPage() {
     }
   }
 
-  /** Cmd/Ctrl+Z — 편집기에서 기대하는 조작이다 */
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
-        // 글자를 치는 중이면 브라우저의 «입력 되돌리기»가 우선이다
-        const t = e.target as HTMLElement | null;
-        if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) return;
-        e.preventDefault();
-        void undo();
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
-
   function addBox() {
     if (!slide?.elements) return;
     const box = newTextBox(slide.elements);
     setSelectedElId(box.id);
     saveBoxes([...slide.elements, box]);
   }
+
+  /** 고른 요소를 복제한다 */
+  function duplicateSelected() {
+    if (!slide?.elements || !selectedElId) return;
+    const el = slide.elements.find((e) => e.id === selectedElId);
+    if (!el) return;
+    const copy = duplicateElement(el, slide.elements);
+    setSelectedElId(copy.id);
+    saveBoxes([...slide.elements, copy]);
+  }
+
+  function sendTo(to: "front" | "back") {
+    if (!slide?.elements || !selectedElId) return;
+    saveBoxes(reorder(slide.elements, selectedElId, to));
+  }
+
+  /** ⌘Z 되돌리기 · ⌘D 복제 — 편집기에서 기대하는 조작이다 */
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      // 글자를 치는 중이면 브라우저의 기본 동작이 우선이다
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) return;
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        void undo();
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        duplicateSelected();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   function addShape(preset: "rect" | "circle" | "line") {
     if (!slide?.elements) return;
@@ -577,6 +610,31 @@ export default function SlideEditPage() {
           onCommit={(next) => save({ slides: [{ order, elements: next }] })}
         />
       </div>
+
+      {/*
+        고른 요소에 대한 동작 (08-31). 미리보기 바로 아래에 둔다 —
+        무엇에 하는 동작인지가 눈에 보이는 자리여야 한다.
+      */}
+      {freeMode && selectedElId && (
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+          <ElBtn label="복제 (⌘D)" onClick={duplicateSelected} disabled={saving}>
+            <Copy size={14} aria-hidden />
+            복제
+          </ElBtn>
+          <ElBtn label="맨 앞으로" onClick={() => sendTo("front")} disabled={saving}>
+            <BringToFront size={14} aria-hidden />
+            맨 앞으로
+          </ElBtn>
+          <ElBtn label="맨 뒤로" onClick={() => sendTo("back")} disabled={saving}>
+            <SendToBack size={14} aria-hidden />
+            맨 뒤로
+          </ElBtn>
+          <ElBtn label="지우기" onClick={() => removeBox(selectedElId)} disabled={saving}>
+            <Trash2 size={14} aria-hidden />
+            지우기
+          </ElBtn>
+        </div>
+      )}
 
       {slide && (
         <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
@@ -868,6 +926,31 @@ export default function SlideEditPage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+function ElBtn({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="flex h-9 items-center gap-1 rounded-md border border-line bg-surface px-3 text-caption text-sub hover:text-ink disabled:opacity-60"
+    >
+      {children}
+    </button>
   );
 }
 
