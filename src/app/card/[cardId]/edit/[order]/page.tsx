@@ -150,8 +150,13 @@ export default function SlideEditPage() {
     const o = { ...DEFAULT_SLOT_STYLE, ...(el.style ?? {}) };
     if (o.sizePx) return o.sizePx;
     if (freeMode) return Math.round(1080 * el.h * 0.42 * SIZE_SCALE[o.size]);
-    const base = slide ? (LAYOUT_FONT_SIZE[slide.layoutId]?.[el.slot ?? ""] ?? 40) : 40;
-    return Math.round(base * canvas.type.scale * SIZE_SCALE[o.size]);
+    return layoutSizeOf(el.slot ?? "", o.size);
+  }
+
+  /** 레이아웃이 이 슬롯에 주는 글자 크기 (1080 기준 px) */
+  function layoutSizeOf(slot: string, step: keyof typeof SIZE_SCALE = "m"): number {
+    const base = slide ? (LAYOUT_FONT_SIZE[slide.layoutId]?.[slot] ?? 40) : 40;
+    return Math.round(base * canvas.type.scale * SIZE_SCALE[step]);
   }
 
   /**
@@ -592,7 +597,19 @@ export default function SlideEditPage() {
             <button
               type="button"
               disabled={saving}
-              onClick={() => save({ slides: [{ order, elements: bakeToElements(slide) }] })}
+              onClick={() =>
+                save({
+                  slides: [
+                    {
+                      order,
+                      // 지금 그려지는 크기를 그대로 물려준다 — 전환해도 글자가 안 변한다
+                      elements: bakeToElements(slide, (slot) =>
+                        layoutSizeOf(slot, styleDraft[slot]?.size ?? "m"),
+                      ),
+                    },
+                  ],
+                })
+              }
               className="h-9 rounded-md border-2 border-berry bg-surface px-3 text-caption font-semibold text-berry"
             >
               자유롭게 옮기기

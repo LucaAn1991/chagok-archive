@@ -62,7 +62,18 @@ const IMAGE_BOXES: Partial<Record<LayoutId, Box>> = {
  * 빈 슬롯은 만들지 않는다 — 화면에 안 보이는 빈 상자를 끌고 다니게 하면
  * «이게 뭐지»가 된다. 필요하면 나중에 요소를 더하면 된다.
  */
-export function bakeToElements(slide: Slide): SlideElement[] {
+export function bakeToElements(
+  slide: Slide,
+  /**
+   * 그 슬롯이 **지금 그려지는 글자 크기**(1080 기준 px).
+   *
+   * 자유 배치는 상자 높이에서 크기를 뽑는데, 전환에 쓰는 상자 높이는 원래
+   * 글자 크기와 아무 상관이 없다. 그래서 전환하는 순간 글자가 커지거나 작아졌다
+   * (08-31). 지금 크기를 **px로 박아** 두면 전환해도 그대로고, 상자를 늘려도
+   * 글자가 멋대로 변하지 않는다 — 크기는 툴바에서만 바뀐다.
+   */
+  sizeOf?: (slot: string) => number,
+): SlideElement[] {
   const boxes = LAYOUT_BOXES[slide.layoutId] ?? {};
   const out: SlideElement[] = [];
 
@@ -84,14 +95,19 @@ export function bakeToElements(slide: Slide): SlideElement[] {
     if (!value?.trim()) continue;
     const box = boxes[slot];
     if (!box) continue;
+    const px = sizeOf?.(slot);
+    const style = {
+      ...(slide.styleOverrides?.[slot] ?? {}),
+      ...(px ? { sizePx: px } : {}),
+    };
     out.push({
-      id: slot,
+      id: newId(`slot-${slot}`),
       kind: "text",
       ...box,
       z: z++,
       text: value,
       slot,
-      ...(slide.styleOverrides?.[slot] ? { style: slide.styleOverrides[slot] } : {}),
+      ...(Object.keys(style).length > 0 ? { style } : {}),
     });
   }
 
@@ -143,6 +159,8 @@ export function newTextBox(existing: SlideElement[]): SlideElement {
     h: 0.1,
     z: Math.max(0, ...existing.map((e) => e.z)) + 1,
     text: "새 문구",
+    // 새 상자도 크기를 박아둔다 — 상자를 늘렸다고 글자가 커지면 놀란다
+    style: { sizePx: 44 },
   });
 }
 

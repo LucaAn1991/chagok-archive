@@ -15,6 +15,7 @@ import {
   Strikethrough,
   Underline,
 } from "lucide-react";
+import { useState } from "react";
 import {
   ALIGNS,
   ALIGN_LABELS,
@@ -99,6 +100,7 @@ export default function SlotToolbar({
   const tracking = v.tracking ?? "normal";
   const shownPx = v.sizePx ?? currentSizePx ?? 40;
 
+
   /** px는 자유값이되 범위는 막는다 — 8px 제목은 안 읽힌다 */
   function setPx(next: number) {
     const clamped = Math.round(Math.min(Math.max(next, MIN_SIZE_PX), MAX_SIZE_PX));
@@ -151,20 +153,12 @@ export default function SlotToolbar({
         >
           <Minus size={14} aria-hidden />
         </button>
-        <input
-          type="number"
-          aria-label="글자 크기(px)"
-          min={MIN_SIZE_PX}
-          max={MAX_SIZE_PX}
+        <PxInput
+          key={shownPx}
           value={shownPx}
+          explicit={Boolean(v.sizePx)}
           disabled={disabled}
-          onChange={(e) => {
-            const n = Number(e.target.value);
-            if (Number.isFinite(n)) setPx(n);
-          }}
-          className={`h-8 w-14 rounded-md border bg-surface px-1 text-center text-caption text-ink ${
-            v.sizePx ? "border-berry" : "border-line"
-          }`}
+          onCommit={setPx}
         />
         <button
           type="button"
@@ -373,5 +367,60 @@ function Stepper({
         <Plus size={14} aria-hidden />
       </button>
     </span>
+  );
+}
+
+/**
+ * 글자 크기 px 칸.
+ *
+ * **치는 동안에는 자르지 않는다** (08-31). 글자를 칠 때마다 12~240으로 자르면
+ * `1`이 곧바로 `12`가 되어 120 같은 세 자리를 아예 칠 수 없다.
+ * 손을 떼거나 Enter를 눌렀을 때만 반영한다.
+ *
+ * 별도 컴포넌트인 이유는 툴바에 이른 반환이 있어 그 뒤로 훅을 둘 수 없어서다.
+ *
+ * 바깥 값이 바뀌면 `useEffect`로 맞추지 않고 **`key`로 다시 만든다** —
+ * 효과 안에서 상태를 바로 바꾸면 렌더링이 한 번 더 도는 걸 React가 경고한다.
+ */
+function PxInput({
+  value,
+  explicit,
+  disabled,
+  onCommit,
+}: {
+  value: number;
+  /** 사용자가 직접 넣은 값인가 — 테두리로 표시한다 */
+  explicit: boolean;
+  disabled?: boolean;
+  onCommit: (n: number) => void;
+}) {
+  const [text, setText] = useState(String(value));
+
+  function commit() {
+    const n = Number(text);
+    if (Number.isFinite(n) && n > 0) onCommit(n);
+    else setText(String(value)); // 이상한 값이면 원래대로
+  }
+
+  return (
+    <input
+      type="number"
+      aria-label="글자 크기(px)"
+      min={MIN_SIZE_PX}
+      max={MAX_SIZE_PX}
+      value={text}
+      disabled={disabled}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commit();
+        }
+      }}
+      className={`h-8 w-14 rounded-md border bg-surface px-1 text-center text-caption text-ink ${
+        explicit ? "border-berry" : "border-line"
+      }`}
+    />
   );
 }
