@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import { ArrowUp, Check, Plus } from "lucide-react";
+import { ArrowUp, Check, ChevronRight, Pencil, Plus } from "lucide-react";
 import { auth } from "@/lib/firebase/client";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/draft";
 import { addCustomAudience, loadCustomAudiences } from "@/lib/custom-audiences";
@@ -11,7 +11,6 @@ import AppSidebar from "@/components/AppSidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import AIChatBubble, { SystemEventLine } from "@/components/AIChatBubble";
 import PlanningSummaryPanel, {
-  PlanningSummaryInline,
   TopicLine,
   type PlanSummary,
   type PlanSummaryPatch,
@@ -493,8 +492,14 @@ function NewPlanScreen() {
                   />
                 )}
 
-                {/* <lg — 기획안 인라인 카드 (사진 포함, 기존 그대로) */}
-                {summaryStarted && !sending && <PlanningSummaryInline {...summaryProps} />}
+                {/* <lg — 확정 직전 요약: 고른 이미지 + 주제 오버레이 카드 (08-31 와이어프레임) */}
+                {ready && !sending && !failed && (
+                  <MobilePlanCard
+                    summary={summary}
+                    photos={summaryProps.photos}
+                    onSaveAudiences={(list) => saveSummaryPatch({ audiences: list })}
+                  />
+                )}
 
                 {/* lg+ — 사진 추천은 왼쪽 열에서 2개씩 3줄로 (08-31 2열) */}
                 {ready && !sending && !failed && (
@@ -580,6 +585,122 @@ function NewPlanScreen() {
       )}
 
       <MobileBottomNav />
+    </div>
+  );
+}
+
+/* ============================================================
+   모바일(1열) 기획 카드 — 고른 이미지 + 주제 오버레이 (08-31 와이어프레임)
+   ============================================================ */
+
+function MobilePlanCard({
+  summary,
+  photos,
+  onSaveAudiences,
+}: {
+  summary: PlanSummary;
+  photos: {
+    selectedStockId: string | null;
+    userPhotos: string[];
+    onSelectStock: (id: string) => void;
+    onAddUserPhotos: (files: FileList) => void;
+    onRemoveUserPhoto: (url: string) => void;
+  };
+  onSaveAudiences: (list: string[]) => void;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  // 폴백 사슬 순서 — 내 사진이 있으면 그것, 없으면 고른 추천 (DESIGN §12)
+  const imageSrc =
+    photos.userPhotos[0] ??
+    (STOCK_SUGGESTIONS.find((s) => s.id === photos.selectedStockId) ?? STOCK_SUGGESTIONS[0]).src;
+
+  function saveAudiences() {
+    setEditing(false);
+    const list = draft
+      .split(/[,·]/)
+      .map((v) => v.trim())
+      .filter(Boolean);
+    if (list.length > 0) onSaveAudiences(list);
+  }
+
+  return (
+    <div className="lg:hidden">
+      {/* 이미지 카드 — 주제만 오버레이 */}
+      <div className="relative overflow-hidden rounded-lg border border-line">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={imageSrc} alt="" className="h-44 w-full object-cover" />
+        <span className="absolute inset-x-0 bottom-0 bg-ink/55 px-4 py-3 text-body-l font-bold text-white">
+          {summary.topic}
+        </span>
+      </div>
+
+      {/* 이미지 아래 한 줄 — 대상 + 연필 */}
+      {editing ? (
+        <div className="mt-2 flex items-center gap-1.5">
+          <input
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                saveAudiences();
+              }
+              if (e.key === "Escape") setEditing(false);
+            }}
+            aria-label="대상 입력"
+            className="h-10 min-w-0 flex-1 rounded-md border border-line bg-surface px-3 text-body text-ink"
+          />
+          <button
+            type="button"
+            onClick={saveAudiences}
+            aria-label="대상 확정"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-berry text-white"
+          >
+            <Check size={16} aria-hidden />
+          </button>
+        </div>
+      ) : (
+        <div className="mt-2 flex items-center gap-1.5">
+          <span className="min-w-0 truncate text-body text-ink">
+            {summary.audiences.join(" · ")}에게
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setDraft(summary.audiences.join(", "));
+              setEditing(true);
+            }}
+            aria-label="대상 수정"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-sub hover:bg-surface-muted hover:text-ink"
+          >
+            <Pencil size={14} aria-hidden />
+          </button>
+        </div>
+      )}
+
+      {/* 다른 사진 고르기 — 기본 접힘, 누르면 추천 6개 펼침 */}
+      <button
+        type="button"
+        onClick={() => setPickerOpen((o) => !o)}
+        aria-expanded={pickerOpen}
+        className="mt-2 flex items-center gap-1 text-body text-sub transition-colors duration-200 hover:text-ink"
+      >
+        <ChevronRight
+          size={16}
+          aria-hidden
+          className={`transition-transform duration-200 ${pickerOpen ? "rotate-90" : ""}`}
+        />
+        다른 사진 고르기
+      </button>
+      {pickerOpen && (
+        <div className="mt-2">
+          <PlanPhotoPicker wrap hideIntro {...photos} />
+        </div>
+      )}
     </div>
   );
 }
