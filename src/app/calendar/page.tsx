@@ -151,8 +151,18 @@ export default function CalendarPage() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <main className="mx-auto w-full max-w-[1100px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
+          {/* 놓친 카드로 가는 길 (PLAN.md §5 화면 흐름) — 눈에 띄되 재촉하지 않는 자리 */}
+          <div className="flex justify-end">
+            <Link
+              href="/calendar/missed"
+              className="text-body text-sub underline underline-offset-4 hover:text-ink"
+            >
+              지나간 카드 보기
+            </Link>
+          </div>
+
           {/* 월 이동 */}
-          <header className="flex items-center justify-between">
+          <header className="mt-2 flex items-center justify-between">
             <h1 className="text-h3 font-bold text-ink">
               {ym.year}년 {ym.month}월
             </h1>
