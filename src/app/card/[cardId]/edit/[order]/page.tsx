@@ -14,7 +14,7 @@ import CardPhotoUploader from "@/components/CardPhotoUploader";
 import { IMAGE_LAYOUTS, LAYOUT_LABELS, layoutOptionsFor } from "@/lib/slide-layout";
 import { bakeToElements } from "@/lib/free-layout";
 import { MAX_PHOTOS_PER_CARD } from "@/lib/storage/limits";
-import type { Card, LayoutId, SlideElement, SlotStyle } from "@/types";
+import type { Card, FontId, LayoutId, SlideElement, SlotStyle } from "@/types";
 
 /**
  * 슬라이드 편집 (08-31 · DESIGN.md §12).
@@ -63,6 +63,8 @@ export default function SlideEditPage() {
   const [styleDraft, setStyleDraft] = useState<Record<string, SlotStyle>>({});
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [selectedElId, setSelectedElId] = useState<string | null>(null);
+  /** 파일이 실제로 있는 폰트만 툴바에 띄운다 — 서버만 아는 값이라 물어본다 */
+  const [fontIds, setFontIds] = useState<FontId[]>([]);
 
   const userRef = useRef<AuthUser | null>(null);
   const urlRef = useRef<string | null>(null);
@@ -113,6 +115,10 @@ export default function SlideEditPage() {
         setTextDraft({ ...found.texts });
         setStyleDraft({ ...(found.styleOverrides ?? {}) });
         setPhase("ready");
+        fetch("/api/fonts")
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d: { fontIds?: FontId[] } | null) => setFontIds(d?.fontIds ?? []))
+          .catch(() => setFontIds([]));
         await loadImage(await user.getIdToken());
       } catch {
         setPhase("not-found");
@@ -243,6 +249,7 @@ export default function SlideEditPage() {
         <SlotToolbar
           slotLabel={selectedSlot ? (SLOT_LABELS[selectedSlot] ?? selectedSlot) : null}
           value={selectedSlot ? styleDraft[selectedSlot] : undefined}
+          availableFontIds={fontIds}
           disabled={saving}
           onChange={(next) => {
             if (!selectedSlot) return;

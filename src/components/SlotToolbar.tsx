@@ -1,40 +1,66 @@
 "use client";
 
 import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  Baseline,
+  Bold,
+  Droplet,
+  Minus,
+  MoveHorizontal,
+  MoveVertical,
+  Plus,
+  RotateCcw,
+  Strikethrough,
+  Underline,
+} from "lucide-react";
+import {
   ALIGNS,
   ALIGN_LABELS,
   COLORS,
   COLOR_LABELS,
+  LINE_HEIGHTS,
+  LINE_HEIGHT_LABELS,
+  OPACITIES,
   SIZE_LABELS,
   SIZE_STEPS,
   TRACKINGS,
   TRACKING_LABELS,
   isAdjusted,
 } from "@/lib/slot-style";
-import type { SlotStyle } from "@/types";
+import { BUILT_IN_FONTS } from "@/lib/render/font-registry";
+import type { FontId, SlotStyle } from "@/types";
 
 /**
  * 글자 조절 툴바 (08-31 · DESIGN.md §12).
  *
- * **화면에 하나만 뜬다.** 처음에는 줄마다 붙였는데, 번호 목록처럼 줄이 다섯인
- * 레이아웃에서 툴바가 다섯 벌 펼쳐져 편집 패널이 칩으로 도배됐다 (08-31 수정).
- * 지금은 **고른 줄 하나**를 위쪽 한 곳에서 조절한다.
+ * **가로 아이콘 바 한 줄.** 처음에는 줄마다 5행짜리 칩 묶음을 붙였는데
+ * 번호 목록(줄 5개)에서 툴바만 25줄이 됐다. 지금은 **고른 줄 하나**를
+ * 위쪽 한 곳에서 조절하고, 이름표 대신 아이콘을 쓴다.
  *
- * 크기·자간은 칩 다섯 개 대신 **－/＋ 단계 버튼**이다. 고를 값이 순서가 있는
- * 것이라 나열할 이유가 없고, 자리도 3분의 1이면 된다.
+ * 좁은 화면에서는 가로로 스크롤한다 — 줄바꿈으로 쌓으면 미리보기가 밀린다.
  *
- * 값은 여전히 «정해진 단계 중 하나»다 — 자유값을 열면 §0의 금지에 걸린다.
+ * **색은 두 갈래다.** 역할(기본·여리게·강조)은 브랜드 색이 바뀌면 따라오고,
+ * 색을 직접 찍으면 그게 이긴다 — 대신 브랜드를 바꿔도 안 따라온다.
  */
 
 type Props = {
-  /** 지금 조절 중인 줄의 이름. null이면 안내만 */
   slotLabel: string | null;
   value: SlotStyle | undefined;
   onChange: (next: SlotStyle | undefined) => void;
+  /** 파일이 실제로 있는 폰트만 — 없는 폰트를 고르면 기본으로 그려진다 */
+  availableFontIds?: FontId[];
   disabled?: boolean;
 };
 
-export default function SlotToolbar({ slotLabel, value, onChange, disabled }: Props) {
+export default function SlotToolbar({
+  slotLabel,
+  value,
+  onChange,
+  availableFontIds = [],
+  disabled,
+}: Props) {
   const v = value ?? {};
 
   if (!slotLabel) {
@@ -45,15 +71,13 @@ export default function SlotToolbar({ slotLabel, value, onChange, disabled }: Pr
     );
   }
 
-  /** 같은 값을 다시 누르면 해제 — «기본으로» 버튼을 항목마다 두지 않으려는 것 */
   function set<K extends keyof SlotStyle>(key: K, next: SlotStyle[K]) {
     const merged: SlotStyle = { ...v };
-    if (merged[key] === next) delete merged[key];
+    if (merged[key] === next || next === undefined) delete merged[key];
     else merged[key] = next;
     onChange(Object.keys(merged).length > 0 ? merged : undefined);
   }
 
-  /** 순서가 있는 값은 나열하지 않고 한 칸씩 옮긴다 */
   function step<T extends readonly string[]>(
     key: keyof SlotStyle,
     steps: T,
@@ -67,114 +91,168 @@ export default function SlotToolbar({ slotLabel, value, onChange, disabled }: Pr
 
   const size = v.size ?? "m";
   const tracking = v.tracking ?? "normal";
+  const lineHeight = v.lineHeight ?? "normal";
+  const opacity = v.opacity ?? "100";
+  const fonts = BUILT_IN_FONTS.filter((f) => availableFontIds.includes(f.id));
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-line bg-surface-muted p-2">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="rounded-pill bg-surface px-2 py-1 text-caption font-semibold text-ink">
-          {slotLabel}
-        </span>
+    <div className="flex items-center gap-2 overflow-x-auto rounded-md border border-line bg-surface-muted p-2">
+      <span className="shrink-0 rounded-pill bg-surface px-2 py-1 text-caption font-semibold text-ink">
+        {slotLabel}
+      </span>
 
-        <Stepper
-          label="크기"
-          value={SIZE_LABELS[size]}
-          disabled={disabled}
-          onMinus={() => step("size", SIZE_STEPS, size, -1)}
-          onPlus={() => step("size", SIZE_STEPS, size, 1)}
-        />
-
-        <Chip active={v.weight === "bold"} disabled={disabled} onClick={() => set("weight", "bold")}>
-          <span className="font-bold">굵게</span>
-        </Chip>
-
-        <Group>
-          {ALIGNS.map((a) => (
-            <Chip key={a} active={v.align === a} disabled={disabled} onClick={() => set("align", a)}>
-              {ALIGN_LABELS[a]}
-            </Chip>
-          ))}
-        </Group>
-
-        <Group>
-          {COLORS.map((c) => (
-            <Chip key={c} active={v.color === c} disabled={disabled} onClick={() => set("color", c)}>
-              {COLOR_LABELS[c]}
-            </Chip>
-          ))}
-        </Group>
-
-        <Stepper
-          label="자간"
-          value={TRACKING_LABELS[tracking]}
-          disabled={disabled}
-          onMinus={() => step("tracking", TRACKINGS, tracking, -1)}
-          onPlus={() => step("tracking", TRACKINGS, tracking, 1)}
-        />
-
-        {isAdjusted(value) && (
-          <button
-            type="button"
+      {fonts.length > 1 && (
+        <>
+          <Sep />
+          <select
+            aria-label="폰트"
             disabled={disabled}
-            onClick={() => onChange(undefined)}
-            className="text-caption text-sub underline underline-offset-4 hover:text-ink"
+            value={v.fontId ?? ""}
+            onChange={(e) => set("fontId", (e.target.value || undefined) as FontId | undefined)}
+            className="h-8 shrink-0 rounded-md border border-line bg-surface px-2 text-caption text-ink"
           >
-            되돌리기
-          </button>
-        )}
-      </div>
+            <option value="">기본 폰트</option>
+            {fonts.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+
+      <Sep />
+      <Stepper
+        label="크기"
+        value={SIZE_LABELS[size]}
+        disabled={disabled}
+        onMinus={() => step("size", SIZE_STEPS, size, -1)}
+        onPlus={() => step("size", SIZE_STEPS, size, 1)}
+      />
+
+      <Sep />
+      {/* 색 — 역할 3종 + 직접 찍기 */}
+      {COLORS.map((c) => (
+        <IconBtn
+          key={c}
+          label={COLOR_LABELS[c]}
+          active={!v.colorHex && v.color === c}
+          disabled={disabled}
+          onClick={() => onChange({ ...v, color: c, colorHex: undefined })}
+        >
+          <span className="text-caption">{COLOR_LABELS[c]}</span>
+        </IconBtn>
+      ))}
+      <label
+        className={`flex h-8 shrink-0 items-center gap-1 rounded-md border px-2 ${
+          v.colorHex ? "border-berry bg-berry-light" : "border-line bg-surface"
+        }`}
+        title="색 직접 고르기"
+      >
+        <Droplet size={14} aria-hidden className={v.colorHex ? "text-berry-dark" : "text-sub"} />
+        <input
+          type="color"
+          aria-label="색 직접 고르기"
+          disabled={disabled}
+          value={v.colorHex ?? "#000000"}
+          onChange={(e) => onChange({ ...v, colorHex: e.target.value.toUpperCase() })}
+          className="h-5 w-6 cursor-pointer border-0 bg-transparent p-0"
+        />
+      </label>
+
+      <Sep />
+      <IconBtn
+        label="굵게"
+        active={v.weight === "bold"}
+        disabled={disabled}
+        onClick={() => set("weight", "bold")}
+      >
+        <Bold size={16} aria-hidden />
+      </IconBtn>
+      <IconBtn
+        label="밑줄"
+        active={v.underline === true}
+        disabled={disabled}
+        onClick={() => set("underline", true)}
+      >
+        <Underline size={16} aria-hidden />
+      </IconBtn>
+      <IconBtn
+        label="취소선"
+        active={v.strike === true}
+        disabled={disabled}
+        onClick={() => set("strike", true)}
+      >
+        <Strikethrough size={16} aria-hidden />
+      </IconBtn>
+
+      <Sep />
+      {ALIGNS.map((a) => {
+        const Icon = a === "left" ? AlignLeft : a === "center" ? AlignCenter : AlignRight;
+        return (
+          <IconBtn
+            key={a}
+            label={`${ALIGN_LABELS[a]} 정렬`}
+            active={v.align === a}
+            disabled={disabled}
+            onClick={() => set("align", a)}
+          >
+            <Icon size={16} aria-hidden />
+          </IconBtn>
+        );
+      })}
+
+      <Sep />
+      <IconStepper
+        icon={<MoveHorizontal size={14} aria-hidden />}
+        label="자간"
+        value={TRACKING_LABELS[tracking]}
+        disabled={disabled}
+        onMinus={() => step("tracking", TRACKINGS, tracking, -1)}
+        onPlus={() => step("tracking", TRACKINGS, tracking, 1)}
+      />
+      <IconStepper
+        icon={<MoveVertical size={14} aria-hidden />}
+        label="줄 간격"
+        value={LINE_HEIGHT_LABELS[lineHeight]}
+        disabled={disabled}
+        onMinus={() => step("lineHeight", LINE_HEIGHTS, lineHeight, -1)}
+        onPlus={() => step("lineHeight", LINE_HEIGHTS, lineHeight, 1)}
+      />
+      <IconStepper
+        icon={<Baseline size={14} aria-hidden />}
+        label="흐리게"
+        value={`${opacity}%`}
+        disabled={disabled}
+        // 목록이 100 → 25 순서라 «흐리게»가 +쪽이다
+        onMinus={() => step("opacity", OPACITIES, opacity, -1)}
+        onPlus={() => step("opacity", OPACITIES, opacity, 1)}
+      />
+
+      {isAdjusted(value) && (
+        <>
+          <Sep />
+          <IconBtn label="이 줄 조절 되돌리기" active={false} disabled={disabled} onClick={() => onChange(undefined)}>
+            <RotateCcw size={16} aria-hidden />
+          </IconBtn>
+        </>
+      )}
     </div>
   );
 }
 
-function Group({ children }: { children: React.ReactNode }) {
-  return <span className="flex items-center gap-1">{children}</span>;
+function Sep() {
+  return <span aria-hidden className="h-5 w-px shrink-0 bg-line" />;
 }
 
-function Stepper({
+function IconBtn({
   label,
-  value,
-  disabled,
-  onMinus,
-  onPlus,
-}: {
-  label: string;
-  value: string;
-  disabled?: boolean;
-  onMinus: () => void;
-  onPlus: () => void;
-}) {
-  return (
-    <span className="flex items-center gap-1">
-      <span className="text-caption text-sub">{label}</span>
-      <button
-        type="button"
-        aria-label={`${label} 줄이기`}
-        disabled={disabled}
-        onClick={onMinus}
-        className="h-7 w-7 rounded-pill border border-line bg-surface text-caption text-sub hover:text-ink disabled:opacity-60"
-      >
-        −
-      </button>
-      <span className="min-w-[3.5rem] text-center text-caption text-ink">{value}</span>
-      <button
-        type="button"
-        aria-label={`${label} 키우기`}
-        disabled={disabled}
-        onClick={onPlus}
-        className="h-7 w-7 rounded-pill border border-line bg-surface text-caption text-sub hover:text-ink disabled:opacity-60"
-      >
-        ＋
-      </button>
-    </span>
-  );
-}
-
-function Chip({
   active,
   disabled,
   onClick,
   children,
 }: {
+  label: string;
   active: boolean;
   disabled?: boolean;
   onClick: () => void;
@@ -183,16 +261,70 @@ function Chip({
   return (
     <button
       type="button"
+      title={label}
+      aria-label={label}
       aria-pressed={active}
       disabled={disabled}
       onClick={onClick}
-      className={`rounded-pill border px-2.5 py-1 text-caption disabled:opacity-60 ${
+      className={`flex h-8 shrink-0 items-center justify-center rounded-md border px-2 disabled:opacity-60 ${
         active
-          ? "border-berry bg-berry-light font-semibold text-berry-dark"
+          ? "border-berry bg-berry-light text-berry-dark"
           : "border-line bg-surface text-sub hover:text-ink"
       }`}
     >
       {children}
     </button>
+  );
+}
+
+function IconStepper(props: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  disabled?: boolean;
+  onMinus: () => void;
+  onPlus: () => void;
+}) {
+  return <Stepper {...props} />;
+}
+
+function Stepper({
+  icon,
+  label,
+  value,
+  disabled,
+  onMinus,
+  onPlus,
+}: {
+  icon?: React.ReactNode;
+  label: string;
+  value: string;
+  disabled?: boolean;
+  onMinus: () => void;
+  onPlus: () => void;
+}) {
+  return (
+    <span className="flex shrink-0 items-center gap-1" title={label}>
+      {icon ?? <span className="text-caption text-sub">{label}</span>}
+      <button
+        type="button"
+        aria-label={`${label} 줄이기`}
+        disabled={disabled}
+        onClick={onMinus}
+        className="flex h-8 w-7 items-center justify-center rounded-md border border-line bg-surface text-sub hover:text-ink disabled:opacity-60"
+      >
+        <Minus size={14} aria-hidden />
+      </button>
+      <span className="min-w-[3rem] text-center text-caption text-ink">{value}</span>
+      <button
+        type="button"
+        aria-label={`${label} 키우기`}
+        disabled={disabled}
+        onClick={onPlus}
+        className="flex h-8 w-7 items-center justify-center rounded-md border border-line bg-surface text-sub hover:text-ink disabled:opacity-60"
+      >
+        <Plus size={14} aria-hidden />
+      </button>
+    </span>
   );
 }

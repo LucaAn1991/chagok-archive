@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { SatoriOptions } from "satori";
-import { BUILT_IN_FONTS, DEFAULT_FONT_ID, findFont } from "./font-registry";
+import { BUILT_IN_FONTS, findFont } from "./font-registry";
 import type { Brand, FontId } from "../../types/user";
 
 /**
@@ -20,8 +20,19 @@ type FontEntry = SatoriOptions["fonts"][number];
 // @TODO: App Hosting(standalone) 배포 시 이 경로가 번들에 포함되는지 확인 필요
 const FONT_DIR = path.join(process.cwd(), "src/lib/render/fonts");
 
-/** satori에 넘기는 이름은 하나로 고정한다 — 레이아웃이 폰트마다 달라지지 않게 */
-export const FONT_FAMILY = "CardFont";
+/**
+ * satori에 넘기는 폰트 이름은 **`fontId` 그대로**다 (08-31).
+ *
+ * 줄마다 다른 폰트를 고를 수 있게 되면서(슬롯 툴바) 한 렌더링에 여러 벌을
+ * 등록해야 한다. 이름이 하나면 나중에 등록한 것이 앞의 것을 덮어써서
+ * 모든 줄이 같은 폰트로 나온다.
+ */
+export const DEFAULT_FAMILY = "pretendard";
+
+/** 브랜드가 고른 폰트의 이름 — 요소가 따로 안 고르면 이걸 쓴다 */
+export function baseFamily(brand?: Brand | null): string {
+  return brand?.fontId ?? DEFAULT_FAMILY;
+}
 
 /** 파일별 캐시. 한 번 읽으면 프로세스가 사는 동안 재사용한다 */
 const cache = new Map<string, Buffer>();
@@ -70,39 +81,40 @@ async function fetchCustomFont(url: string): Promise<Buffer | null> {
  * 고른 폰트의 파일이 없으면 **기본 폰트로 내려앉는다.** 업로드 폰트도 마찬가지다 —
  * 사용자가 파일을 지웠거나 Storage가 막혔을 수 있다.
  */
-export async function loadCardFonts(brand?: Brand | null): Promise<FontEntry[]> {
-  if (brand?.fontId === "custom" && brand.customFontUrl) {
-    const data = await fetchCustomFont(brand.customFontUrl);
-    // 올린 폰트는 굵기가 한 벌뿐이라 400·700에 같은 파일을 물린다.
-    // 없는 굵기를 satori가 요구하면 글자가 아예 안 그려진다.
-    if (data) {
-      return [
-        { name: FONT_FAMILY, data, weight: 400, style: "normal" },
-        { name: FONT_FAMILY, data, weight: 700, style: "normal" },
-      ];
+/**
+ * 이 렌더링에 필요한 폰트를 전부 준비한다.
+ *
+ * `extra`는 «줄마다 고른 폰트»다. 브랜드 폰트만 넣으면 그 줄이 글자 없이 나온다.
+ * 파일이 없는 폰트는 조용히 빠지고, 그 줄은 기본 폰트로 그려진다 —
+ * 폰트 하나 없다고 카드 제작 전체가 죽으면 안 된다.
+ */
+export async function loadCardFonts(
+  brand?: Brand | null,
+  extra: string[] = [],
+): Promise<FontEntry[]> {
+  const wanted = new Set<string>([baseFamily(brand), DEFAULT_FAMILY, ...extra]);
+  const out: FontEntry[] = [];
+
+  for (const id of wanted) {
+    if (id === "custom") {
+      if (!brand?.customFontUrl) continue;
+      const data = await fetchCustomFont(brand.customFontUrl);
+      // 올린 폰트는 굵기가 한 벌뿐이라 400·700에 같은 파일을 물린다.
+      // 없는 굵기를 satori가 요구하면 글자가 아예 안 그려진다.
+      if (data) {
+        out.push({ name: "custom", data, weight: 400, style: "normal" });
+        out.push({ name: "custom", data, weight: 700, style: "normal" });
+      }
+      continue;
     }
+    const def = findFont(id);
+    const bufs = await Promise.all(def.files.map((f) => readFont(f.file)));
+    if (bufs.some((b) => b === null)) continue; // 아직 안 넣은 폰트
+    def.files.forEach((f, i) => {
+      out.push({ name: def.id, data: bufs[i]!, weight: f.weight, style: "normal" });
+    });
   }
 
-  const wanted = findFont(brand?.fontId);
-  const loaded = await loadFamily(wanted.files);
-  if (loaded) return loaded;
-
-  // 고른 폰트 파일이 아직 없다 — 기본으로
-  const fallback = await loadFamily(findFont(DEFAULT_FONT_ID).files);
-  if (fallback) return fallback;
-
-  throw new Error("카드뉴스 폰트 파일을 하나도 찾지 못했습니다.");
-}
-
-async function loadFamily(
-  files: { file: string; weight: 400 | 700 }[],
-): Promise<FontEntry[] | null> {
-  const bufs = await Promise.all(files.map((f) => readFont(f.file)));
-  if (bufs.some((b) => b === null)) return null;
-  return files.map((f, i) => ({
-    name: FONT_FAMILY,
-    data: bufs[i]!,
-    weight: f.weight,
-    style: "normal" as const,
-  }));
+  if (out.length === 0) throw new Error("카드뉴스 폰트 파일을 하나도 찾지 못했습니다.");
+  return out;
 }

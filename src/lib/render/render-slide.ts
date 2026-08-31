@@ -43,7 +43,16 @@ function ensureSvgLoaderAllowed(): void {
 export async function renderSlidePng(content: SlideContent): Promise<Buffer> {
   ensureSvgLoaderAllowed();
 
-  const fonts = await loadCardFonts(content.brand);
+  /*
+    줄마다 고른 폰트까지 함께 등록한다 (08-31). 브랜드 폰트만 넣으면
+    다른 폰트를 고른 줄이 글자 없이 나온다.
+  */
+  const extra = [
+    ...Object.values(content.styleOverrides ?? {}).map((s) => s.fontId),
+    ...(content.elements ?? []).map((e) => e.style?.fontId),
+  ].filter((v): v is NonNullable<typeof v> => Boolean(v));
+
+  const fonts = await loadCardFonts(content.brand, extra);
 
   const svg = await satori(buildLayout(content) as unknown as ReactNode, {
     width: SLIDE_SIZE,

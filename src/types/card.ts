@@ -1,3 +1,5 @@
+import type { FontId } from "./user";
+
 import type { Timestamp } from "firebase/firestore";
 
 /** 콘텐츠 카드 — 만들고 올리는 단위. 발행률의 분모가 된다 */
@@ -137,8 +139,21 @@ export type SlotStyle = {
   size?: "xs" | "s" | "m" | "l" | "xl";
   weight?: "regular" | "bold";
   align?: "left" | "center" | "right";
+  /** 역할 색 — 브랜드 색이 바뀌면 따라 바뀐다 */
   color?: "ink" | "sub" | "accent";
+  /**
+   * 직접 찍은 색 `#RRGGBB` (08-31). **있으면 `color`보다 이긴다.**
+   * 역할 색과 달리 브랜드를 바꿔도 따라오지 않는다 — 그게 «직접 찍었다»는 뜻이다.
+   */
+  colorHex?: string;
   tracking?: "tight" | "normal" | "wide";
+  underline?: boolean;
+  strike?: boolean;
+  lineHeight?: "tight" | "normal" | "loose";
+  /** 흐리게 — 100·75·50·25 (%) */
+  opacity?: "100" | "75" | "50" | "25";
+  /** 이 줄만 다른 폰트 (08-31). 없으면 계정의 「내 스타일」 폰트 */
+  fontId?: FontId;
 };
 
 /** 스톡 사진 출처 — 사진가 이름과 사진 페이지 주소 */

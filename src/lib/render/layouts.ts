@@ -4,9 +4,13 @@ import type { Brand } from "../../types/user";
 import type { SlideElement, SlotStyle } from "../../types/card";
 import {
   DEFAULT_SLOT_STYLE,
+  LINE_HEIGHT_VALUE,
+  OPACITY_VALUE,
   SIZE_SCALE,
   TRACKING_DELTA,
+  type ResolvedSlotStyle,
 } from "../slot-style";
+import { baseFamily } from "./fonts";
 
 /**
  * 카드뉴스 레이아웃 6종의 satori 템플릿 골격.
@@ -92,7 +96,31 @@ function root(th: Theme, children: unknown[]): Node {
 type Ctx = {
   th: Theme;
   ov: Record<string, SlotStyle>;
+  /** 요소가 폰트를 따로 안 고르면 쓸 이름 */
+  family: string;
 };
+
+/**
+ * 조절값에서 «글자에 붙일 스타일»을 뽑는다. 자유 배치와 레이아웃이 같이 쓴다.
+ *
+ * 직접 찍은 색(`colorHex`)이 역할 색(`color`)을 이긴다 — 굳이 찍었다는 건
+ * 그 색을 쓰겠다는 뜻이다. 대신 브랜드 색을 바꿔도 따라오지 않는다.
+ */
+function styleOf(ctx: Ctx, o: ResolvedSlotStyle): Record<string, unknown> {
+  const { th } = ctx;
+  const roleColor =
+    o.color === "accent" ? th.color.accent : o.color === "sub" ? th.color.sub : undefined;
+  const decoration = [o.underline && "underline", o.strike && "line-through"]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    fontFamily: o.fontId ?? ctx.family,
+    ...(o.colorHex ? { color: o.colorHex } : roleColor ? { color: roleColor } : {}),
+    ...(decoration ? { textDecoration: decoration } : {}),
+    ...(o.opacity !== "100" ? { opacity: OPACITY_VALUE[o.opacity] } : {}),
+  };
+}
 
 /**
  * 글자 한 덩이. `size`는 «기준 크기»이고 테마의 `scale`이 곱해진다 —
@@ -114,13 +142,6 @@ function text(
   const o = { ...DEFAULT_SLOT_STYLE, ...(ctx.ov[slot] ?? {}) };
   const adjusted = ctx.ov[slot] ?? {};
 
-  const color =
-    o.color === "accent"
-      ? th.color.accent
-      : o.color === "sub"
-        ? th.color.sub
-        : undefined; // 기본은 부모(root)가 정한 색을 물려받는다
-
   /*
     정렬은 `textAlign`이 아니라 `justifyContent`다. 이 div는 `display: flex`라
     글자가 flex 아이템이 되고, flex 컨테이너에서는 textAlign이 아이템을 옮기지 못한다.
@@ -136,13 +157,13 @@ function text(
       // 볼드를 고르지 않았으면 레이아웃이 정한 굵기를 그대로 쓴다
       fontWeight: adjusted.weight ? (o.weight === "bold" ? 700 : 400) : weight,
       letterSpacing: th.type.tracking + TRACKING_DELTA[o.tracking],
-      lineHeight: 1.4,
+      lineHeight: LINE_HEIGHT_VALUE[o.lineHeight],
       ...extra,
       /*
         조절값은 `extra`보다 **뒤에** 온다. 레이아웃이 박아둔 색
-        (예: 부제의 `color: sub`)이 사용자가 고른 강조색을 덮어쓰면 안 된다.
+        (예: 부제의 `color: sub`)이 사용자가 고른 색을 덮어쓰면 안 된다.
       */
-      ...(color ? { color } : {}),
+      ...styleOf(ctx, o),
       ...(adjusted.align
         ? { justifyContent: JUSTIFY[o.align], width: "100%", textAlign: o.align }
         : {}),
@@ -381,8 +402,6 @@ function freeform(ctx: Ctx, elements: SlideElement[]): Node {
       }
 
       const o = { ...DEFAULT_SLOT_STYLE, ...(e.style ?? {}) };
-      const color =
-        o.color === "accent" ? th.color.accent : o.color === "sub" ? th.color.sub : th.color.ink;
       const JUSTIFY = { left: "flex-start", center: "center", right: "flex-end" } as const;
 
       return el(
@@ -395,9 +414,10 @@ function freeform(ctx: Ctx, elements: SlideElement[]): Node {
           fontSize: Math.round(SLIDE_SIZE * e.h * 0.42 * SIZE_SCALE[o.size]),
           fontWeight: o.weight === "bold" ? 700 : 400,
           letterSpacing: th.type.tracking + TRACKING_DELTA[o.tracking],
-          lineHeight: 1.3,
-          color,
+          lineHeight: LINE_HEIGHT_VALUE[o.lineHeight],
+          color: th.color.ink,
           textAlign: o.align,
+          ...styleOf(ctx, o),
         },
         e.text ?? "",
       );
@@ -410,7 +430,11 @@ function freeform(ctx: Ctx, elements: SlideElement[]): Node {
 export function buildLayout(content: SlideContent): Node {
   const { layoutId, texts, imageUrl } = content;
   const th = applyBrand(resolveTheme(content.themeId), content.brand, content.bgOverride);
-  const ctx: Ctx = { th, ov: content.styleOverrides ?? {} };
+  const ctx: Ctx = {
+    th,
+    ov: content.styleOverrides ?? {},
+    family: baseFamily(content.brand),
+  };
 
   // 자유 배치로 전환한 슬라이드는 레이아웃을 거치지 않는다 (08-31)
   if (content.elements && content.elements.length > 0) {
