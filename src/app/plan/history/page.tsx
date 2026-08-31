@@ -216,19 +216,25 @@ function HistoryList({
               <span className="w-16 shrink-0 pt-0.5 text-caption text-sub">
                 {group.dateKey ? dateLabel(group.dateKey) : "날짜 없음"}
               </span>
-              <div className="flex min-w-0 flex-1 flex-col gap-3">
+              <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                 {group.rows.map((row) => {
                   const title = listTitle(row);
                   const duplicated = (titleCount.get(title) ?? 0) > 1;
                   return (
-                    <Link key={row.id} href={`/plan/${row.id}`} className="block min-w-0">
-                      <span className="block truncate text-body font-semibold text-ink">
+                    /* 한 항목 = 제목 한 줄 (08-31). 같은 날 제목이 겹칠 때만 오른쪽 끝에 시각 */
+                    <Link
+                      key={row.id}
+                      href={`/plan/${row.id}`}
+                      className="flex min-w-0 items-baseline gap-2"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-body font-semibold text-ink">
                         {title}
                       </span>
-                      <span className="mt-0.5 block text-caption text-sub">
-                        {duplicated && `${timeLabel(row.confirmedAt)} · `}카드 {row.cardCount}장
-                        {row.uploadedCount > 0 && ` · ${row.uploadedCount}장 올림`}
-                      </span>
+                      {duplicated && (
+                        <span className="shrink-0 text-caption text-sub">
+                          {timeLabel(row.confirmedAt)}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}
