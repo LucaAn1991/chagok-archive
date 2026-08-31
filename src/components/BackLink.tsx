@@ -19,15 +19,32 @@ import { ArrowLeft } from "lucide-react";
 type Props = {
   /** 기록이 없을 때 갈 곳 */
   fallbackHref: string;
+  /**
+   * **늘 `fallbackHref`로 간다** (08-31).
+   *
+   * 돌아갈 곳이 하나로 정해진 화면에 쓴다. 슬라이드 편집처럼 한 화면 안에서
+   * 이리저리 옮겨 다니면 기록이 쌓여서, «왔던 곳으로»가 바로 직전에 보던
+   * 같은 화면을 가리키게 된다 — 사용자는 나가려는데 제자리를 맴돈다.
+   */
+  exact?: boolean;
   /** 화면에 보일 글자. 생략하면 아이콘만 */
   children?: React.ReactNode;
   label?: string;
 };
 
-export default function BackLink({ fallbackHref, children, label = "뒤로 가기" }: Props) {
+export default function BackLink({
+  fallbackHref,
+  children,
+  label = "뒤로 가기",
+  exact,
+}: Props) {
   const router = useRouter();
 
   function goBack() {
+    if (exact) {
+      router.push(fallbackHref);
+      return;
+    }
     /*
       이 앱 안에서 넘어온 것인지 본다. history.length는 새 탭에서 1이고,
       다른 사이트에서 넘어온 경우 referrer가 우리 도메인이 아니다.

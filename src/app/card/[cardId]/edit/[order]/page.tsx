@@ -359,7 +359,9 @@ export default function SlideEditPage() {
       <AppShell>
         <div className="flex flex-col items-center justify-center gap-3 py-16">
           <h1 className="text-title font-bold">슬라이드를 찾을 수 없어요</h1>
-          <BackLink fallbackHref={`/card/${cardId}/result`}>제작 결과로</BackLink>
+          <BackLink exact fallbackHref={`/card/${cardId}/result`}>
+          제작 결과로
+        </BackLink>
         </div>
       </AppShell>
     );
@@ -369,17 +371,25 @@ export default function SlideEditPage() {
   return (
     <AppShell>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <BackLink fallbackHref={`/card/${cardId}/result`}>제작 결과</BackLink>
+        {/* 돌아갈 곳이 하나로 정해져 있다 — 슬라이드를 오가느라 쌓인 기록을 따라가면 안 된다 */}
+        <BackLink exact fallbackHref={`/card/${cardId}/result`}>
+          제작 결과
+        </BackLink>
         <span className="text-caption text-sub">
           {saving ? "저장 중···" : savedAt ? "저장됐어요" : ""}
         </span>
       </div>
 
-      {/* 슬라이드 이동 — 목록으로 돌아가지 않고 옆 장으로 간다 */}
+      {/*
+        슬라이드 이동 — 목록으로 돌아가지 않고 옆 장으로 간다.
+
+        `replace`를 쓴다. `push`면 옮길 때마다 기록이 쌓여서, 6장을 훑어본 뒤
+        브라우저 뒤로가기를 누르면 편집 화면을 여섯 번 거슬러야 빠져나온다 (08-31).
+      */}
       <div className="mt-3 flex items-center justify-between">
         <NavButton
           disabled={order <= 0}
-          onClick={() => router.push(`/card/${cardId}/edit/${order - 1}`)}
+          onClick={() => router.replace(`/card/${cardId}/edit/${order - 1}`)}
           label="이전 슬라이드"
         >
           <ChevronLeft size={20} aria-hidden />
@@ -389,7 +399,7 @@ export default function SlideEditPage() {
         </span>
         <NavButton
           disabled={order >= total - 1}
-          onClick={() => router.push(`/card/${cardId}/edit/${order + 1}`)}
+          onClick={() => router.replace(`/card/${cardId}/edit/${order + 1}`)}
           label="다음 슬라이드"
         >
           <ChevronRight size={20} aria-hidden />
