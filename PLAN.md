@@ -152,20 +152,8 @@ type CardStatus = 'planned' | 'pending' | 'published' | 'discarded';
 /** status에 합치면 '아니오'와 '미응답'을 구분할 수 없어 분모가 흐려진다 — 별도 필드 유지 */
 type PublishIntent = null | 'yes' | 'no';
 
-type VisualType =
-  | 'user_photo_preferred'
-  | 'stock_recommended'
-  | 'ai_generated'   // 사진도 스톡도 없지만 AI로 만들 수 있다 (08-31 F15)
-  | 'text_only';
+type VisualType = 'user_photo_preferred' | 'stock_recommended' | 'text_only';
 
-/**
- * 이미지 출처 `[08-31]` — 폴백 사슬(DESIGN.md §12)의 어느 단계에서 왔는지.
- *
- * **AI 생성물을 표시하기 위해 둔다.** 사용자가 자기 계정에 올리는 것이라
- * 무엇이 실제 사진이고 무엇이 만들어진 그림인지 본인이 알아야 한다.
- * 스톡은 `imageCredit`이 따로 있어 구분되지만 user와 ai는 둘 다 크레딧이 없다.
- */
-type ImageOrigin = 'user' | 'stock' | 'ai';
 
 type Caption = {
   hook: string;                   // 첫 문장
@@ -180,7 +168,6 @@ type Slide = {
   texts: Record<string, string>;  // 레이아웃의 텍스트 슬롯별 내용. 글자 «내용»만 수정 가능
   imageUrl: string | null;        // 'text-only'면 null
   imageOrigin?: ImageOrigin;      // 이 사진이 어디서 왔는지 (08-31). 없으면 판단 불가 = 옛 슬라이드
-  imageQuery?: string;            // 이 자리에 어울릴 사진의 영어 검색어. 2단계 생성이 다시 쓴다 (08-31)
 };
 
 /**
@@ -577,7 +564,7 @@ plans  (userId ASC, status ASC, confirmedAt DESC)      지난 기획 목록
 | **폰트** | **UI는 나눔스퀘어 네오** — 가변 woff2 1개를 `next/font/local`로 자체 서빙(08-31 교체, CDN 의존 제거). **렌더러는 Pretendard `.ttf` 직접 포함** — satori는 시스템 폰트를 못 읽고 폰트 버퍼를 넘겨받으며 `.woff2`도 못 읽는다. **TODO: 나눔스퀘어 네오 TTF 확보 시 렌더러도 통일** |
 | **아이콘** | lucide-react. **TODO: 아직 미설치** |
 | **AI** | **Anthropic Claude `claude-opus-5`** · `@anthropic-ai/sdk`. **08-31 전 기능 실연동 완료** — 기획(F2·F3) `lib/ai/claude.ts` · 캡션(F7) `lib/ai/caption.ts` · 슬라이드(F8) `lib/ai/slides.ts`. 호출 규칙(재시도·구조화 출력·거부 처리)은 `lib/ai/client.ts` 한 곳. `ANTHROPIC_API_KEY`가 없으면 목 모드로 자동 폴백하므로 키 없이도 전 화면이 돈다 |
-| **이미지 소스** | 폴백 사슬 ②는 **Pexels**(`PEXELS_API_KEY`), ③은 **Seedream 5.0 Pro**(`GPTPROTO_API_KEY`, 08-31 F15). 둘 다 키가 없으면 그 단계를 건너뛰고 다음으로 내려간다 — 키 없이도 전 화면이 돈다. 생성 이미지는 **우리 Storage로 복사해 저장한다**(공급자 주소의 수명을 믿지 않는다) |
+| **이미지 소스** | 폴백 사슬 ②는 **Pexels**(`PEXELS_API_KEY`). 키가 없으면 그 단계를 건너뛰고 text-only로 내려간다 — 키 없이도 전 화면이 돈다 |
 | **상태 관리** | 별도 라이브러리 없이 React 내장 + Firestore 실시간 구독으로 시작. 부족해지면 재검토 |
 | **결제 연동** | 없음 — v1 결제 제외 |
 | **카드뉴스 렌더링** | **satori** (HTML→SVG) + **sharp** (SVG→PNG). App Hosting 안에서 실행 · 배포 대상 1개 유지. **TODO: 두 패키지 미설치 — `CLAUDE.md` 「의존성」 규칙에 따라 F8 착수 시점에 허락을 구한다** |
@@ -641,7 +628,8 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 | 날짜 | 변경 내용 | 이유 | 관련 섹션 |
 |---|---|---|---|
 | 2026-08-27 | 최초 작성 | PRD·IA·DESIGN 기준 기술 설계 수립 | 전체 |
-| 2026-08-31 | **카드뉴스 제작을 2단계로 분리.** `POST .../render`는 글자가 든 슬라이드를 곧바로 돌려주고(이미지 자리는 비운 채), 새 경로 `POST .../render/images`가 사진을 채운다. `Slide.imageQuery` 신설 — 2단계가 같은 장면을 만들려면 1단계의 검색어가 남아 있어야 한다 | AI 이미지 생성이 **장당 25~40초**로 실측됐다(문서 예시 12초). 한 번에 하면 그동안 skeleton만 보인다. 2단계 경로는 여러 번 불러도 안전하고, 실패한 자리는 글자 레이아웃으로 내려앉혀 카드를 완결시킨다 | §2-3 · §6 · §12 |
+| 2026-08-31 | **F15(AI 이미지 생성)와 2단계 제작을 되돌림** — `lib/imagegen`·`render/images` 라우트 삭제, `Slide.imageOrigin`·`imageQuery`·`VisualType.ai_generated` 제거 | 브랜드 색·폰트 + 편집 기능을 넣기로 하면서 «글자만 있는 카드»가 실패가 아니게 됐다. 2단계 제작은 오직 AI 생성(장당 25~40초) 때문에 있었으므로 함께 걷어냈다. 앞으로 할 리팩터링에서 안 쓰는 경로를 매번 고려하지 않으려는 것 | §2-3 · §6 · §8 · §12 |
+| 2026-08-31 | ~~**카드뉴스 제작을 2단계로 분리.**~~ `POST .../render`는 글자가 든 슬라이드를 곧바로 돌려주고(이미지 자리는 비운 채), 새 경로 `POST .../render/images`가 사진을 채운다. `Slide.imageQuery` 신설 — 2단계가 같은 장면을 만들려면 1단계의 검색어가 남아 있어야 한다 | AI 이미지 생성이 **장당 25~40초**로 실측됐다(문서 예시 12초). 한 번에 하면 그동안 skeleton만 보인다. 2단계 경로는 여러 번 불러도 안전하고, 실패한 자리는 글자 레이아웃으로 내려앉혀 카드를 완결시킨다 | §2-3 · §6 · §12 |
 | 2026-08-31 | `VisualType`에 `ai_generated` 추가 | 렌더 라우트가 AI 단계를 모른 채 판정하면, 실제로는 AI가 그림을 만들었는데 카드에는 `text_only`로 적혀 결과 화면이 «사진이 없다»고 잘못 판단한다(구성 템플릿 선택이 막힌다) | §2-3 · §12 |
 | 2026-08-31 | **AI 이미지 생성(F15) — 폴백 사슬 ③ 구현.** Seedream 5.0 Pro를 GPTProto 경유로 호출(`GPTPROTO_API_KEY`). `Slide.imageOrigin` 신설로 user·stock·ai를 구분한다. 생성 이미지는 공급자 주소를 그대로 쓰지 않고 **우리 Storage로 복사**한다 | PRD가 F15를 v1로 올렸다(08-31). 공급자 출력 URL의 수명이 문서에 없어, 그대로 저장하면 나중에 카드를 열 때 이미지가 통째로 깨진다. 크기는 `1024x1024` 고정 — 캔버스가 1080²이라 2K가 필요 없고 기본값(2048)은 최대 2.6배 비싸다 | §2-3 · §8 · §12 |
 | 2026-08-31 | **구성 템플릿 4종 신설** — `Card.templateId` 추가(`null`=AI가 알아서). 템플릿은 장수·순서·각 장의 «할 일»만 담고 문구는 AI가 쓴다. 고르는 자리는 제작 «결과» 화면(「다른 구성으로」) | 캔바식 갤러리를 기획 앞에 두면 «AI가 먼저 구조화»(DESIGN §7)와 «빈칸부터 채우게 만들지 않는다»(§0)가 뒤집힌다. 4종은 08-28 취향 예시 재작업에서 살아남은 형식(diary·editorial·statement·informational) | §2-3 · §7 · §9 |

@@ -10,7 +10,7 @@ import AppShell from "@/components/AppShell";
 import BackLink from "@/components/BackLink";
 import StockAttribution from "@/components/StockAttribution";
 import { THEMES, THEME_ORDER, resolveTheme } from "@/lib/render/themes";
-import { IMAGE_LAYOUTS, LAYOUT_LABELS, layoutOptionsFor } from "@/lib/slide-layout";
+import { LAYOUT_LABELS, layoutOptionsFor } from "@/lib/slide-layout";
 import { CARD_TEMPLATES, TEMPLATE_ORDER, worksWithoutPhotos } from "@/lib/card-templates";
 import type { Card, Caption, LayoutId, ThemeId, TemplateId } from "@/types";
 
@@ -78,8 +78,6 @@ export default function CardResultPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
-  /** AI 사진이 아직 채워지는 중 — 슬라이드는 이미 보인다 (08-31 2단계) */
-  const [imagesPending, setImagesPending] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -210,42 +208,6 @@ export default function CardResultPage() {
     [fetchSlideImage],
   );
 
-  /**
-   * 비워둔 사진 자리를 채운다 — 제작의 2단계 (08-31 F15).
-   *
-   * 1단계(`POST .../render`)가 글자가 든 슬라이드를 곧바로 돌려주고 화면에 뜬 뒤,
-   * 이게 뒤이어 돈다. **기다리는 동안에도 카드는 이미 읽을 수 있다** —
-   * 사진 자리는 회색 면으로 보이고 준비되면 조용히 갈아끼워진다.
-   *
-   * 실패해도 조용히 넘어간다. 서버가 그 자리를 글자 레이아웃으로 내려앉혀
-   * 카드를 완결시키므로(DESIGN §12), 화면은 다음 진입 때 맞춰진다.
-   */
-  const fillImages = useCallback(
-    async (token: string) => {
-      setImagesPending(true);
-      try {
-        const res = await fetch(`/api/cards/${cardId}/render/images`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as { slides: Card["slides"]; filled: number };
-
-        const snap = await getDoc(doc(db, "cards", cardId));
-        const fresh = snap.data() as Card | undefined;
-        if (fresh) setCard(fresh);
-
-        // 사진이 들어갔거나 레이아웃이 내려앉았거나 — 어느 쪽이든 다시 그려야 한다
-        await fetchAllSlideImages(data.slides.length, token, true);
-      } catch {
-        /* 다음 진입 때 맞춰진다 */
-      } finally {
-        setImagesPending(false);
-      }
-    },
-    [cardId, fetchAllSlideImages],
-  );
-
   /** 캡션 + 슬라이드 구성 생성 → 이미지 로드 */
   const generate = useCallback(async () => {
     const user = userRef.current;
@@ -270,11 +232,7 @@ export default function CardResultPage() {
       }
 
       const captionData = (await captionRes.json()) as { mock?: boolean };
-      const renderData = (await renderRes.json()) as {
-        slides: unknown[];
-        imagesPending?: boolean;
-        mock?: boolean;
-      };
+      const renderData = (await renderRes.json()) as { slides: unknown[]; mock?: boolean };
       setIsMock(Boolean(captionData.mock || renderData.mock));
 
       const snap = await getDoc(doc(db, "cards", cardId));
@@ -286,14 +244,11 @@ export default function CardResultPage() {
       setPhase("ready");
       // 「다시 만들기」로 재진입할 수 있다 — 이때도 옛 PNG가 나오면 안 된다
       await fetchAllSlideImages(renderData.slides.length, token, true);
-
-      // 여기서부터는 «이미 카드가 보이는» 상태다. 사진은 뒤이어 채운다 (08-31 2단계)
-      if (renderData.imagesPending) await fillImages(token);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "생성에 실패했어요.");
       setPhase("error");
     }
-  }, [cardId, fetchAllSlideImages, fillImages]);
+  }, [cardId, fetchAllSlideImages]);
 
   /** 진입: 로그인 확인 → 카드 로드 → 제작 여부 분기 */
   useEffect(() => {
@@ -316,16 +271,7 @@ export default function CardResultPage() {
 
         if (data.slides.length > 0 && data.caption) {
           setPhase("ready");
-          const token = await user.getIdToken();
-          await fetchAllSlideImages(data.slides.length, token);
-
-          /*
-            중간에 나갔다 들어온 경우 — 사진 자리가 비어 있을 수 있다 (08-31 2단계).
-            서버가 여러 번 불러도 안전하게 만들어져 있어서, 남아 있으면 마저 채운다.
-          */
-          if (data.slides.some((sl) => IMAGE_LAYOUTS.includes(sl.layoutId) && !sl.imageUrl)) {
-            await fillImages(token);
-          }
+          await fetchAllSlideImages(data.slides.length, await user.getIdToken());
         } else {
           await generate();
         }
@@ -335,7 +281,7 @@ export default function CardResultPage() {
       }
     });
     return unsubscribe;
-  }, [cardId, router, generate, fetchAllSlideImages, fillImages]);
+  }, [cardId, router, generate, fetchAllSlideImages]);
 
   /** PATCH /content 공통 저장 */
   const saveContent = useCallback(
@@ -433,7 +379,7 @@ export default function CardResultPage() {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(body?.error ?? "다시 만들지 못했어요.");
       }
-      const data = (await res.json()) as { slides: unknown[]; imagesPending?: boolean };
+      const data = (await res.json()) as { slides: unknown[] };
 
       const snap = await getDoc(doc(db, "cards", cardId));
       const fresh = snap.data() as Card | undefined;
@@ -442,8 +388,6 @@ export default function CardResultPage() {
       // 방금 서버에서 새로 만들었다 — 캐시를 반드시 지나쳐야 한다
       await fetchAllSlideImages(data.slides.length, token, true);
       showToast(`「${t.label}」 구성으로 다시 만들었어요.`);
-
-      if (data.imagesPending) await fillImages(token);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "다시 만들지 못했어요.");
     } finally {
@@ -607,7 +551,7 @@ export default function CardResultPage() {
                         role="radio"
                         aria-checked={active}
                         onClick={() => selectTheme(id)}
-                        disabled={saving || imagesPending}
+                        disabled={saving}
                         className={`flex items-center gap-2 rounded-pill border px-3 py-2 text-caption font-semibold
                                     disabled:opacity-60 ${
                                       active
@@ -658,7 +602,7 @@ export default function CardResultPage() {
                         key={id}
                         type="button"
                         aria-pressed={active}
-                        disabled={regenerating || saving || imagesPending || noPhotos}
+                        disabled={regenerating || saving || noPhotos}
                         title={noPhotos ? "사진이 없어 이 구성은 글자만 남아요" : undefined}
                         onClick={() => rebuildWith(id)}
                         className={`flex flex-col items-start rounded-md border px-3 py-2 text-left
@@ -737,12 +681,7 @@ export default function CardResultPage() {
                   />
                 ))}
             </div>
-            {phase === "ready" && imagesPending && (
-              <p className="text-body text-purple">
-                ✦ 차곡이 사진을 그리고 있어요. 먼저 문구부터 보고 계셔도 돼요
-              </p>
-            )}
-            {phase === "ready" && !imagesPending && selectedSlide === null && (
+            {phase === "ready" && selectedSlide === null && (
               <p className="text-caption text-sub">슬라이드를 누르면 문구를 수정할 수 있어요.</p>
             )}
             {phase === "ready" && card && <StockAttribution slides={card.slides} />}

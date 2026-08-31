@@ -3,8 +3,6 @@ import "server-only";
 import { audiencePrompt } from "../audiences";
 import { toneDirective } from "../tone";
 import { isStockConfigured, pickStockPhotos } from "../stock";
-import { generateImage, isImageGenConfigured } from "../imagegen";
-import { saveServerImage } from "../storage/photos";
 import { BASE_SYSTEM, STR, callJson, isClaudeConfigured, obj } from "./client";
 import { buildPreferenceDirective } from "./preferences";
 import { CARD_TEMPLATES, materializeTemplate, type TemplateSlide } from "../card-templates";
@@ -16,7 +14,6 @@ import {
   TEXT_ONLY_LAYOUTS,
 } from "../slide-layout";
 import type {
-  ImageOrigin,
   LayoutId,
   Slide,
   StockCredit,
@@ -55,15 +52,6 @@ export type SlidesInput = {
    * null이면 지금까지처럼 AI가 구성까지 정한다.
    */
   templateId?: TemplateId | null;
-  /**
-   * AI 이미지를 **지금 만들지 않고 자리만 비워둔다** (08-31 B단계).
-   *
-   * 생성이 장당 25~40초라 여기서 기다리면 사용자가 그만큼 skeleton만 본다.
-   * 켜면 이미지 레이아웃을 유지한 채 `imageUrl: null`로 남기고,
-   * 두 번째 호출(`POST .../render/images`)이 채운다.
-   * 스톡은 검색이 1초 안쪽이라 이 옵션과 무관하게 그 자리에서 채운다.
-   */
-  deferImages?: boolean;
   visualType: VisualType;
   /** 사용자가 올린 사진 (F13). 순서 = 배열 순서. 이미지 레이아웃에 이 순서대로 배정된다 */
   photoUrls: string[];
@@ -84,26 +72,6 @@ const SLOT_HINT: Record<LayoutId, string> = {
 
 function slotLine(id: LayoutId): string {
   return `${LAYOUT_SLOTS[id].join(", ")}${SLOT_HINT[id]}`;
-}
-
-/**
- * 스톡 «검색어»를 이미지 «생성 프롬프트»로 바꾼다 (08-31 F15).
- *
- * 검색어는 `morning run city street`처럼 낱말 몇 개다. 그대로 넣으면 모델이
- * 일러스트나 콜라주를 낼 수 있는데, 이 자리는 **스톡 사진이 있었을 자리**라
- * 사진처럼 보여야 카드뉴스 안에서 튀지 않는다. 그래서 사진 지시를 붙인다.
- *
- * **글자를 넣지 말라고 못박는다.** 문구는 satori가 정확히 그리는데,
- * 생성 이미지에 글자까지 섞이면 한 화면에 두 벌이 겹쳐 보인다.
- */
-function imagePrompt(query: string, input: SlidesInput): string {
-  const subject = query.trim() || input.audience;
-  return [
-    `Realistic photograph: ${subject}.`,
-    "Natural lighting, candid lifestyle photography, shallow depth of field.",
-    "Square 1:1 composition with empty space for text overlay.",
-    "No text, no letters, no watermark, no logo, no collage, no illustration.",
-  ].join(" ");
 }
 
 const MIN_SLIDES = 5;
@@ -152,10 +120,7 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
   const photos = input.photoUrls ?? [];
   const photoCount = input.visualType === "text_only" ? 0 : photos.length;
   const stockAvailable = photoCount === 0 && isStockConfigured();
-  // ③ AI 생성 — 앞의 둘이 모두 비었을 때만 (DESIGN §12 · PRD F15, 08-31)
-  const genAvailable = photoCount === 0 && !stockAvailable && isImageGenConfigured();
-  const usable =
-    photoCount === 0 && !stockAvailable && !genAvailable ? TEXT_ONLY_LAYOUTS : ALL_LAYOUTS;
+  const usable = photoCount === 0 && !stockAvailable ? TEXT_ONLY_LAYOUTS : ALL_LAYOUTS;
 
   /*
     구성 템플릿 (08-31). 주어지면 «몇 장·어떤 순서»가 여기서 확정되고
@@ -166,10 +131,7 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
   */
   const template = input.templateId ? CARD_TEMPLATES[input.templateId] : null;
   const plan: TemplateSlide[] | null = template
-    ? materializeTemplate(
-        template,
-        stockAvailable || genAvailable ? template.slides.length : photoCount,
-      )
+    ? materializeTemplate(template, stockAvailable ? template.slides.length : photoCount)
     : null;
 
   const directives = [
@@ -260,16 +222,13 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
     .map((s, i) => ({ i, query: s.imageQuery ?? "" }))
     .filter(({ i }) => IMAGE_LAYOUTS.includes(kept[i].layoutId as LayoutId));
 
-  const assigned = new Map<
-    number,
-    { url: string; credit: StockCredit | null; origin: ImageOrigin }
-  >();
+  const assigned = new Map<number, { url: string; credit: StockCredit | null }>();
 
   if (photoCount > 0) {
     imageSlots.forEach((slot, n) => {
       // 사용자 사진은 출처가 본인이라 크레딧이 없다
       if (n < photoCount) {
-        assigned.set(slot.i, { url: photos[n], credit: null, origin: "user" });
+        assigned.set(slot.i, { url: photos[n], credit: null });
       }
     });
   } else if (stockAvailable && imageSlots.length > 0) {
@@ -281,40 +240,8 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
           url: photo.imageUrl,
           // 약관이 요구하는 크레딧 — 지금 안 담아두면 나중에 알아낼 방법이 없다
           credit: { photographer: photo.photographer, sourceUrl: photo.sourceUrl },
-          origin: "stock",
         });
       }
-    });
-  } else if (genAvailable && input.deferImages) {
-    /*
-      자리만 비워두고 넘어간다. 아래 «내려앉히기»도 건너뛰어야 이미지 레이아웃이
-      살아남는다 — 그래야 두 번째 호출이 그 자리에 사진을 넣을 수 있다.
-      그때까지 렌더러는 회색 면을 그리는데, 이건 생성 중 skeleton이다 (DESIGN §10).
-    */
-  } else if (genAvailable && imageSlots.length > 0) {
-    /*
-      ③ AI 생성 (F15, 08-31). 여기까지 왔다는 건 사용자 사진도 스톡도 없다는 뜻이다.
-
-      **한 장이 12초쯤 걸린다.** 순서대로 부르면 두 장에 25초라, 자리들을 한꺼번에
-      부른다. 이미지 자리는 레이아웃당 최대 2개라 동시 호출이 몰릴 일은 없다.
-
-      만든 이미지는 **우리 Storage로 옮겨 저장한다** — 공급자 출력 주소의 수명이
-      문서에 없어서, 그대로 두면 나중에 카드를 열 때 이미지가 깨진다.
-      저장까지 실패하면 그 자리는 비고, 아래에서 글자 레이아웃으로 내려앉는다.
-    */
-    const made = await Promise.all(
-      imageSlots.map((slot) => generateImage(imagePrompt(slot.query, input))),
-    );
-    const stored = await Promise.all(
-      // 형식은 만들어진 것을 따른다 — 실측상 JPEG가 온다. 고정하면 내용과 어긋난다
-      made.map((img) =>
-        img ? saveServerImage("cards", input.cardId, img.bytes, img.contentType) : null,
-      ),
-    );
-    imageSlots.forEach((slot, n) => {
-      const url = stored[n];
-      // AI 생성물에는 크레딧이 없다 — 대신 origin으로 «만든 그림»임을 남긴다
-      if (url) assigned.set(slot.i, { url, credit: null, origin: "ai" });
     });
   }
 
@@ -323,14 +250,8 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
     const picked = assigned.get(order) ?? null;
     const imageUrl = picked?.url ?? null;
 
-    /*
-      사진을 못 채운 이미지 레이아웃은 글자 쪽으로.
-
-      **단, 이미지를 미뤄둔 경우는 예외다.** 여기서 내려앉히면 레이아웃이 글자용으로
-      바뀌어, 뒤늦게 사진이 도착해도 넣을 자리가 없다.
-    */
-    const deferred = genAvailable && input.deferImages === true;
-    if (imageUrl === null && !deferred && IMAGE_LAYOUTS.includes(layoutId)) {
+    // 사진을 못 채운 이미지 레이아웃은 글자 쪽으로
+    if (imageUrl === null && IMAGE_LAYOUTS.includes(layoutId)) {
       layoutId = DOWNGRADE[layoutId];
     }
 
@@ -347,9 +268,6 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
       texts,
       imageUrl,
       imageCredit: picked?.credit ?? null,
-      ...(imageUrl && picked ? { imageOrigin: picked.origin } : {}),
-      // 2단계가 같은 장면을 만들 수 있도록 검색어를 남긴다 (08-31)
-      ...(s.imageQuery ? { imageQuery: s.imageQuery } : {}),
     };
   });
 
