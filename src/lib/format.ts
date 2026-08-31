@@ -6,6 +6,14 @@
  * 붙일 수 있는 조사는 «에게» 하나뿐 — 화면마다 표현이 달라지면 같은 것인 줄 모른다.
  */
 
+/** 'YYYY-MM-DD' 또는 Date → 'M월 D일 (월)' — 날짜 표기 통일형 (08-31) */
+export function formatMonthDayWeekday(input: string | Date): string {
+  const date = typeof input === "string" ? new Date(`${input}T00:00:00`) : input;
+  if (Number.isNaN(date.getTime())) return "날짜 미정";
+  const weekday = ["일", "월", "화", "수", "목", "금", "토"][date.getDay()];
+  return `${date.getMonth() + 1}월 ${date.getDate()}일 (${weekday})`;
+}
+
 /** 'YYYY-MM-DD' → 'M월 D일'. 값이 없으면 «날짜 미정» */
 export function formatMonthDay(dateKey: string): string {
   if (!dateKey) return "날짜 미정";
