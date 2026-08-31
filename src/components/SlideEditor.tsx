@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { clampElement } from "@/lib/free-layout";
+import { DEFAULT_SLOT_STYLE, SIZE_SCALE } from "@/lib/slot-style";
 import type { SlideElement } from "@/types";
+
+/** 렌더러(`lib/render/layouts.ts`)와 같은 식 — 상자 높이에서 글자 크기를 뽑는다 */
+const SLIDE_SIZE = 1080;
 
 /**
  * 자유 배치 편집기 (08-31 · 편집기 B단계).
@@ -47,6 +51,14 @@ type Props = {
   disabled?: boolean;
   /** 'select'면 고르기만 한다 — 레이아웃 모드에서는 위치를 못 바꾼다 */
   mode?: "edit" | "select";
+  /**
+   * 캔버스 배경색. 글자를 그 자리에서 고칠 때 **밑에 깔린 PNG의 옛 글자를 덮으려고** 쓴다.
+   * 안 덮으면 옛 글자와 지금 치는 글자가 겹쳐 보인다.
+   */
+  bg: string;
+  ink: string;
+  /** 글자를 그 자리에서 고쳤을 때. 없으면 그 자리 편집이 꺼진다 */
+  onEditText?: (id: string, text: string) => void;
   /** 손을 뗐을 때만 부른다 — 끄는 동안 저장하면 요청이 폭주한다 */
   onCommit: (next: SlideElement[]) => void;
 };
@@ -58,8 +70,26 @@ export default function SlideEditor({
   onSelect,
   disabled,
   mode = "edit",
+  bg,
+  ink,
+  onEditText,
   onCommit,
 }: Props) {
+  /** 지금 그 자리에서 고치는 중인 상자 */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+
+  function beginEdit(el: SlideElement) {
+    if (!onEditText || disabled || el.kind !== "text") return;
+    setEditingId(el.id);
+    setEditText(el.text ?? "");
+  }
+
+  function commitEdit() {
+    const id = editingId;
+    setEditingId(null);
+    if (id) onEditText?.(id, editText);
+  }
   const boxRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<SlideElement[] | null>(null);
   const dragRef = useRef<Drag | null>(null);
@@ -162,6 +192,8 @@ export default function SlideEditor({
     <div
       ref={boxRef}
       onPointerDown={() => onSelect(null)}
+      // `cqw`로 글자 크기를 재려면 이 상자가 기준이어야 한다
+      style={{ containerType: "inline-size" }}
       className="relative aspect-square w-full max-w-[420px] touch-none select-none overflow-hidden rounded-lg border border-line bg-surface-muted"
     >
       {/* 바탕은 «진짜 결과물»이다 — 흉내 낸 그림이 아니라 내려받을 그 PNG */}
@@ -172,6 +204,47 @@ export default function SlideEditor({
 
       {shown.map((el) => {
         const active = el.id === selectedId;
+        const o = { ...DEFAULT_SLOT_STYLE, ...(el.style ?? {}) };
+        const fontSize = Math.round(SLIDE_SIZE * el.h * 0.42 * SIZE_SCALE[o.size]);
+
+        /*
+          그 자리 편집 — 밑에 깔린 PNG의 옛 글자를 배경색으로 덮고 그 위에 입력칸을 놓는다.
+          크기·정렬·색을 렌더러와 같은 식으로 맞춰서, 치는 동안과 그려진 뒤가 비슷하게 보인다.
+        */
+        if (editingId === el.id) {
+          return (
+            <textarea
+              key={el.id}
+              autoFocus
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              onBlur={commitEdit}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setEditingId(null);
+                } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  commitEdit();
+                }
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              style={{
+                left: `${el.x * 100}%`,
+                top: `${el.y * 100}%`,
+                width: `${el.w * 100}%`,
+                height: `${el.h * 100}%`,
+                background: bg,
+                color: o.colorHex ?? ink,
+                // 미리보기 폭에 맞춰 줄인다 — 캔버스는 1080 기준으로 계산했다
+                fontSize: `${(fontSize / SLIDE_SIZE) * 100}cqw`,
+                textAlign: o.align,
+                fontWeight: o.weight === "bold" ? 700 : 400,
+                lineHeight: 1.3,
+              }}
+              className="absolute resize-none overflow-hidden rounded-sm border-2 border-berry p-0 outline-none"
+            />
+          );
+        }
+
         return (
           <div
             key={el.id}
@@ -181,7 +254,16 @@ export default function SlideEditor({
               mode === "edit" ? `${el.slot ?? el.kind} 옮기기` : `${el.slot ?? el.kind} 고르기`
             }
             onPointerDown={(e) => start(e, el, "move")}
-            onKeyDown={(e) => onKeyDown(e, el)}
+            onDoubleClick={() => beginEdit(el)}
+            onKeyDown={(e) => {
+              // 고른 상태에서 Enter로도 들어간다 — 마우스 없이 쓸 수 있어야 한다
+              if (e.key === "Enter") {
+                e.preventDefault();
+                beginEdit(el);
+                return;
+              }
+              onKeyDown(e, el);
+            }}
             style={{
               left: `${el.x * 100}%`,
               top: `${el.y * 100}%`,

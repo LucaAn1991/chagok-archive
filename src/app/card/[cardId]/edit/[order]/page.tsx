@@ -15,6 +15,7 @@ import { IMAGE_LAYOUTS, LAYOUT_LABELS, layoutOptionsFor } from "@/lib/slide-layo
 import { bakeToElements, newTextBox } from "@/lib/free-layout";
 import { Plus, Trash2 } from "lucide-react";
 import { MAX_PHOTOS_PER_CARD } from "@/lib/storage/limits";
+import { applyBrand, resolveTheme } from "@/lib/render/themes";
 import type { Card, FontId, LayoutId, SlideElement, SlotStyle } from "@/types";
 
 /**
@@ -54,6 +55,7 @@ export default function SlideEditPage() {
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [card, setCard] = useState<Card | null>(null);
+  const [brand, setBrand] = useState<import("@/types").Brand | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("text");
   const [saving, setSaving] = useState(false);
@@ -63,8 +65,6 @@ export default function SlideEditPage() {
   const [textDraft, setTextDraft] = useState<Record<string, string>>({});
   const [styleDraft, setStyleDraft] = useState<Record<string, SlotStyle>>({});
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
-  /** 자유 배치일 때 상자별 글자 초안 (id → 글) */
-  const [boxDraft, setBoxDraft] = useState<Record<string, string>>({});
   const [selectedElId, setSelectedElId] = useState<string | null>(null);
   /** 파일이 실제로 있는 폰트만 툴바에 띄운다 — 서버만 아는 값이라 물어본다 */
   const [fontIds, setFontIds] = useState<FontId[]>([]);
@@ -101,6 +101,9 @@ export default function SlideEditPage() {
   */
   const hitBoxes = slide ? (freeMode ? (slide.elements ?? []) : bakeToElements(slide)) : [];
 
+  /** 캔버스 색 — 렌더러와 같은 함수를 쓴다. 어긋나면 덮은 자리가 눈에 띈다 */
+  const canvas = applyBrand(resolveTheme(card?.themeId), brand, card?.bgOverride);
+
   /**
    * 미리보기에서 상자를 골랐을 때 (08-31).
    *
@@ -121,7 +124,8 @@ export default function SlideEditPage() {
   /** 툴바에 보여줄 «무엇을 고쳤나» — 자유 배치는 이름이 없어 내용 앞부분을 쓴다 */
   const toolbarLabel = freeMode
     ? selectedElId
-      ? (boxDraft[selectedElId]?.trim().slice(0, 10) || "빈 상자")
+      ? (slide?.elements?.find((e) => e.id === selectedElId)?.text?.trim().slice(0, 10) ||
+        "빈 상자")
       : null
     : selectedSlot
       ? (SLOT_LABELS[selectedSlot] ?? selectedSlot)
@@ -159,15 +163,12 @@ export default function SlideEditPage() {
           return;
         }
         setCard(data);
+        // 그 자리 편집이 옛 글자를 덮으려면 캔버스 색을 화면도 알아야 한다
+        getDoc(doc(db, "users", user.uid))
+          .then((u) => setBrand((u.data() as { brand?: import("@/types").Brand })?.brand ?? null))
+          .catch(() => setBrand(null));
         setTextDraft({ ...found.texts });
         setStyleDraft({ ...(found.styleOverrides ?? {}) });
-        setBoxDraft(
-          Object.fromEntries(
-            (found.elements ?? [])
-              .filter((e) => e.kind === "text")
-              .map((e) => [e.id, e.text ?? ""]),
-          ),
-        );
         setPhase("ready");
         fetch("/api/fonts")
           .then((r) => (r.ok ? r.json() : null))
@@ -202,11 +203,6 @@ export default function SlideEditPage() {
       setCard((prev) => (prev ? { ...prev, slides: data.slides } : prev));
       const fresh = data.slides.find((s) => s.order === order);
       if (fresh?.elements) {
-        setBoxDraft(
-          Object.fromEntries(
-            fresh.elements.filter((e) => e.kind === "text").map((e) => [e.id, e.text ?? ""]),
-          ),
-        );
       }
       await loadImage(token, true);
       setSavedAt(true);
@@ -258,15 +254,6 @@ export default function SlideEditPage() {
     saveBoxes(next);
   }
 
-  /** 자유 배치 상자들의 글자를 한 번에 저장 */
-  function saveBoxTexts() {
-    if (!slide?.elements) return;
-    saveBoxes(
-      slide.elements.map((e) =>
-        e.kind === "text" && boxDraft[e.id] !== undefined ? { ...e, text: boxDraft[e.id] } : e,
-      ),
-    );
-  }
 
   /**
    * 툴바 조절은 **누르는 즉시 반영한다** (08-31 수정).
@@ -290,20 +277,6 @@ export default function SlideEditPage() {
     }, 250);
   }
 
-  async function saveText() {
-    const els = withElementText();
-    await save({
-      slides: [
-        {
-          order,
-          texts: textDraft,
-          styleOverrides: styleDraft,
-          ...(els ? { elements: els } : {}),
-        },
-      ],
-    });
-  }
-
   async function selectLayout(next: LayoutId) {
     const slides = await save({
       slides: [{ order, texts: textDraft, styleOverrides: styleDraft, layoutId: next }],
@@ -316,14 +289,10 @@ export default function SlideEditPage() {
     }
   }
 
-  /** 문구만 «저장 안 됨»으로 본다 — 툴바 조절은 알아서 반영되므로 (08-31) */
-  const dirty = Boolean(slide && JSON.stringify(slide.texts) !== JSON.stringify(textDraft));
-
-  /** 자유 배치 상자들의 글자가 저장된 것과 다른가 */
-  const boxDirty = Boolean(
-    freeMode &&
-      slide?.elements?.some((e) => e.kind === "text" && (boxDraft[e.id] ?? "") !== (e.text ?? "")),
-  );
+  /*
+    «저장 안 됨» 상태가 없다 (08-31). 글자는 그 자리에서 고치는 즉시,
+    조절은 250ms 뒤에 저장된다. 사용자가 눌러야 하는 저장 버튼이 없다.
+  */
 
   if (phase === "not-found") {
     return (
@@ -337,21 +306,12 @@ export default function SlideEditPage() {
   }
 
   const total = card?.slides.length ?? 0;
-  const inputClass =
-    "w-full rounded-md border border-line bg-surface px-3 py-2 text-body text-ink";
-
   return (
     <AppShell>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <BackLink fallbackHref={`/card/${cardId}/result`}>제작 결과</BackLink>
         <span className="text-caption text-sub">
-          {saving
-            ? "저장 중···"
-            : savedAt
-              ? "저장됐어요"
-              : dirty || boxDirty
-                ? "저장 안 됨"
-                : ""}
+          {saving ? "저장 중···" : savedAt ? "저장됐어요" : ""}
         </span>
       </div>
 
@@ -419,6 +379,24 @@ export default function SlideEditPage() {
           onSelect={pickBox}
           disabled={saving}
           mode={freeMode ? "edit" : "select"}
+          bg={canvas.color.bg}
+          ink={canvas.color.ink}
+          onEditText={(id, text) => {
+            /*
+              그 자리에서 고친 글을 저장한다 (08-31).
+              자유 배치면 그 상자의 글이고, 레이아웃 모드면 그 상자가 가리키는 슬롯의 글이다.
+            */
+            if (freeMode) {
+              if (!slide?.elements) return;
+              saveBoxes(slide.elements.map((e) => (e.id === id ? { ...e, text } : e)));
+              return;
+            }
+            const slot = hitBoxes.find((b) => b.id === id)?.slot;
+            if (!slot) return;
+            const nextTexts = { ...textDraft, [slot]: text };
+            setTextDraft(nextTexts);
+            void save({ slides: [{ order, texts: nextTexts, styleOverrides: styleDraft }] });
+          }}
           onCommit={(next) => save({ slides: [{ order, elements: next }] })}
         />
       </div>
@@ -449,9 +427,8 @@ export default function SlideEditPage() {
             </button>
           )}
           <span className="text-caption text-sub">
-            {freeMode
-              ? "끌어서 옮기고 모서리 점으로 크기 조절"
-              : "글자를 누르면 그 줄을 바로 고칠 수 있어요"}
+            글자를 두 번 누르면 그 자리에서 고쳐요
+            {freeMode ? " · 끌어서 옮기고 모서리 점으로 크기 조절" : ""}
           </span>
         </div>
       )}
@@ -494,6 +471,11 @@ export default function SlideEditPage() {
           좌표를 가진 상자를 슬롯 이름으로 부르는 게 안 맞고, 상자를 더하거나
           지울 수 있어야 자유 배치라는 말이 성립한다.
         */}
+        {/*
+          글자는 **미리보기에서 두 번 눌러 그 자리에서** 고친다 (08-31).
+          아래에 입력칸을 또 두면 같은 글이 두 곳에 있어 어느 쪽이 진짜인지 헷갈린다.
+          여기는 «상자를 더하고 지우는» 곳이다.
+        */}
         {tab === "text" && slide && freeMode && (
           <>
             <button
@@ -511,35 +493,26 @@ export default function SlideEditPage() {
               .map((e, i) => {
                 const active = selectedElId === e.id;
                 return (
-                  <div key={e.id} className="flex items-start gap-2">
-                    <label className="flex flex-1 flex-col gap-1">
-                      <span
-                        className={`text-label font-semibold ${
-                          active ? "text-berry-dark" : "text-sub"
-                        }`}
-                      >
-                        텍스트 상자 {i + 1}
-                      </span>
-                      <textarea
-                        ref={(el) => {
-                          fieldRefs.current[e.id] = el;
-                        }}
-                        value={boxDraft[e.id] ?? ""}
-                        rows={(boxDraft[e.id] ?? "").length > 40 ? 3 : 1}
-                        onFocus={() => {
-                          setSelectedElId(e.id);
-                          setSelectedSlot(null);
-                        }}
-                        onChange={(ev) => setBoxDraft({ ...boxDraft, [e.id]: ev.target.value })}
-                        className={`${inputClass} ${active ? "border-berry" : ""}`}
-                      />
-                    </label>
+                  <div
+                    key={e.id}
+                    className={`flex items-center gap-2 rounded-md border px-3 py-2 ${
+                      active ? "border-berry bg-berry-light" : "border-line bg-surface"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setSelectedElId(e.id)}
+                      className="flex-1 truncate text-left text-body text-ink"
+                    >
+                      <span className="mr-2 text-caption text-sub">{i + 1}</span>
+                      {e.text?.trim() || "(빈 상자)"}
+                    </button>
                     <button
                       type="button"
                       aria-label={`텍스트 상자 ${i + 1} 지우기`}
                       disabled={saving}
                       onClick={() => removeBox(e.id)}
-                      className="mt-6 flex size-11 items-center justify-center rounded-md text-sub hover:bg-surface-muted disabled:opacity-60"
+                      className="flex size-9 items-center justify-center rounded-md text-sub hover:bg-surface-muted disabled:opacity-60"
                     >
                       <Trash2 size={16} aria-hidden />
                     </button>
@@ -547,88 +520,38 @@ export default function SlideEditPage() {
                 );
               })}
 
-            {boxDirty && (
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={saveBoxTexts}
-                  disabled={saving}
-                  className="h-11 rounded-md bg-berry px-5 text-body font-semibold text-white
-                             hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
-                >
-                  {saving ? "···" : "저장"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setBoxDraft(
-                      Object.fromEntries(
-                        (slide.elements ?? [])
-                          .filter((e) => e.kind === "text")
-                          .map((e) => [e.id, e.text ?? ""]),
-                      ),
-                    )
-                  }
-                  className="text-body text-sub"
-                >
-                  되돌리기
-                </button>
-              </div>
-            )}
+            <p className="text-caption text-sub">
+              글자는 위 미리보기에서 두 번 눌러 고쳐요. 여기서는 상자를 더하거나 지워요.
+            </p>
           </>
         )}
 
         {tab === "text" && slide && !freeMode && (
           <>
-            {Object.entries(textDraft).map(([key, value]) => {
-              const active = selectedSlot === key;
-              return (
-                <label key={key} className="flex flex-col gap-1">
-                  <span
-                    className={`text-label font-semibold ${active ? "text-berry-dark" : "text-sub"}`}
-                  >
-                    {SLOT_LABELS[key] ?? key}
-                  </span>
-                  <textarea
-                    ref={(el) => {
-                      fieldRefs.current[key] = el;
-                    }}
-                    value={value}
-                    rows={value.length > 40 ? 3 : 1}
-                    onFocus={() => {
+            <p className="text-caption text-sub">
+              위 미리보기에서 글자를 두 번 누르면 그 자리에서 고칠 수 있어요.
+            </p>
+            <div className="flex flex-col gap-2">
+              {Object.entries(textDraft).map(([key, value]) => {
+                const active = selectedSlot === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
                       setSelectedSlot(key);
-                      // 입력칸을 눌러도 미리보기의 그 상자가 켜지게 — 방향이 양쪽이다
                       setSelectedElId(hitBoxes.find((b) => b.slot === key)?.id ?? null);
                     }}
-                    onChange={(e) => setTextDraft({ ...textDraft, [key]: e.target.value })}
-                    className={`${inputClass} ${active ? "border-berry" : ""}`}
-                  />
-                </label>
-              );
-            })}
-            {dirty && (
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={saveText}
-                  disabled={saving}
-                  className="h-11 rounded-md bg-berry px-5 text-body font-semibold text-white
-                             hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
-                >
-                  {saving ? "···" : "저장"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTextDraft({ ...slide.texts });
-                    setStyleDraft({ ...(slide.styleOverrides ?? {}) });
-                  }}
-                  className="text-body text-sub"
-                >
-                  되돌리기
-                </button>
-              </div>
-            )}
+                    className={`truncate rounded-md border px-3 py-2 text-left text-body ${
+                      active ? "border-berry bg-berry-light text-berry-dark" : "border-line bg-surface text-ink"
+                    }`}
+                  >
+                    <span className="mr-2 text-caption text-sub">{SLOT_LABELS[key] ?? key}</span>
+                    {value.trim() || "(비어 있음)"}
+                  </button>
+                );
+              })}
+            </div>
           </>
         )}
 
