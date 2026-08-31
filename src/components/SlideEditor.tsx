@@ -38,6 +38,50 @@ const SLIDE_SIZE = 1080;
 /** 한 번에 얼마나 잘게 움직일지 — 너무 잘면 손이 떨리고, 너무 크면 못 맞춘다 */
 const SNAP = 0.005;
 
+/**
+ * 이 거리 안에 들어오면 **달라붙는다** (0~1 비율).
+ *
+ * 카드뉴스는 요소가 조금만 삐뚤어도 티가 난다. 손으로 정확히 맞추기는 어려우니
+ * 가운데선·다른 요소의 모서리에 붙게 하고, 붙는 순간 안내선을 보여준다.
+ */
+const MAGNET = 0.012;
+
+/** 붙을 수 있는 선 — 화면 가운데와 다른 요소들의 모서리·가운데 */
+function guideLines(others: SlideElement[], axis: "x" | "y"): number[] {
+  const lines = [0.5];
+  for (const o of others) {
+    const start = axis === "x" ? o.x : o.y;
+    const size = axis === "x" ? o.w : o.h;
+    lines.push(start, start + size / 2, start + size);
+  }
+  return lines;
+}
+
+/**
+ * 한 축을 붙인다. 요소의 **왼쪽·가운데·오른쪽** 셋 다 후보로 보고
+ * 가장 가까운 짝을 고른다 — 가운데끼리 맞추는 경우가 제일 흔하다.
+ */
+function magnet(
+  start: number,
+  size: number,
+  lines: number[],
+): { start: number; guide: number | null } {
+  let best: { start: number; guide: number; dist: number } | null = null;
+  for (const line of lines) {
+    for (const [edge, offset] of [
+      [start, 0],
+      [start + size / 2, size / 2],
+      [start + size, size],
+    ] as [number, number][]) {
+      const dist = Math.abs(edge - line);
+      if (dist <= MAGNET && (!best || dist < best.dist)) {
+        best = { start: line - offset, guide: line, dist };
+      }
+    }
+  }
+  return best ? { start: best.start, guide: best.guide } : { start, guide: null };
+}
+
 type Drag = {
   id: string;
   mode: "move" | "resize";
@@ -95,6 +139,9 @@ export default function SlideEditor({
   onEditText,
   onCommit,
 }: Props) {
+  /** 지금 붙어 있는 안내선 — 끄는 동안만 보인다 */
+  const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
+
   /** 지금 그 자리에서 고치는 중인 상자 */
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
@@ -143,16 +190,36 @@ export default function SlideEditor({
     const dx = (e.clientX - d.startX) / rect.width;
     const dy = (e.clientY - d.startY) / rect.height;
 
+    const current = draftRef.current ?? [];
+    const others = current.filter((el) => el.id !== d.id);
+    const v: number[] = [];
+    const h: number[] = [];
+
     applyDraft(
-      (draftRef.current ?? []).map((el) => {
+      current.map((el) => {
         if (el.id !== d.id) return el;
-        return clampElement(
-          d.mode === "move"
-            ? { ...el, x: snap(d.origin.x + dx), y: snap(d.origin.y + dy) }
-            : { ...el, w: snap(d.origin.w + dx), h: snap(d.origin.h + dy) },
-        );
+        if (d.mode !== "move") {
+          return clampElement({
+            ...el,
+            w: snap(d.origin.w + dx),
+            h: snap(d.origin.h + dy),
+          });
+        }
+
+        // 붙일 곳을 찾는다. 못 찾으면 손이 놓은 자리 그대로
+        const mx = magnet(d.origin.x + dx, el.w, guideLines(others, "x"));
+        const my = magnet(d.origin.y + dy, el.h, guideLines(others, "y"));
+        if (mx.guide !== null) v.push(mx.guide);
+        if (my.guide !== null) h.push(my.guide);
+
+        return clampElement({
+          ...el,
+          x: mx.guide !== null ? mx.start : snap(d.origin.x + dx),
+          y: my.guide !== null ? my.start : snap(d.origin.y + dy),
+        });
       }),
     );
+    setGuides({ v, h });
   }, [applyDraft]);
 
   const onPointerUp = useCallback(() => {
@@ -163,6 +230,7 @@ export default function SlideEditor({
     // 값을 먼저 읽고 초안을 비운 뒤에 저장한다 — 순서가 바뀌면 렌더링 중 갱신이 된다
     const next = draftRef.current;
     applyDraft(null);
+    setGuides({ v: [], h: [] });
     // 놓는 순간에만 저장한다 — 여기서 부모가 다시 그린다
     if (next) onCommit(next);
   }, [applyDraft, onCommit]);
@@ -222,6 +290,24 @@ export default function SlideEditor({
         // eslint-disable-next-line @next/next/no-img-element -- blob URL은 next/image 대상이 아니다
         <img src={imageUrl} alt="" className="absolute inset-0 h-full w-full" />
       )}
+
+      {/* 붙는 순간 보이는 안내선 — 어디에 맞춰졌는지 눈으로 알려준다 */}
+      {guides.v.map((x) => (
+        <span
+          key={`v${x}`}
+          aria-hidden
+          style={{ left: `${x * 100}%` }}
+          className="pointer-events-none absolute inset-y-0 w-px bg-berry"
+        />
+      ))}
+      {guides.h.map((y) => (
+        <span
+          key={`h${y}`}
+          aria-hidden
+          style={{ top: `${y * 100}%` }}
+          className="pointer-events-none absolute inset-x-0 h-px bg-berry"
+        />
+      ))}
 
       {shown.map((el) => {
         const active = el.id === selectedId;

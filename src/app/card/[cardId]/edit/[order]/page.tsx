@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged, type User as AuthUser } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Undo2 } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import AppShell from "@/components/AppShell";
 import BackLink from "@/components/BackLink";
@@ -22,7 +22,7 @@ import { bakeToElements, newShape, newTextBox } from "@/lib/free-layout";
 import { Plus, Trash2 } from "lucide-react";
 import { MAX_PHOTOS_PER_CARD } from "@/lib/storage/limits";
 import { applyBrand, resolveTheme } from "@/lib/render/themes";
-import type { Card, FontId, LayoutId, SlideElement, SlotStyle } from "@/types";
+import type { Card, FontId, LayoutId, Slide, SlideElement, SlotStyle } from "@/types";
 
 /**
  * 슬라이드 편집 (08-31 · DESIGN.md §12).
@@ -87,6 +87,18 @@ export default function SlideEditPage() {
   const styleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** 미리보기에서 고른 줄의 입력칸으로 바로 커서를 옮기려고 들고 있는다 */
   const fieldRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+
+  /**
+   * 실행 취소 (08-31).
+   *
+   * 고치기 **직전의 슬라이드**를 쌓아둔다. 편집기에서 되돌릴 방법이 없으면
+   * 사용자가 과감하게 못 만진다 — 잘못 옮기거나 지운 걸 복구할 수 없기 때문이다.
+   *
+   * 서버에 저장된 상태만 쌓는다. 화면 초안까지 넣으면 «어디까지 되돌아가는지»가
+   * 흐려진다. 20개까지만 — 그보다 멀리 가면 다시 만드는 편이 빠르다.
+   */
+  const historyRef = useRef<Slide[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
   useEffect(() => {
     return () => {
       if (styleTimer.current) clearTimeout(styleTimer.current);
@@ -241,10 +253,20 @@ export default function SlideEditPage() {
     return unsubscribe;
   }, [cardId, order, router, loadImage, loadBoxes]);
 
+
   /** 저장 공통 — 저장하고 그 자리에서 다시 그린다 */
-  async function save(patch: Record<string, unknown>): Promise<Card["slides"] | null> {
+  async function save(
+    patch: Record<string, unknown>,
+    /** 되돌리기로 부른 경우 — 기록을 다시 쌓지 않는다 */
+    isUndo = false,
+  ): Promise<Card["slides"] | null> {
     const user = userRef.current;
     if (!user || saving) return null;
+
+    if (!isUndo && slide) {
+      historyRef.current = [...historyRef.current, slide].slice(-20);
+      setCanUndo(true);
+    }
     setSaving(true);
     setError(null);
     try {
@@ -290,6 +312,57 @@ export default function SlideEditPage() {
   function saveBoxes(next: SlideElement[]) {
     void save({ slides: [{ order, elements: next }] });
   }
+
+  /**
+   * 한 걸음 되돌린다.
+   *
+   * 슬라이드를 통째로 되돌린다 — 글자·조절·배치·사진·레이아웃이 한 번에 맞춰진다.
+   * `elements`는 **없었으면 `null`을 보내야** 한다. 안 보내면 서버가
+   * «안 바꾼다»로 읽어서 지금 배치가 그대로 남는다.
+   */
+  async function undo() {
+    const prev = historyRef.current.at(-1);
+    if (!prev || saving) return;
+    historyRef.current = historyRef.current.slice(0, -1);
+    setCanUndo(historyRef.current.length > 0);
+
+    const slides = await save(
+      {
+        slides: [
+          {
+            order,
+            texts: prev.texts,
+            layoutId: prev.layoutId,
+            styleOverrides: prev.styleOverrides ?? {},
+            elements: prev.elements ?? null,
+            imageUrl: prev.imageUrl,
+          },
+        ],
+      },
+      true,
+    );
+    const back = slides?.find((s) => s.order === order);
+    if (back) {
+      setTextDraft({ ...back.texts });
+      setStyleDraft({ ...(back.styleOverrides ?? {}) });
+      setSelectedElId(null);
+    }
+  }
+
+  /** Cmd/Ctrl+Z — 편집기에서 기대하는 조작이다 */
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+        // 글자를 치는 중이면 브라우저의 «입력 되돌리기»가 우선이다
+        const t = e.target as HTMLElement | null;
+        if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) return;
+        e.preventDefault();
+        void undo();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   function addBox() {
     if (!slide?.elements) return;
@@ -382,8 +455,21 @@ export default function SlideEditPage() {
         <BackLink exact fallbackHref={`/card/${cardId}/result`}>
           제작 결과
         </BackLink>
-        <span className="text-caption text-sub">
-          {saving ? "저장 중···" : savedAt ? "저장됐어요" : ""}
+        <span className="flex items-center gap-2">
+          <span className="text-caption text-sub">
+            {saving ? "저장 중···" : savedAt ? "저장됐어요" : ""}
+          </span>
+          <button
+            type="button"
+            aria-label="되돌리기"
+            title="되돌리기 (⌘Z)"
+            disabled={!canUndo || saving}
+            onClick={() => void undo()}
+            className="flex h-9 items-center gap-1 rounded-md border border-line bg-surface px-3 text-caption text-sub hover:text-ink disabled:opacity-40"
+          >
+            <Undo2 size={14} aria-hidden />
+            되돌리기
+          </button>
         </span>
       </div>
 
