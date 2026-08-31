@@ -188,8 +188,9 @@ function CalendarView({ uid }: { uid: string }) {
   // 올렸어요 — 실제 올린 날짜를 물어보는 다이얼로그 (놓친 카드와 같은 규칙)
   const [publishTarget, setPublishTarget] = useState<Card | null>(null);
   const [publishDate, setPublishDate] = useState("");
-  // 온보딩에서 고른 업로드 요일 (월=0…일=6) — 쉬는 날/채울 날 구분에 쓴다 (08-31)
+  // 온보딩에서 고른 업로드 요일 (월=0…일=6)·주기 — 쉬는 날/채울 날 구분과 주간 헤더에 쓴다 (08-31)
   const [uploadDays, setUploadDays] = useState<number[] | null>(null);
+  const [uploadFrequency, setUploadFrequency] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -207,6 +208,7 @@ function CalendarView({ uid }: { uid: string }) {
           return;
         }
         setUploadDays((userSnap.data().uploadDays as number[] | undefined) ?? null);
+        setUploadFrequency((userSnap.data().uploadFrequency as number | undefined) ?? null);
 
         const { start, end } = rangeFor(view, anchor);
         const cardsRef = collection(db, "cards");
@@ -546,14 +548,44 @@ function CalendarView({ uid }: { uid: string }) {
                   </>
                 ) : (
                   <>
-                    {/* 주간 = 실행 관리 — 요일 컬럼에 진짜 콘텐츠 카드 (08-31 재설계) */}
-                    <div className="flex items-baseline justify-between">
+                    {/* 주간 = 실행 관리 — 제목 옆 요약 + 상태별 집계 한 줄 (08-31 v3) */}
+                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                       <h2 className="text-body-l font-semibold text-ink">
                         {todayKey >= range.start && todayKey <= range.end
                           ? "이번 주 콘텐츠"
                           : "이 주의 콘텐츠"}
                       </h2>
-                      <span className="text-body text-sub">{state.cards.length}개 예정</span>
+                      <span className="text-caption text-sub">
+                        {uploadFrequency ? `주 ${uploadFrequency}회 목표 · ` : ""}
+                        {state.cards.length}개 기획됨
+                      </span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+                      {(
+                        [
+                          ["planned", "제작 대기"],
+                          ["pending", "업로드 대기"],
+                          ["published", "발행"],
+                        ] as const
+                      ).map(([status, label]) => (
+                        <span
+                          key={status}
+                          className="flex items-center gap-1.5 text-caption text-sub"
+                        >
+                          {status === "published" ? (
+                            <span aria-hidden className="font-semibold">
+                              ✓
+                            </span>
+                          ) : (
+                            <span
+                              aria-hidden
+                              className="h-2 w-2 rounded-pill"
+                              style={{ background: STATUS_COLOR[status] }}
+                            />
+                          )}
+                          {label} {state.cards.filter((c) => c.status === status).length}
+                        </span>
+                      ))}
                     </div>
 
                     {/* Desktop/Tablet — 플래너 컬럼 */}
