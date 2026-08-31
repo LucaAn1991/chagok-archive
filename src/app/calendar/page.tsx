@@ -766,8 +766,14 @@ function CalendarView({ uid }: { uid: string }) {
                 )}
               </div>
 
-              {/* 오른쪽 미리보기 패널 — Desktop(≥1200)만 (08-31 시안 01·06) */}
-              <aside className="sticky top-6 hidden w-[300px] shrink-0 self-start desktop:block">
+              {/* 오른쪽 미리보기 패널 — Desktop(≥1200)만 (08-31 시안 01·06).
+                  월간에서는 요일 헤더(34px)만큼 내려 1일 칸 시작선과 맞춘다 */}
+              <aside
+                className={[
+                  "sticky top-6 hidden w-[300px] shrink-0 self-start desktop:block",
+                  view === "month" ? "mt-[34px]" : "",
+                ].join(" ")}
+              >
                 <DayPanel
                   dateKey={selectedDate}
                   cards={selectedCards}
