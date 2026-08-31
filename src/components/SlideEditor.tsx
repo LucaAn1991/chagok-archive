@@ -18,6 +18,12 @@ import type { SlideElement } from "@/types";
  *
  * 터치도 같은 코드로 받는다 — Pointer 이벤트라 마우스·손가락을 구분하지 않는다
  * (PRD가 모바일 우선이다).
+ *
+ * **두 가지 모드가 있다** (08-31).
+ * - `edit` — 자유 배치. 끌어서 옮기고 크기를 바꾼다.
+ * - `select` — 레이아웃 모드. **고르기만 한다.** 위치는 레이아웃이 정하지만,
+ *   «글자를 눌러서 그 줄을 고른다»는 동작은 두 모드가 같아야 한다.
+ *   그래야 아래 입력칸을 찾아 누르지 않아도 된다.
  */
 
 /** 한 번에 얼마나 잘게 움직일지 — 너무 잘면 손이 떨리고, 너무 크면 못 맞춘다 */
@@ -39,6 +45,8 @@ type Props = {
   onSelect: (id: string | null) => void;
   /** 끄는 중(저장 중)에는 못 만지게 */
   disabled?: boolean;
+  /** 'select'면 고르기만 한다 — 레이아웃 모드에서는 위치를 못 바꾼다 */
+  mode?: "edit" | "select";
   /** 손을 뗐을 때만 부른다 — 끄는 동안 저장하면 요청이 폭주한다 */
   onCommit: (next: SlideElement[]) => void;
 };
@@ -49,6 +57,7 @@ export default function SlideEditor({
   selectedId,
   onSelect,
   disabled,
+  mode = "edit",
   onCommit,
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null);
@@ -118,17 +127,20 @@ export default function SlideEditor({
     };
   }, [onPointerMove, onPointerUp]);
 
-  function start(e: React.PointerEvent, el: SlideElement, mode: Drag["mode"]) {
+  function start(e: React.PointerEvent, el: SlideElement, dragMode: Drag["mode"]) {
     if (disabled) return;
-    e.preventDefault();
     e.stopPropagation();
     onSelect(el.id);
-    dragRef.current = { id: el.id, mode, startX: e.clientX, startY: e.clientY, origin: el };
+    // 고르기 전용일 때는 여기서 끝 — 끌어도 아무 일이 없어야 한다
+    if (mode === "select") return;
+    e.preventDefault();
+    dragRef.current = { id: el.id, mode: dragMode, startX: e.clientX, startY: e.clientY, origin: el };
     applyDraft(elements);
   }
 
   /** 키보드로도 옮길 수 있어야 한다 — 손이 떨리거나 마우스가 없을 수 있다 */
   function onKeyDown(e: React.KeyboardEvent, el: SlideElement) {
+    if (mode === "select") return;
     const step = e.shiftKey ? SNAP * 4 : SNAP;
     const move: Record<string, [number, number]> = {
       ArrowLeft: [-step, 0],
@@ -165,7 +177,9 @@ export default function SlideEditor({
             key={el.id}
             role="button"
             tabIndex={0}
-            aria-label={`${el.slot ?? el.kind} 옮기기`}
+            aria-label={
+              mode === "edit" ? `${el.slot ?? el.kind} 옮기기` : `${el.slot ?? el.kind} 고르기`
+            }
             onPointerDown={(e) => start(e, el, "move")}
             onKeyDown={(e) => onKeyDown(e, el)}
             style={{
@@ -174,11 +188,11 @@ export default function SlideEditor({
               width: `${el.w * 100}%`,
               height: `${el.h * 100}%`,
             }}
-            className={`absolute cursor-move rounded-sm border-2 ${
-              active ? "border-berry bg-berry/10" : "border-transparent hover:border-berry/40"
-            }`}
+            className={`absolute rounded-sm border-2 ${
+              mode === "edit" ? "cursor-move" : "cursor-pointer"
+            } ${active ? "border-berry bg-berry/10" : "border-transparent hover:border-berry/40"}`}
           >
-            {active && (
+            {active && mode === "edit" && (
               <span
                 aria-label="크기 조절"
                 onPointerDown={(e) => start(e, el, "resize")}

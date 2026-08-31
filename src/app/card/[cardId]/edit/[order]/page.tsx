@@ -69,6 +69,8 @@ export default function SlideEditPage() {
   const userRef = useRef<AuthUser | null>(null);
   /** 툴바 자동 저장 타이머 — 연달아 누르면 마지막 것만 보낸다 */
   const styleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 미리보기에서 고른 줄의 입력칸으로 바로 커서를 옮기려고 들고 있는다 */
+  const fieldRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   useEffect(() => {
     return () => {
       if (styleTimer.current) clearTimeout(styleTimer.current);
@@ -86,6 +88,31 @@ export default function SlideEditPage() {
 
   const slide = card?.slides.find((s) => s.order === order) ?? null;
   const freeMode = Boolean(slide?.elements?.length);
+
+  /*
+    미리보기 위에 얹을 «집을 수 있는 상자»들.
+
+    자유 배치면 저장된 좌표를 쓰고, 레이아웃 모드면 전환용 좌표표를 그대로 쓴다
+    (`bakeToElements`). 위치가 100% 정확하진 않지만 **글자를 눌러 그 줄을 고르는 데는
+    충분하다** — 아래 입력칸을 찾아 누르지 않아도 된다 (08-31).
+  */
+  const hitBoxes = slide ? (freeMode ? (slide.elements ?? []) : bakeToElements(slide)) : [];
+
+  /**
+   * 미리보기에서 상자를 골랐을 때 (08-31).
+   *
+   * 툴바의 대상을 바꾸고, **그 줄의 입력칸으로 커서를 옮긴다.**
+   * 고르기만 하고 커서가 안 가면 결국 아래로 스크롤해 다시 눌러야 한다.
+   */
+  function pickBox(id: string | null) {
+    setSelectedElId(id);
+    const slot = hitBoxes.find((b) => b.id === id)?.slot ?? null;
+    setSelectedSlot(slot);
+    if (!slot) return;
+    setTab("text");
+    // 탭이 그려진 뒤에 커서를 옮긴다
+    setTimeout(() => fieldRefs.current[slot]?.focus(), 0);
+  }
 
   /** 이 슬라이드 PNG를 받아 화면에 건다. `fresh`면 캐시를 지나친다 */
   const loadImage = useCallback(
@@ -290,23 +317,15 @@ export default function SlideEditPage() {
 
       {/* 미리보기 — 늘 보인다. 자유 배치면 여기서 바로 끈다 */}
       <div className="mt-4 flex justify-center">
-        {freeMode && slide?.elements ? (
-          <SlideEditor
-            imageUrl={imageUrl}
-            elements={slide.elements}
-            selectedId={selectedElId}
-            onSelect={setSelectedElId}
-            disabled={saving}
-            onCommit={(next) => save({ slides: [{ order, elements: next }] })}
-          />
-        ) : (
-          <div className="aspect-square w-full max-w-[420px] overflow-hidden rounded-lg border border-line bg-surface-muted">
-            {imageUrl && (
-              // eslint-disable-next-line @next/next/no-img-element -- blob URL은 next/image 대상이 아니다
-              <img src={imageUrl} alt={`슬라이드 ${order + 1}`} className="h-full w-full" />
-            )}
-          </div>
-        )}
+        <SlideEditor
+          imageUrl={imageUrl}
+          elements={hitBoxes}
+          selectedId={selectedElId}
+          onSelect={pickBox}
+          disabled={saving}
+          mode={freeMode ? "edit" : "select"}
+          onCommit={(next) => save({ slides: [{ order, elements: next }] })}
+        />
       </div>
 
       {slide && (
@@ -334,9 +353,11 @@ export default function SlideEditPage() {
               자유롭게 옮기기
             </button>
           )}
-          {freeMode && (
-            <span className="text-caption text-sub">끌어서 옮기고 모서리 점으로 크기 조절</span>
-          )}
+          <span className="text-caption text-sub">
+            {freeMode
+              ? "끌어서 옮기고 모서리 점으로 크기 조절"
+              : "글자를 누르면 그 줄을 바로 고칠 수 있어요"}
+          </span>
         </div>
       )}
 
@@ -385,9 +406,16 @@ export default function SlideEditPage() {
                     {SLOT_LABELS[key] ?? key}
                   </span>
                   <textarea
+                    ref={(el) => {
+                      fieldRefs.current[key] = el;
+                    }}
                     value={value}
                     rows={value.length > 40 ? 3 : 1}
-                    onFocus={() => setSelectedSlot(key)}
+                    onFocus={() => {
+                      setSelectedSlot(key);
+                      // 입력칸을 눌러도 미리보기의 그 상자가 켜지게 — 방향이 양쪽이다
+                      setSelectedElId(hitBoxes.find((b) => b.slot === key)?.id ?? null);
+                    }}
                     onChange={(e) => setTextDraft({ ...textDraft, [key]: e.target.value })}
                     className={`${inputClass} ${active ? "border-berry" : ""}`}
                   />
