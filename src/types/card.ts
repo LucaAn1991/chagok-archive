@@ -29,15 +29,16 @@ export type Card = {
 };
 
 /**
- * 제작 대기 → 제작 완료 → 업로드 대기 → 발행 완료
- *     └───────────┴────────────┴──────→ 버림 (어느 단계에서든)
+ * 제작 대기 → 업로드 대기 → 발행 완료
+ *     └──────────┴──────→ 버림 (어느 단계에서든)
  *
  * 「제작 중」은 없다. 렌더링이 0.05초라 로딩이지 상태가 아니다 (DESIGN.md §11).
+ * 「제작 완료(crafted)」도 없앴다 (08-31) — 제작이 끝나면 바로 업로드 대기다.
+ *   발행 의향의 '아니오'·'미응답' 구분은 publishIntent가 따로 든다.
  * overdue도 상태가 아니다 — scheduledDate < today && status != 'published' 로 계산한다.
  */
 export type CardStatus =
   | "planned"
-  | "crafted"
   | "pending"
   | "published"
   | "discarded";

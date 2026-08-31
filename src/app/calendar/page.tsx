@@ -11,12 +11,14 @@ import {
   getDocs,
   orderBy,
   query,
+  Timestamp,
   updateDoc,
   where,
 } from "firebase/firestore";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
+import CardTile from "@/components/CardTile";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import StatusBadge from "@/components/StatusBadge";
 import type { Card, CardStatus } from "@/types";
@@ -57,11 +59,17 @@ const DAY_HEADS = ["일", "월", "화", "수", "목", "금", "토"];
 
 const STATUS_COLOR: Record<CardStatus, string> = {
   planned: "var(--st-planned)",
-  crafted: "var(--st-crafted)",
   pending: "var(--st-pending)",
   published: "var(--st-published)",
   discarded: "var(--st-discarded)",
 };
+
+/** 범례 — 색만으로는 상태를 해석할 수 없다는 지적 보완 (08-31). discarded는 캘린더에 없다 */
+const LEGEND: { status: CardStatus; label: string }[] = [
+  { status: "planned", label: "제작 대기" },
+  { status: "pending", label: "업로드 대기" },
+  { status: "published", label: "발행 완료" },
+];
 
 /** 해당 월의 캘린더 격자 — 앞뒤 빈칸(null) 포함, 일요일 시작 */
 function monthGrid(year: number, month: number): (string | null)[] {
@@ -159,6 +167,9 @@ function CalendarView({ uid }: { uid: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   // 빈 날은 바로 옮기고, 이미 카드가 있는 날로 드롭할 때만 확인 팝업 (08-31 확정)
   const [pendingMove, setPendingMove] = useState<{ cardId: string; toDate: string } | null>(null);
+  // 올렸어요 — 실제 올린 날짜를 물어보는 다이얼로그 (놓친 카드와 같은 규칙)
+  const [publishTarget, setPublishTarget] = useState<Card | null>(null);
+  const [publishDate, setPublishDate] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -266,6 +277,40 @@ function CalendarView({ uid }: { uid: string }) {
     }
   }
 
+  /** 올렸어요 확정 — 놓친 카드와 동일한 쓰기 (published는 publishedAt 필수) */
+  async function confirmPublish() {
+    if (!publishTarget || !publishDate || state.phase !== "ready") return;
+    const target = publishTarget;
+    setPublishTarget(null);
+    try {
+      const [y, m, d] = publishDate.split("-").map(Number);
+      await updateDoc(doc(db, "cards", target.id), {
+        status: "published",
+        publishIntent: "yes",
+        // 정오로 만든다 — 자정은 UTC 표기에서 하루 밀릴 수 있다
+        publishedAt: Timestamp.fromDate(new Date(y, m - 1, d, 12)),
+        scheduledDate: publishDate, // 실제 올린 날로 이동
+      });
+      setState((prev) =>
+        prev.phase === "ready"
+          ? {
+              ...prev,
+              cards: prev.cards.map((c) =>
+                c.id === target.id
+                  ? { ...c, status: "published", publishIntent: "yes", scheduledDate: publishDate }
+                  : c,
+              ),
+            }
+          : prev,
+      );
+      setNotice("발행 완료로 기록했어요.");
+      setTimeout(() => setNotice(null), 3000);
+    } catch {
+      setNotice("저장하지 못했어요. 잠시 후 다시 시도해주세요.");
+      setTimeout(() => setNotice(null), 3000);
+    }
+  }
+
   const anchorDate = parseDateKey(anchor);
   const cells =
     view === "month" ? monthGrid(anchorDate.getFullYear(), anchorDate.getMonth()) : weekDates(anchor);
@@ -284,6 +329,26 @@ function CalendarView({ uid }: { uid: string }) {
     }
   }
   const selectedCards = byDate.get(selectedDate) ?? [];
+
+  /** 드롭 공통 처리 — 빈 날은 즉시, 카드가 있는 날은 확인 팝업 */
+  function handleDrop(cardId: string, dateKey: string) {
+    setDraggingId(null);
+    if (state.phase !== "ready") return;
+    const moving = state.cards.find((c) => c.id === cardId);
+    if (!moving || moving.scheduledDate === dateKey) return;
+    if ((byDate.get(dateKey) ?? []).length > 0) {
+      setPendingMove({ cardId, toDate: dateKey });
+    } else {
+      void moveCard(cardId, dateKey);
+    }
+  }
+
+  /** 올렸어요 다이얼로그 열기 — 기본값은 오늘 */
+  function openPublish(card: Card) {
+    setPublishTarget(card);
+    setPublishDate(todayKey);
+  }
+
   const pendingCard =
     pendingMove && state.phase === "ready"
       ? (state.cards.find((c) => c.id === pendingMove.cardId) ?? null)
@@ -397,46 +462,119 @@ function CalendarView({ uid }: { uid: string }) {
             <div className="mt-4 flex gap-6">
               {/* 격자 영역 */}
               <div className="min-w-0 flex-1">
-                {/* 요일 헤더 */}
-                <div className="grid grid-cols-7">
-                  {DAY_HEADS.map((d) => (
-                    <div key={d} className="py-2 text-center text-caption text-sub">
-                      {d}
+                {view === "month" ? (
+                  <>
+                    {/* 월간 = 흐름 파악 — compact 유지 + 상태 범례 (08-31) */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pb-1">
+                      {LEGEND.map(({ status, label }) => (
+                        <span
+                          key={status}
+                          className="flex items-center gap-1.5 text-caption text-sub"
+                        >
+                          {status === "published" ? (
+                            <span aria-hidden className="font-semibold">
+                              ✓
+                            </span>
+                          ) : (
+                            <span
+                              aria-hidden
+                              className="h-2 w-2 rounded-pill"
+                              style={{ background: STATUS_COLOR[status] }}
+                            />
+                          )}
+                          {label}
+                        </span>
+                      ))}
                     </div>
-                  ))}
-                </div>
 
-                {/* 격자 — 월간은 5~6줄, 주간은 한 줄을 세로로 넓게 */}
-                <div className="grid grid-cols-7 gap-1">
-                  {cells.map((dateKey, i) =>
-                    dateKey === null ? (
-                      <div key={`empty-${i}`} />
-                    ) : (
-                      <DayCell
-                        key={dateKey}
-                        dateKey={dateKey}
-                        cards={byDate.get(dateKey) ?? []}
-                        tall={view === "week"}
-                        isToday={dateKey === todayKey}
-                        isSelected={dateKey === selectedDate}
-                        dragging={draggingId != null}
-                        onSelect={() => setSelectedDate(dateKey)}
-                        onDragStartCard={setDraggingId}
-                        onDropCard={(cardId) => {
-                          setDraggingId(null);
-                          const moving = state.cards.find((c) => c.id === cardId);
-                          if (!moving || moving.scheduledDate === dateKey) return;
-                          if ((byDate.get(dateKey) ?? []).length > 0) {
-                            setPendingMove({ cardId, toDate: dateKey });
-                          } else {
-                            void moveCard(cardId, dateKey);
-                          }
-                        }}
-                        onOpenCard={(id) => router.push(`/card/${id}`)}
-                      />
-                    ),
-                  )}
-                </div>
+                    {/* 요일 헤더 */}
+                    <div className="grid grid-cols-7">
+                      {DAY_HEADS.map((d) => (
+                        <div key={d} className="py-2 text-center text-caption text-sub">
+                          {d}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-7 gap-1">
+                      {cells.map((dateKey, i) =>
+                        dateKey === null ? (
+                          <div key={`empty-${i}`} />
+                        ) : (
+                          <DayCell
+                            key={dateKey}
+                            dateKey={dateKey}
+                            cards={byDate.get(dateKey) ?? []}
+                            isToday={dateKey === todayKey}
+                            isSelected={dateKey === selectedDate}
+                            dragging={draggingId != null}
+                            onSelect={() => setSelectedDate(dateKey)}
+                            onDragStartCard={setDraggingId}
+                            onDropCard={(cardId) => handleDrop(cardId, dateKey)}
+                            onOpenCard={(id) => router.push(`/card/${id}`)}
+                          />
+                        ),
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* 주간 = 실행 관리 — 요일 컬럼에 진짜 콘텐츠 카드 (08-31 재설계) */}
+                    <div className="flex items-baseline justify-between">
+                      <h2 className="text-body-l font-semibold text-ink">
+                        {todayKey >= range.start && todayKey <= range.end
+                          ? "이번 주 콘텐츠"
+                          : "이 주의 콘텐츠"}
+                      </h2>
+                      <span className="text-body text-sub">{state.cards.length}개 예정</span>
+                    </div>
+
+                    {/* Desktop/Tablet — 플래너 컬럼 */}
+                    <div className="mt-3 hidden grid-cols-7 gap-2 md:grid">
+                      {(cells as string[]).map((dateKey) => (
+                        <WeekColumn
+                          key={dateKey}
+                          dateKey={dateKey}
+                          cards={byDate.get(dateKey) ?? []}
+                          isToday={dateKey === todayKey}
+                          isSelected={dateKey === selectedDate}
+                          dragging={draggingId != null}
+                          onSelect={() => setSelectedDate(dateKey)}
+                          onDragStartCard={setDraggingId}
+                          onDropCard={(cardId) => handleDrop(cardId, dateKey)}
+                          onPublish={openPublish}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Mobile — 날짜 줄 + 아래 리스트 (컬럼이 좁아 플래너를 못 쓴다) */}
+                    <div className="mt-3 md:hidden">
+                      <div className="grid grid-cols-7">
+                        {DAY_HEADS.map((d) => (
+                          <div key={d} className="py-2 text-center text-caption text-sub">
+                            {d}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-7 gap-1">
+                        {(cells as string[]).map((dateKey) => (
+                          <DayCell
+                            key={dateKey}
+                            dateKey={dateKey}
+                            cards={byDate.get(dateKey) ?? []}
+                            isToday={dateKey === todayKey}
+                            isSelected={dateKey === selectedDate}
+                            dragging={draggingId != null}
+                            onSelect={() => setSelectedDate(dateKey)}
+                            onDragStartCard={setDraggingId}
+                            onDropCard={(cardId) => handleDrop(cardId, dateKey)}
+                            onOpenCard={(id) => router.push(`/card/${id}`)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 {/* 이 범위에 아무것도 없을 때 (empty state) */}
                 {state.cards.length === 0 && (
@@ -455,9 +593,9 @@ function CalendarView({ uid }: { uid: string }) {
                   </div>
                 )}
 
-                {/* 선택 날짜 리스트 — 패널이 없는 폭에서만 (썸네일 허용, DESIGN §8 Mobile) */}
+                {/* 선택 날짜 리스트 — 패널·플래너가 없는 폭에서만 (썸네일 허용, DESIGN §8 Mobile) */}
                 {state.cards.length > 0 && (
-                  <section className="mt-6 desktop:hidden">
+                  <section className={view === "week" ? "mt-6 md:hidden" : "mt-6 desktop:hidden"}>
                     <h2 className="text-body font-semibold text-ink">
                       {Number(selectedDate.slice(5, 7))}월 {Number(selectedDate.slice(8, 10))}일
                       {selectedDate === todayKey && (
@@ -472,34 +610,16 @@ function CalendarView({ uid }: { uid: string }) {
                       <ul className="mt-3 flex flex-col gap-2">
                         {selectedCards.map((card) => (
                           <li key={card.id}>
-                            <Link
-                              href={`/card/${card.id}`}
-                              className="flex items-center gap-3 rounded-lg border border-line bg-surface p-3 hover:bg-surface-muted"
-                            >
-                              {/* 리스트 썸네일 — 사진 없으면 중립 면 */}
-                              {card.photoUrls?.[0] ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={card.photoUrls[0]}
-                                  alt=""
-                                  className="size-12 shrink-0 rounded-sm object-cover"
-                                />
-                              ) : (
-                                <span className="size-12 shrink-0 rounded-sm bg-surface-muted" />
-                              )}
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate text-body font-semibold text-ink">
-                                  {card.title}
-                                </span>
-                                <span className="mt-0.5 block truncate text-caption text-sub">
-                                  {card.audience}
-                                  {card.scheduledDate < todayKey && card.status !== "published" && (
-                                    <span className="ml-1.5">· 예정일 지남</span>
-                                  )}
-                                </span>
-                              </span>
-                              <StatusBadge status={card.status} />
-                            </Link>
+                            <CardTile
+                              card={card}
+                              variant="row"
+                              subline={
+                                card.audience +
+                                (card.scheduledDate < todayKey && card.status !== "published"
+                                  ? " · 예정일 지남"
+                                  : "")
+                              }
+                            />
                           </li>
                         ))}
                       </ul>
@@ -510,7 +630,12 @@ function CalendarView({ uid }: { uid: string }) {
 
               {/* 오른쪽 미리보기 패널 — Desktop(≥1200)만 (08-31 시안 01·06) */}
               <aside className="sticky top-6 hidden w-[300px] shrink-0 self-start desktop:block">
-                <DayPanel dateKey={selectedDate} cards={selectedCards} todayKey={todayKey} />
+                <DayPanel
+                  dateKey={selectedDate}
+                  cards={selectedCards}
+                  todayKey={todayKey}
+                  onPublish={openPublish}
+                />
               </aside>
             </div>
           )}
@@ -563,6 +688,56 @@ function CalendarView({ uid }: { uid: string }) {
             </div>
           )}
 
+          {/* 올렸어요 — 실제 올린 날짜 확인 (놓친 카드와 같은 규칙) */}
+          {publishTarget && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="publish-title"
+              onClick={() => setPublishTarget(null)}
+              className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="flex w-full max-w-[400px] flex-col gap-4 rounded-xl bg-surface p-6 shadow-lg"
+              >
+                <h2 id="publish-title" className="text-title font-bold text-ink">
+                  언제 올리셨어요?
+                </h2>
+                <p className="text-body text-sub">
+                  「{publishTarget.title}」 — 올린 날짜로 기록해요.
+                </p>
+                <input
+                  type="date"
+                  value={publishDate}
+                  min={
+                    publishTarget.scheduledDate < todayKey ? publishTarget.scheduledDate : undefined
+                  }
+                  max={todayKey}
+                  onChange={(e) => setPublishDate(e.target.value)}
+                  className="h-11 rounded-md border border-line bg-surface px-3 text-body text-ink"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPublishTarget(null)}
+                    className="h-11 flex-1 rounded-md border border-line bg-surface text-body font-semibold text-ink hover:bg-surface-muted"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!publishDate}
+                    onClick={() => void confirmPublish()}
+                    className="h-11 flex-1 rounded-md bg-berry text-body font-semibold text-white hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+                  >
+                    기록하기
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 이동 실패 안내 — 빨간색 금지 (DESIGN §2) */}
           {notice && (
             <div
@@ -581,13 +756,12 @@ function CalendarView({ uid }: { uid: string }) {
 }
 
 /**
- * 날짜 칸 — Desktop: shortTitle 컴팩트(월간 2건 · 주간 8건) + «+N건» / Mobile: 상태색 점.
+ * 월간 날짜 칸 — Desktop: shortTitle 컴팩트 2건 + «+N건» / Mobile: 상태색 점.
  * 칸 자체가 드롭 대상이다 (드래그로 예정일 변경).
  */
 function DayCell({
   dateKey,
   cards,
-  tall,
   isToday,
   isSelected,
   dragging,
@@ -598,7 +772,6 @@ function DayCell({
 }: {
   dateKey: string;
   cards: Card[];
-  tall: boolean;
   isToday: boolean;
   isSelected: boolean;
   dragging: boolean;
@@ -609,7 +782,7 @@ function DayCell({
 }) {
   const dayNum = Number(dateKey.slice(8, 10));
   const [over, setOver] = useState(false);
-  const maxDesktop = tall ? 8 : 2;
+  const maxDesktop = 2;
 
   return (
     <div
@@ -627,8 +800,7 @@ function DayCell({
         if (cardId) onDropCard(cardId);
       }}
       className={[
-        "cursor-pointer rounded-sm border p-1 md:p-1.5",
-        tall ? "min-h-14 md:min-h-64" : "min-h-14 md:min-h-24",
+        "min-h-14 cursor-pointer rounded-sm border p-1 md:min-h-24 md:p-1.5",
         isSelected ? "border-berry" : "border-line",
         over && dragging ? "bg-berry-tint" : "bg-surface",
       ].join(" ")}
@@ -673,9 +845,10 @@ function DayCell({
             className="flex w-full items-center gap-1 overflow-hidden rounded-sm bg-surface-muted px-1 py-0.5 text-left hover:bg-berry-tint"
             title={card.title}
           >
+            {/* w-1(4px) — 3px로는 상태색이 안 읽힌다는 지적 반영 (08-31) */}
             <span
               aria-hidden
-              className="h-3 w-[3px] shrink-0 rounded-pill"
+              className="h-3 w-1 shrink-0 rounded-pill"
               style={{ background: STATUS_COLOR[card.status] }}
             />
             <span className="truncate text-caption text-ink">
@@ -691,18 +864,126 @@ function DayCell({
   );
 }
 
+/** 주간 플래너 컬럼 — 실행 관리 뷰: 카드가 크게, 상태·CTA가 보인다 (08-31 재설계) */
+function WeekColumn({
+  dateKey,
+  cards,
+  isToday,
+  isSelected,
+  dragging,
+  onSelect,
+  onDragStartCard,
+  onDropCard,
+  onPublish,
+}: {
+  dateKey: string;
+  cards: Card[];
+  isToday: boolean;
+  isSelected: boolean;
+  dragging: boolean;
+  onSelect: () => void;
+  onDragStartCard: (id: string | null) => void;
+  onDropCard: (cardId: string) => void;
+  onPublish: (card: Card) => void;
+}) {
+  const [over, setOver] = useState(false);
+  const dayNum = Number(dateKey.slice(8, 10));
+  const dow = DAY_HEADS[parseDateKey(dateKey).getDay()];
+
+  // CTA는 outline — primary(솔리드)는 화면에 1개 원칙 (DESIGN §6), 컬럼마다 반복되므로
+  const ctaClass =
+    "flex h-8 w-full items-center justify-center rounded-md border-2 border-berry bg-surface " +
+    "text-caption font-semibold text-berry hover:bg-berry-light hover:text-berry-dark";
+
+  return (
+    <div
+      data-date={dateKey}
+      onClick={onSelect}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        const cardId = e.dataTransfer.getData("text/card-id");
+        if (cardId) onDropCard(cardId);
+      }}
+      className={[
+        "flex min-h-72 cursor-pointer flex-col gap-2 rounded-md border p-2",
+        isSelected ? "border-berry" : "border-line",
+        over && dragging ? "bg-berry-tint" : "bg-surface",
+      ].join(" ")}
+    >
+      <div className="flex items-center gap-1.5">
+        <span
+          className={[
+            "flex size-6 items-center justify-center rounded-pill text-caption",
+            isToday ? "bg-berry font-bold text-white" : "text-sub",
+          ].join(" ")}
+        >
+          {dayNum}
+        </span>
+        <span className="text-caption text-sub">{dow}</span>
+      </div>
+
+      {cards.length === 0 ? (
+        <p className="mt-4 text-center text-caption text-sub/50">예정 없음</p>
+      ) : (
+        cards.map((card) => (
+          <CardTile
+            key={card.id}
+            card={card}
+            variant="tile"
+            onDragStart={(e) => {
+              e.dataTransfer.setData("text/card-id", card.id);
+              onDragStartCard(card.id);
+            }}
+            onDragEnd={() => onDragStartCard(null)}
+            action={
+              card.status === "planned" ? (
+                <Link
+                  href={`/card/${card.id}/result`}
+                  onClick={(e) => e.stopPropagation()}
+                  className={ctaClass}
+                >
+                  제작하기
+                </Link>
+              ) : card.status === "pending" ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPublish(card);
+                  }}
+                  className={ctaClass}
+                >
+                  올렸어요
+                </button>
+              ) : undefined
+            }
+          />
+        ))
+      )}
+    </div>
+  );
+}
+
 /**
  * 선택 날짜 미리보기 패널 (Desktop ≥1200) — 썸네일·캡션은 여기서만 보여준다.
- * 칸(Compact)이 «무엇이 언제»라면 패널은 «어떤 내용인지»다.
+ * 칸(Compact)이 «무엇이 언제»라면 패널은 «어떤 내용이고, 지금 뭘 할 차례인지»다 (08-31).
  */
 function DayPanel({
   dateKey,
   cards,
   todayKey,
+  onPublish,
 }: {
   dateKey: string;
   cards: Card[];
   todayKey: string;
+  onPublish: (card: Card) => void;
 }) {
   const dow = DAY_HEADS[parseDateKey(dateKey).getDay()];
 
@@ -752,23 +1033,50 @@ function DayPanel({
                     )}
                   </p>
 
-                  {/* 캡션 미리보기 — 없으면 다음 단계를 알려준다 */}
-                  {card.caption ? (
+                  {/* 캡션 미리보기 — 있을 때만 */}
+                  {card.caption && (
                     <p className="mt-2 line-clamp-3 text-caption text-sub">
                       {card.caption.hook} {card.caption.body}
                     </p>
-                  ) : (
-                    <p className="mt-2 text-caption text-sub">
-                      캡션은 아직 없어요 — 카드에서 제작하면 여기에 보여요.
-                    </p>
                   )}
 
-                  <Link
-                    href={`/card/${card.id}`}
-                    className="mt-3 flex h-9 items-center justify-center rounded-md bg-berry text-body font-semibold text-white hover:bg-berry-dark"
-                  >
-                    상세 보기
-                  </Link>
+                  {/* 다음 할 일 — 상태가 곧 다음 행동. 상세 보기는 보조로 (08-31) */}
+                  <div className="mt-3 flex flex-col gap-2">
+                    {card.status === "planned" && (
+                      <>
+                        <p className="text-caption text-sub">아직 콘텐츠를 만들지 않았어요.</p>
+                        <Link
+                          href={`/card/${card.id}/result`}
+                          className="flex h-9 items-center justify-center rounded-md bg-berry text-body font-semibold text-white hover:bg-berry-dark"
+                        >
+                          제작하기
+                        </Link>
+                      </>
+                    )}
+                    {card.status === "pending" && (
+                      <>
+                        <p className="text-caption text-sub">
+                          다 만들어졌어요 — 올린 뒤에 기록해주세요.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => onPublish(card)}
+                          className="flex h-9 items-center justify-center rounded-md bg-berry text-body font-semibold text-white hover:bg-berry-dark"
+                        >
+                          올렸어요 기록
+                        </button>
+                      </>
+                    )}
+                    {card.status === "published" && (
+                      <p className="text-caption text-sub">✓ 발행을 마친 콘텐츠예요.</p>
+                    )}
+                    <Link
+                      href={`/card/${card.id}`}
+                      className="self-start text-caption font-semibold text-berry-dark underline underline-offset-2"
+                    >
+                      상세 보기 →
+                    </Link>
+                  </div>
                 </div>
               </article>
             </li>
