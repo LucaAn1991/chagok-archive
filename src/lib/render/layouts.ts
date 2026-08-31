@@ -192,6 +192,14 @@ function text(
     "div",
     {
       display: "flex",
+      /*
+        **사용자가 넣은 줄바꿈을 살린다** (08-31).
+
+        CSS 기본값(`normal`)은 줄바꿈을 공백으로 접는다. satori도 그 규칙을 따라서,
+        편집칸에서는 두 줄로 보이는데 그려진 카드는 한 줄이 됐다.
+        `pre-wrap`이면 넣은 줄바꿈은 지키고 폭이 넘칠 때 자동 줄바꿈도 그대로 된다.
+      */
+      whiteSpace: "pre-wrap",
       // px로 직접 넣었으면 그 값 그대로 — 테마 배율도 곱하지 않는다 (08-31)
       fontSize: o.sizePx ?? Math.round(size * th.type.scale * SIZE_SCALE[o.size]),
       // 볼드를 고르지 않았으면 레이아웃이 정한 굵기를 그대로 쓴다
@@ -466,6 +474,7 @@ function freeform(ctx: Ctx, elements: SlideElement[]): Node {
         {
           ...box,
           ...(hitColor ? { backgroundColor: hitColor, color: "transparent" } : {}),
+          whiteSpace: "pre-wrap", // 자유 배치에서도 줄바꿈을 살린다 (08-31)
           alignItems: "flex-start",
           justifyContent: JUSTIFY[o.align],
           // 상자 높이에 비례한 글자 크기 — 상자를 키우면 글자가 커진다
