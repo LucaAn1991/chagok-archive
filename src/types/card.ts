@@ -57,6 +57,8 @@ export type PublishIntent = null | "yes" | "no";
 export type VisualType =
   | "user_photo_preferred"
   | "stock_recommended"
+  /** 사진도 스톡도 없지만 AI로 만들 수 있다 (08-31 · PRD F15) */
+  | "ai_generated"
   | "text_only";
 
 export type Caption = {
@@ -79,7 +81,19 @@ export type Slide = {
    * 사용자 사진이거나 사진이 없으면 null.
    */
   imageCredit?: StockCredit | null;
+  /**
+   * 이 사진이 어디서 왔는지 (08-31 · PRD F15).
+   *
+   * **AI 생성물을 표시하기 위해 둔다.** 사용자가 자기 계정에 올리는 것이라
+   * 무엇이 실제 사진이고 무엇이 만들어진 그림인지 본인이 알아야 한다.
+   * 스톡은 `imageCredit`으로 구분되지만 user와 ai는 둘 다 크레딧이 없다.
+   * 옛 슬라이드에는 없다.
+   */
+  imageOrigin?: ImageOrigin;
 };
+
+/** 이미지 폴백 사슬(DESIGN.md §12)의 어느 단계에서 온 사진인가 */
+export type ImageOrigin = "user" | "stock" | "ai";
 
 /** 스톡 사진 출처 — 사진가 이름과 사진 페이지 주소 */
 export type StockCredit = {

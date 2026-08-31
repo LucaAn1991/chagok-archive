@@ -5,6 +5,7 @@ import { getUidFromRequest } from "@/lib/api/auth";
 import { generateSlides } from "@/lib/ai/slides";
 import { isClaudeConfigured } from "@/lib/ai/caption";
 import { isStockConfigured } from "@/lib/stock";
+import { isImageGenConfigured } from "@/lib/imagegen";
 import { CARD_TEMPLATES } from "@/lib/card-templates";
 import type { Card, VisualType, User, TemplateId } from "@/types";
 
@@ -56,20 +57,26 @@ export async function POST(
 
   /*
     이미지 폴백 사슬 (DESIGN.md §12) — 어디서 멈춰도 완성된다.
-    ① 사용자 사진 → ② 무료 스톡(Pexels, 08-31) → ③ text_only
+    ① 사용자 사진 → ② 무료 스톡(Pexels) → ③ AI 생성(08-31 F15) → ④ text_only
 
-    여기서 정하는 건 «어느 단계까지 쓸 수 있는가»다. 실제로 스톡에서 사진을 못
-    찾으면 generateSlides가 그 슬라이드를 글자 레이아웃으로 내려앉힌다.
+    여기서 정하는 건 «어느 단계까지 쓸 수 있는가»다. 실제로 사진을 못 구하면
+    generateSlides가 그 슬라이드를 글자 레이아웃으로 내려앉힌다.
+
+    **AI 단계를 여기서도 봐야 한다.** 안 그러면 실제로는 AI가 그림을 만들었는데
+    카드에는 `text_only`로 적혀, 결과 화면이 «사진이 없다»고 잘못 판단한다.
   */
   const visualType: VisualType =
     card.photoUrls.length > 0
       ? "user_photo_preferred"
       : isStockConfigured()
         ? "stock_recommended"
-        : "text_only";
+        : isImageGenConfigured()
+          ? "ai_generated"
+          : "text_only";
 
   try {
     const slides = await generateSlides({
+      cardId, // 생성 이미지를 cards/{cardId}/photos/ 아래 저장한다 (08-31 F15)
       title: card.title,
       audience: card.audience,
       intent: card.intent,

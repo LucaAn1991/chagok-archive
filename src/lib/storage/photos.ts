@@ -128,6 +128,46 @@ export async function issueUploadTicket(
   }
 }
 
+/**
+ * **서버가 직접 파일을 써 넣는다** — 서명 URL 방식과 다른 경로 (08-31, F15).
+ *
+ * AI가 만든 이미지는 브라우저를 거치지 않고 서버가 공급자에게서 받아 온다.
+ * 그 주소를 그대로 슬라이드에 저장하면 안 된다 — 공급자 출력 URL의 수명이
+ * 문서에 없어서, 만료되면 **나중에 카드를 열 때 이미지가 통째로 깨진다.**
+ * 우리 버킷으로 옮겨 두면 그 위험이 사라진다.
+ *
+ * 버킷이 없으면 `null`. 부르는 쪽은 그때 다음 폴백으로 내려간다 (DESIGN §12).
+ */
+export async function saveServerImage(
+  owner: PhotoOwner,
+  id: string,
+  bytes: Buffer,
+  contentType: PhotoContentType,
+): Promise<string | null> {
+  const name = bucketName();
+  if (!name) return null;
+
+  const path = buildPhotoPath(owner, id, contentType);
+  const token = randomUUID();
+
+  try {
+    const bucket = getStorage(getAdminApp()).bucket(name);
+    const [exists] = await bucket.exists();
+    if (!exists) return null;
+
+    await bucket.file(path).save(bytes, {
+      contentType,
+      // 업로드 시점에 토큰을 심어야 영구 주소를 바로 만들 수 있다 (서명 URL 경로와 같은 이유)
+      metadata: { metadata: { firebaseStorageDownloadTokens: token } },
+    });
+
+    return downloadUrl(name, path, token);
+  } catch {
+    // 자격증명·권한·네트워크. 카드를 못 쓰게 만들지 않는다 — 다음 폴백으로 내려간다
+    return null;
+  }
+}
+
 /** 다운로드 토큰이 붙은 영구 URL — 토큰을 모르면 열 수 없다 */
 function downloadUrl(bucket: string, path: string, token: string): string {
   return (

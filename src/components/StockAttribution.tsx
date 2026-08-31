@@ -11,6 +11,10 @@ import type { Slide } from "@/types";
  * 레이아웃 6종을 전부 손봐야 하는 데다 사용자 게시물을 우리가 더럽히는 셈이 된다.
  *
  * 스톡을 안 쓴 카드(사용자 사진·글자만)에서는 아무것도 그리지 않는다.
+ *
+ * **AI로 만든 이미지가 섞였으면 그것도 함께 알린다** (08-31 · PRD F15).
+ * 약관이 시켜서가 아니라, 사용자가 자기 계정에 올리는 것이라
+ * 무엇이 실제 사진이고 무엇이 만들어진 그림인지 본인이 알아야 하기 때문이다.
  */
 /**
  * Pexels는 사진가 이름 자리에 **URL을 넣어두는 계정이 있다**
@@ -35,9 +39,17 @@ export default function StockAttribution({ slides }: { slides: Slide[] }) {
       credits.set(displayName(s.imageCredit.photographer), s.imageCredit.sourceUrl);
     }
   }
-  if (credits.size === 0) return null;
+  const aiCount = slides.filter((s) => s.imageOrigin === "ai" && s.imageUrl).length;
+  if (credits.size === 0 && aiCount === 0) return null;
 
   return (
+    <div className="flex flex-col gap-1">
+      {aiCount > 0 && (
+        <p className="text-caption text-sub">
+          이 카드의 이미지 {aiCount}장은 차곡이 만든 그림이에요. 실제 사진이 아니에요.
+        </p>
+      )}
+      {credits.size > 0 && (
     <p className="text-caption text-sub">
       사진 제공{" "}
       <a
@@ -63,5 +75,7 @@ export default function StockAttribution({ slides }: { slides: Slide[] }) {
         </span>
       ))}
     </p>
+      )}
+    </div>
   );
 }

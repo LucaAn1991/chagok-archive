@@ -152,7 +152,11 @@ type CardStatus = 'planned' | 'pending' | 'published' | 'discarded';
 /** status에 합치면 '아니오'와 '미응답'을 구분할 수 없어 분모가 흐려진다 — 별도 필드 유지 */
 type PublishIntent = null | 'yes' | 'no';
 
-type VisualType = 'user_photo_preferred' | 'stock_recommended' | 'text_only';
+type VisualType =
+  | 'user_photo_preferred'
+  | 'stock_recommended'
+  | 'ai_generated'   // 사진도 스톡도 없지만 AI로 만들 수 있다 (08-31 F15)
+  | 'text_only';
 
 /**
  * 이미지 출처 `[08-31]` — 폴백 사슬(DESIGN.md §12)의 어느 단계에서 왔는지.
@@ -636,6 +640,7 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 | 날짜 | 변경 내용 | 이유 | 관련 섹션 |
 |---|---|---|---|
 | 2026-08-27 | 최초 작성 | PRD·IA·DESIGN 기준 기술 설계 수립 | 전체 |
+| 2026-08-31 | `VisualType`에 `ai_generated` 추가 | 렌더 라우트가 AI 단계를 모른 채 판정하면, 실제로는 AI가 그림을 만들었는데 카드에는 `text_only`로 적혀 결과 화면이 «사진이 없다»고 잘못 판단한다(구성 템플릿 선택이 막힌다) | §2-3 · §12 |
 | 2026-08-31 | **AI 이미지 생성(F15) — 폴백 사슬 ③ 구현.** Seedream 5.0 Pro를 GPTProto 경유로 호출(`GPTPROTO_API_KEY`). `Slide.imageOrigin` 신설로 user·stock·ai를 구분한다. 생성 이미지는 공급자 주소를 그대로 쓰지 않고 **우리 Storage로 복사**한다 | PRD가 F15를 v1로 올렸다(08-31). 공급자 출력 URL의 수명이 문서에 없어, 그대로 저장하면 나중에 카드를 열 때 이미지가 통째로 깨진다. 크기는 `1024x1024` 고정 — 캔버스가 1080²이라 2K가 필요 없고 기본값(2048)은 최대 2.6배 비싸다 | §2-3 · §8 · §12 |
 | 2026-08-31 | **구성 템플릿 4종 신설** — `Card.templateId` 추가(`null`=AI가 알아서). 템플릿은 장수·순서·각 장의 «할 일»만 담고 문구는 AI가 쓴다. 고르는 자리는 제작 «결과» 화면(「다른 구성으로」) | 캔바식 갤러리를 기획 앞에 두면 «AI가 먼저 구조화»(DESIGN §7)와 «빈칸부터 채우게 만들지 않는다»(§0)가 뒤집힌다. 4종은 08-28 취향 예시 재작업에서 살아남은 형식(diary·editorial·statement·informational) | §2-3 · §7 · §9 |
 | 2026-08-31 | **산출물 테마 3종 신설** — `Card.themeId` · `ThemeId` 추가. 렌더러의 고정 색·글자 상수를 `lib/render/themes.ts`로 분리하고, 기본값은 온보딩 취향(`users.visualPreferences.attributes`)에서 정한다. 제작 결과 화면에서 변경 가능 | 온보딩에서 취향을 모으고도 결과물에 닿지 않아 누가 무엇을 골랐든 카드가 똑같이 나왔다. 이름은 08-28 확정 direction 3종을 그대로 써 어휘를 하나로 유지 | §2-3 · §7 · §9 |

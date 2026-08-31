@@ -16,4 +16,5 @@ export type {
   LayoutId,
   ThemeId,
   TemplateId,
+  ImageOrigin,
 } from "./card";
