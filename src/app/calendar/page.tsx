@@ -521,29 +521,77 @@ function CalendarView({ uid }: { uid: string }) {
                       ))}
                     </div>
 
-                    <div className="grid grid-cols-7 gap-1">
-                      {cells.map((dateKey, i) =>
-                        dateKey === null ? (
-                          <div key={`empty-${i}`} />
-                        ) : (
-                          <DayCell
-                            key={dateKey}
-                            dateKey={dateKey}
-                            cards={byDate.get(dateKey) ?? []}
-                            isToday={dateKey === todayKey}
-                            isSelected={dateKey === selectedDate}
-                            dragging={draggingId != null}
-                            onSelect={() => setSelectedDate(dateKey)}
-                            onDragStartCard={setDraggingId}
-                            onDropCard={(cardId) => handleDrop(cardId, dateKey)}
-                            showPlus={
-                              (byDate.get(dateKey) ?? []).length === 0 &&
-                              dateKey >= todayKey &&
-                              isUploadDayOf(uploadDays, dateKey) === true
-                            }
-                          />
-                        ),
-                      )}
+                    {/* [실험] 아코디언 월간 — 선택한 날이 속한 주만 주간 보드로 확장 (08-31) */}
+                    <div className="flex flex-col gap-1">
+                      {Array.from({ length: cells.length / 7 }, (_, wi) =>
+                        cells.slice(wi * 7, wi * 7 + 7),
+                      ).map((week, wi) => {
+                        const expanded = week.some(
+                          (d) => d !== null && weekDates(selectedDate).includes(d),
+                        );
+                        if (!expanded) {
+                          return (
+                            <div key={`w-${wi}`} className="grid grid-cols-7 gap-1">
+                              {week.map((dateKey, i) =>
+                                dateKey === null ? (
+                                  <div key={`empty-${wi}-${i}`} />
+                                ) : (
+                                  <DayCell
+                                    key={dateKey}
+                                    dateKey={dateKey}
+                                    cards={byDate.get(dateKey) ?? []}
+                                    isToday={dateKey === todayKey}
+                                    isSelected={dateKey === selectedDate}
+                                    dragging={draggingId != null}
+                                    onSelect={() => setSelectedDate(dateKey)}
+                                    onDragStartCard={setDraggingId}
+                                    onDropCard={(cardId) => handleDrop(cardId, dateKey)}
+                                    showPlus={
+                                      (byDate.get(dateKey) ?? []).length === 0 &&
+                                      dateKey >= todayKey &&
+                                      isUploadDayOf(uploadDays, dateKey) === true
+                                    }
+                                  />
+                                ),
+                              )}
+                            </div>
+                          );
+                        }
+                        return (
+                          <div
+                            key={`w-${wi}`}
+                            className="grid grid-cols-7 gap-2 rounded-lg bg-berry-tint/30 p-1.5"
+                          >
+                            {week.map((dateKey, i) =>
+                              dateKey === null ? (
+                                <div key={`empty-${wi}-${i}`} />
+                              ) : (
+                                <WeekColumn
+                                  key={dateKey}
+                                  dateKey={dateKey}
+                                  cards={byDate.get(dateKey) ?? []}
+                                  isToday={dateKey === todayKey}
+                                  isSelected={dateKey === selectedDate}
+                                  dragging={draggingId != null}
+                                  onSelect={() => setSelectedDate(dateKey)}
+                                  onDragStartCard={setDraggingId}
+                                  onDropCard={(cardId) => handleDrop(cardId, dateKey)}
+                                  emptyHint={
+                                    (byDate.get(dateKey) ?? []).length > 0
+                                      ? "none"
+                                      : isUploadDayOf(uploadDays, dateKey) === false
+                                        ? "rest"
+                                        : isUploadDayOf(uploadDays, dateKey) === true &&
+                                            dateKey >= todayKey
+                                          ? "invite"
+                                          : "none"
+                                  }
+                                />
+                              ),
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </>
                 ) : (
