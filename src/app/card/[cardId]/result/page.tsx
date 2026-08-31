@@ -38,6 +38,22 @@ const SLOT_LABELS: Record<string, string> = {
   item4: "항목 4",
 };
 
+/**
+ * 카드 제목을 파일 이름으로 쓸 수 있게 다듬는다.
+ *
+ * 윈도우·맥이 막는 글자(\ / : * ? " < > |)와 줄바꿈을 `_`로 바꾸고,
+ * 끝의 점·공백(윈도우가 싫어한다)을 떼어낸다. 남는 게 없으면 기본 이름을 쓴다.
+ */
+function safeFileName(raw: string): string {
+  const cleaned = raw
+    .replace(/[\\/:*?"<>|\r\n]/g, "_")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 40)
+    .replace(/[.\s]+$/, "");
+  return cleaned || "카드뉴스";
+}
+
 export default function CardResultPage() {
   const router = useRouter();
   const { cardId } = useParams<{ cardId: string }>();
@@ -55,8 +71,10 @@ export default function CardResultPage() {
   const [selectedSlide, setSelectedSlide] = useState<number | null>(null);
   const [slideDraft, setSlideDraft] = useState<Record<string, string> | null>(null);
   const [saving, setSaving] = useState(false);
-  const [savedToast, setSavedToast] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* blob URL은 언마운트 때만 해제한다 — 표시 중인 URL을 해제하면 이미지가 깨진다 */
   const urlsRef = useRef<string[]>([]);
@@ -78,9 +96,76 @@ export default function CardResultPage() {
         JSON.stringify(slideDraft)
       : false;
 
-  function showSavedToast() {
-    setSavedToast(true);
-    setTimeout(() => setSavedToast(false), 2000);
+  /**
+   * 짧은 피드백 토스트 (DESIGN.md §13).
+   * 연달아 부르면 앞의 타이머를 지운다 — 안 그러면 나중 메시지가 먼저 사라진다.
+   */
+  const showToast = useCallback((message: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(message);
+    toastTimer.current = setTimeout(() => setToast(null), 2000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
+
+  /**
+   * 카드뉴스 이미지를 파일로 내려받는다 (08-31).
+   *
+   * **인스타 연동이 없으므로 사용자가 직접 올린다** (PRD §4). 그러려면 이미지가
+   * 손에 있어야 하는데, 지금까지는 화면에서 보기만 되고 가져갈 방법이 없었다.
+   *
+   * 슬라이드는 이미 blob으로 받아둔 상태(`slideUrls`)라 다시 내려받지 않는다.
+   * 여러 장을 한 번에 받으면 브라우저가 «여러 파일 다운로드» 확인을 띄울 수 있는데,
+   * 사용자가 누른 버튼에서 시작된 동작이라 허용된다. 간격을 조금 두면 더 안전하다.
+   */
+  async function downloadSlides() {
+    if (!card || slideUrls.length === 0 || downloading) return;
+
+    setDownloading(true);
+    try {
+      const base = safeFileName(card.shortTitle || card.title);
+      for (const [i, url] of slideUrls.entries()) {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `차곡_${base}_${String(i + 1).padStart(2, "0")}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        // 연달아 부르면 브라우저가 뒤엣것을 흘린다 — 한 박자씩 띄운다
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      showToast(`이미지 ${slideUrls.length}장을 저장했어요.`);
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  /** 캡션을 인스타에 그대로 붙일 수 있는 모양으로 클립보드에 담는다 */
+  async function copyCaption() {
+    if (!captionDraft) return;
+    const text = [
+      captionDraft.hook,
+      "",
+      captionDraft.body,
+      "",
+      captionDraft.cta,
+      "",
+      captionDraft.hashtags.map((t) => `#${t}`).join(" "),
+    ]
+      .join("\n")
+      .trim();
+
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast("캡션을 복사했어요.");
+    } catch {
+      // 권한이 없거나 https가 아닌 환경 — 사용자가 직접 고르도록 알린다
+      showToast("복사하지 못했어요. 캡션을 길게 눌러 복사해주세요.");
+    }
   }
 
   /** 슬라이드 1장 PNG 로드. fresh=true면 브라우저 캐시를 우회한다(문구 수정 직후) */
@@ -205,7 +290,7 @@ export default function CardResultPage() {
         const data = (await res.json()) as Pick<Card, "caption" | "slides">;
         const next = card ? { ...card, ...data } : null;
         if (next) setCard(next);
-        showSavedToast();
+        showToast("저장됐어요.");
         return next;
       } catch (err) {
         setSaveError(err instanceof Error ? err.message : "저장하지 못했어요.");
@@ -214,7 +299,7 @@ export default function CardResultPage() {
         setSaving(false);
       }
     },
-    [card, cardId],
+    [card, cardId, showToast],
   );
 
   async function saveCaption() {
@@ -357,6 +442,24 @@ export default function CardResultPage() {
               <p className="text-caption text-sub">슬라이드를 누르면 문구를 수정할 수 있어요.</p>
             )}
             {phase === "ready" && card && <StockAttribution slides={card.slides} />}
+
+            {/* 인스타 연동이 없으므로 이미지를 손에 쥐여주는 게 이 화면의 마지막 할 일 */}
+            {phase === "ready" && slideUrls.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={downloadSlides}
+                  disabled={downloading}
+                  className="h-11 rounded-md bg-berry px-5 text-body font-semibold text-white
+                             hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+                >
+                  {downloading ? "···" : `이미지 ${slideUrls.length}장 저장`}
+                </button>
+                <p className="text-caption text-sub">
+                  저장한 이미지를 인스타그램에 직접 올려주세요.
+                </p>
+              </div>
+            )}
           </>
         )}
 
@@ -478,6 +581,17 @@ export default function CardResultPage() {
             </p>
           )}
 
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={copyCaption}
+              className="h-11 rounded-md border-2 border-berry bg-surface px-5 text-body font-semibold text-berry"
+            >
+              캡션 복사
+            </button>
+            <p className="text-caption text-sub">화면에 보이는 문구 그대로 복사돼요.</p>
+          </div>
+
           {captionDirty && (
             <div className="flex items-center gap-3">
               <button
@@ -501,13 +615,13 @@ export default function CardResultPage() {
         </section>
       )}
 
-      {/* 저장 토스트 (DESIGN.md §13) */}
-      {savedToast && (
+      {/* 피드백 토스트 (DESIGN.md §13) */}
+      {toast && (
         <div
           role="status"
           className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-pill bg-ink px-5 py-2 text-body text-white shadow-lg"
         >
-          저장됐어요.
+          {toast}
         </div>
       )}
     </div>
