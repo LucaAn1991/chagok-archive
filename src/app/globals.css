@@ -32,9 +32,8 @@
   --ink:           #2D292B;
   --sub:           #746F72;
 
-  /* 카드 상태 — 명도 계단식 (진할수록 완료에 가깝다) */
-  --st-planned:    #D9CCE8;  /* 기획 완료 */
-  --st-crafted:    #E9A9C0;  /* 제작 완료 */
+  /* 카드 상태 — 명도 계단식 (진할수록 완료에 가깝다). 08-31 crafted 제거로 4색 */
+  --st-planned:    #D9CCE8;  /* 제작 대기 */
   --st-pending:    #DE7E80;  /* 업로드 대기 */
   --st-published:  #A85578;  /* 발행 완료 = berry */
   --st-discarded:  #C4BDB7;  /* 버림 */
@@ -81,7 +80,6 @@
   --color-sub:           var(--sub);
 
   --color-st-planned:    var(--st-planned);
-  --color-st-crafted:    var(--st-crafted);
   --color-st-pending:    var(--st-pending);
   --color-st-published:  var(--st-published);
   --color-st-discarded:  var(--st-discarded);
