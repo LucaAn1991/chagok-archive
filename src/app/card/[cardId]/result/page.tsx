@@ -10,31 +10,17 @@ import AppShell from "@/components/AppShell";
 import BackLink from "@/components/BackLink";
 import StockAttribution from "@/components/StockAttribution";
 import { THEMES, THEME_ORDER, isHexColor, resolveTheme } from "@/lib/render/themes";
-import { LAYOUT_LABELS, layoutOptionsFor } from "@/lib/slide-layout";
 import { CARD_TEMPLATES, TEMPLATE_ORDER, worksWithoutPhotos } from "@/lib/card-templates";
-import SlotToolbar from "@/components/SlotToolbar";
-import SlideEditor from "@/components/SlideEditor";
-import { bakeToElements } from "@/lib/free-layout";
-import CardPhotoUploader from "@/components/CardPhotoUploader";
-import { IMAGE_LAYOUTS } from "@/lib/slide-layout";
-import { MAX_PHOTOS_PER_CARD } from "@/lib/storage/limits";
-import type {
-  Card,
-  Caption,
-  LayoutId,
-  SlideElement,
-  SlotStyle,
-  ThemeId,
-  TemplateId,
-} from "@/types";
+import type { Card, Caption, ThemeId, TemplateId } from "@/types";
 
 /**
  * 제작 결과 (F7·F8) — 슬라이드 · 캡션 · 부분 수정.
  *
  * - 제작 전 카드면 진입 즉시 생성 — skeleton → 순차 reveal (DESIGN.md §10)
  * - 슬라이드 PNG는 GET .../slides/[order]/image 가 즉석 렌더링. fetch + blob URL
- * - 수정은 «부분 수정이 기본»(PRD §5-7) — 캡션·슬라이드 문구를 인라인으로 고쳐
- *   PATCH .../content 로 저장한다. 글자 «내용»만 수정 가능 (DESIGN.md §12)
+ * - 슬라이드 편집은 **별도 화면**이다 (08-31) — `/card/[cardId]/edit/[order]`.
+ *   여기 아래에 패널로 붙어 있었는데, 고치는 동안 정작 슬라이드가 화면 밖으로 밀려났다.
+ * - 캡션 수정만 여기 남는다 — 슬라이드와 달리 미리보기가 필요 없다
  *
  * @TODO: 슬라이드 순서·개수 변경 — 다음 단계
  *   (레이아웃·테마·구성·내 스타일·줄 조절·자유 배치·사진 교체는 08-31 구현)
@@ -44,18 +30,6 @@ import type {
 type Phase = "loading" | "generating" | "ready" | "error" | "not-found";
 
 /** 슬라이드 텍스트 슬롯의 한국어 라벨. 없는 키는 키 이름 그대로 보여준다 */
-const SLOT_LABELS: Record<string, string> = {
-  title: "제목",
-  subtitle: "부제",
-  body: "본문",
-  message: "메시지",
-  cta: "마무리 문구",
-  item1: "항목 1",
-  item2: "항목 2",
-  item3: "항목 3",
-  item4: "항목 4",
-};
-
 /**
  * 카드 제목을 파일 이름으로 쓸 수 있게 다듬는다.
  *
@@ -86,14 +60,6 @@ export default function CardResultPage() {
   /* 편집 상태 */
   const [captionDraft, setCaptionDraft] = useState<Caption | null>(null);
   const [hashtagInput, setHashtagInput] = useState("");
-  const [selectedSlide, setSelectedSlide] = useState<number | null>(null);
-  const [slideDraft, setSlideDraft] = useState<Record<string, string> | null>(null);
-  /** 슬롯별 글자 조절 초안 (08-31). 문구와 함께 저장된다 */
-  const [styleDraft, setStyleDraft] = useState<Record<string, SlotStyle>>({});
-  /** 자유 편집 중 고른 요소 (08-31) */
-  const [selectedElId, setSelectedElId] = useState<string | null>(null);
-  /** 툴바가 지금 조절 중인 줄 — 화면에 툴바를 하나만 두려고 (08-31) */
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   /** 이 카드만의 배경색 입력 (08-31). 빈 문자열이면 «계정 스타일 따르기» */
   const [bgDraft, setBgDraft] = useState("");
   const [saving, setSaving] = useState(false);
@@ -115,24 +81,6 @@ export default function CardResultPage() {
   const captionDirty =
     card?.caption && captionDraft
       ? JSON.stringify(card.caption) !== JSON.stringify(captionDraft)
-      : false;
-
-  /** 이 슬라이드가 자유 배치로 전환돼 있는가 */
-  const freeMode = Boolean(
-    selectedSlide !== null &&
-      card?.slides.find((s) => s.order === selectedSlide)?.elements?.length,
-  );
-
-  const editingSlide =
-    selectedSlide !== null && card
-      ? (card.slides.find((s) => s.order === selectedSlide) ?? null)
-      : null;
-
-  /** 문구든 조절이든 하나라도 달라지면 «저장할 게 있다» */
-  const slideDirty =
-    editingSlide && slideDraft
-      ? JSON.stringify(editingSlide.texts) !== JSON.stringify(slideDraft) ||
-        JSON.stringify(editingSlide.styleOverrides ?? {}) !== JSON.stringify(styleDraft)
       : false;
 
   /**
@@ -248,8 +196,6 @@ export default function CardResultPage() {
     if (!user) return;
     setPhase("generating");
     setErrorMessage(null);
-    setSelectedSlide(null);
-    setSlideDraft(null);
 
     try {
       const token = await user.getIdToken();
@@ -359,50 +305,6 @@ export default function CardResultPage() {
     if (next) setCaptionDraft(next.caption);
   }
 
-  async function saveSlideTexts() {
-    if (selectedSlide === null || !slideDraft) return;
-    /*
-      자유 배치 중이면 요소의 글자도 같이 고친다 (08-31).
-      요소가 `slot`을 들고 있어서 어느 입력칸이 어느 상자인지 알 수 있다.
-      안 이으면 «문구를 고쳤는데 그림이 그대로»가 된다.
-    */
-    const elements = freeMode
-      ? editingSlide?.elements?.map((el) =>
-          el.slot && slideDraft[el.slot] !== undefined
-            ? { ...el, text: slideDraft[el.slot], style: styleDraft[el.slot] }
-            : el,
-        )
-      : undefined;
-
-    const next = await saveContent({
-      slides: [
-        {
-          order: selectedSlide,
-          texts: slideDraft,
-          styleOverrides: styleDraft,
-          ...(elements ? { elements } : {}),
-        },
-      ],
-    });
-    if (!next) return;
-
-    // 문구가 바뀌었으니 그 슬라이드만 다시 렌더링해서 교체한다
-    const user = userRef.current;
-    if (!user) return;
-    try {
-      const url = await fetchSlideImage(selectedSlide, await user.getIdToken(), true);
-      setSlideUrls((prev) =>
-        prev.map((u, i) => {
-          if (i !== selectedSlide) return u;
-          URL.revokeObjectURL(u); // 화면에서 내려가는 것만 해제한다
-          return url;
-        }),
-      );
-    } catch {
-      /* 이미지 갱신 실패는 다음 진입 때 다시 그려진다 — 저장 자체는 성공 */
-    }
-  }
-
   /**
    * 다른 구성으로 다시 만들기 (08-31).
    *
@@ -423,8 +325,6 @@ export default function CardResultPage() {
     if (!ok) return;
 
     setRegenerating(true);
-    setSelectedSlide(null);
-    setSlideDraft(null);
     try {
       const token = await user.getIdToken();
       const res = await fetch(`/api/cards/${cardId}/render`, {
@@ -458,33 +358,6 @@ export default function CardResultPage() {
    * 계정 스타일(설정)이 기본이고 이건 예외다 — 「이번 건만 어둡게」 같은 경우.
    * 테마와 마찬가지로 카드 전체에 걸리므로 모든 슬라이드를 다시 그린다.
    */
-  /**
-   * 이 슬라이드의 사진 교체 (08-31 · DESIGN.md §12 「사진 교체」).
-   *
-   * 카드가 가진 사진(`card.photoUrls`) 중에서 고른다 — 새로 올리는 것도
-   * 「재료 추가」와 같은 경로로 그 목록에 더해진다.
-   * 서버가 «이 카드의 사진인지»를 다시 확인한다.
-   */
-  async function replacePhoto(next: string | null) {
-    if (selectedSlide === null || saving) return;
-    const updated = await saveContent({ slides: [{ order: selectedSlide, imageUrl: next }] });
-    if (!updated) return;
-
-    const user = userRef.current;
-    if (!user) return;
-    try {
-      const url = await fetchSlideImage(selectedSlide, await user.getIdToken(), true);
-      setSlideUrls((prev) =>
-        prev.map((u, i) => {
-          if (i !== selectedSlide) return u;
-          URL.revokeObjectURL(u);
-          return url;
-        }),
-      );
-    } catch {
-      /* 저장은 됐다 — 다음 진입 때 맞춰진다 */
-    }
-  }
 
   async function saveCardBg(next: string | null) {
     if (!card || saving) return;
@@ -533,97 +406,6 @@ export default function CardResultPage() {
       /* 저장은 됐다 — 다음 진입 때 새 테마로 그려진다 */
       showToast("테마는 바뀌었어요. 미리보기는 잠시 후 반영돼요.");
     }
-  }
-
-  /**
-   * 레이아웃 바꾸기 (08-31).
-   *
-   * 테마와 달리 **이 한 장에만** 걸리므로 그 장만 다시 그린다.
-   * 고치던 문구(`slideDraft`)를 함께 보내는 게 중요하다 — 안 보내면
-   * 저장돼 있던 옛 문구가 새 레이아웃으로 옮겨져 편집 중이던 내용이 사라진다.
-   *
-   * 문구가 새 슬롯으로 옮겨지므로(`remapTexts`) 응답으로 온 값을
-   * 편집칸에 다시 채운다. 안 그러면 없어진 슬롯이 화면에 남는다.
-   */
-  async function selectLayout(next: LayoutId) {
-    if (selectedSlide === null || !slideDraft || saving) return;
-
-    const updated = await saveContent({
-      slides: [
-        { order: selectedSlide, texts: slideDraft, styleOverrides: styleDraft, layoutId: next },
-      ],
-    });
-    if (!updated) return;
-
-    const moved = updated.slides.find((s) => s.order === selectedSlide);
-    if (moved) {
-      setSlideDraft({ ...moved.texts });
-      // 조절값도 새 슬롯 이름으로 옮겨져 돌아온다 (remapOverrides)
-      setStyleDraft({ ...(moved.styleOverrides ?? {}) });
-    }
-
-    const user = userRef.current;
-    if (!user) return;
-    try {
-      const url = await fetchSlideImage(selectedSlide, await user.getIdToken(), true);
-      setSlideUrls((prev) =>
-        prev.map((u, i) => {
-          if (i !== selectedSlide) return u;
-          URL.revokeObjectURL(u); // 화면에서 내려가는 것만 해제한다
-          return url;
-        }),
-      );
-    } catch {
-      /* 저장은 됐다 — 다음 진입 때 새 레이아웃으로 그려진다 */
-    }
-  }
-
-  /**
-   * 자유 배치 저장 (08-31 · 편집기).
-   *
-   * 손을 뗄 때마다 부른다. 저장하고 **그 슬라이드만** 다시 그린다 —
-   * 렌더링이 5~10ms라 바탕 PNG가 거의 즉시 새것으로 바뀐다.
-   * `elements: null`이면 자유 배치를 끄고 레이아웃으로 돌아간다.
-   */
-  async function saveElements(next: SlideElement[] | null) {
-    if (selectedSlide === null) return;
-    const updated = await saveContent({
-      slides: [{ order: selectedSlide, elements: next }],
-    });
-    if (!updated) return;
-
-    const user = userRef.current;
-    if (!user) return;
-    try {
-      const url = await fetchSlideImage(selectedSlide, await user.getIdToken(), true);
-      setSlideUrls((prev) =>
-        prev.map((u, i) => {
-          if (i !== selectedSlide) return u;
-          URL.revokeObjectURL(u);
-          return url;
-        }),
-      );
-    } catch {
-      /* 저장은 됐다 — 다음 진입 때 맞춰진다 */
-    }
-  }
-
-  function selectSlide(order: number) {
-    if (!card) return;
-    if (selectedSlide === order) {
-      setSelectedSlide(null);
-      setSlideDraft(null);
-      setStyleDraft({});
-      setSelectedElId(null);
-      setSelectedSlot(null);
-      return;
-    }
-    const slide = card.slides.find((s) => s.order === order);
-    setSelectedSlide(order);
-    setSlideDraft({ ...slide?.texts });
-    setStyleDraft({ ...(slide?.styleOverrides ?? {}) });
-    setSelectedElId(null);
-    setSelectedSlot(null);
   }
 
   function addHashtag() {
@@ -851,18 +633,13 @@ export default function CardResultPage() {
                   <button
                     key={slide.order}
                     type="button"
-                    onClick={() => selectSlide(slide.order)}
-                    aria-pressed={selectedSlide === slide.order}
-                    className={`shrink-0 snap-start rounded-lg ${
-                      selectedSlide === slide.order
-                        ? "outline outline-2 outline-offset-2 outline-berry"
-                        : ""
-                    }`}
+                    onClick={() => router.push(`/card/${cardId}/edit/${slide.order}`)}
+                    className="shrink-0 snap-start rounded-lg"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element -- blob URL은 next/image 대상이 아니다 */}
                     <img
                       src={slideUrls[i]}
-                      alt={`슬라이드 ${i + 1} — 누르면 문구를 수정할 수 있어요`}
+                      alt={`슬라이드 ${i + 1} — 누르면 편집 화면으로 가요`}
                       className="aspect-square w-72 rounded-lg border border-line bg-surface object-cover"
                     />
                   </button>
@@ -881,8 +658,8 @@ export default function CardResultPage() {
                   />
                 ))}
             </div>
-            {phase === "ready" && selectedSlide === null && (
-              <p className="text-caption text-sub">슬라이드를 누르면 문구를 수정할 수 있어요.</p>
+            {phase === "ready" && (
+              <p className="text-caption text-sub">슬라이드를 누르면 편집 화면이 열려요.</p>
             )}
             {phase === "ready" && card && <StockAttribution slides={card.slides} />}
 
@@ -906,237 +683,6 @@ export default function CardResultPage() {
           </>
         )}
 
-        {/* 선택한 슬라이드 문구 편집 */}
-        {selectedSlide !== null && slideDraft && (
-          <div className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-body font-semibold text-ink">
-                슬라이드 {selectedSlide + 1} 수정
-              </h2>
-              {/*
-                자유 편집 켜고 끄기 (08-31).
-                켜면 이 슬라이드만 좌표로 그려지고, 끄면 레이아웃으로 돌아간다 —
-                레이아웃·테마·구성은 그대로 살아 있다.
-              */}
-              {editingSlide &&
-                (freeMode ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (window.confirm("옮겨둔 배치가 사라지고 원래 레이아웃으로 돌아가요.")) {
-                        saveElements(null);
-                      }
-                    }}
-                    disabled={saving}
-                    className="text-caption text-sub underline underline-offset-4 hover:text-ink"
-                  >
-                    레이아웃으로 되돌리기
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => saveElements(bakeToElements(editingSlide))}
-                    disabled={saving}
-                    className="h-9 rounded-md border-2 border-berry bg-surface px-3 text-caption font-semibold text-berry"
-                  >
-                    자유롭게 옮기기
-                  </button>
-                ))}
-            </div>
-
-            {/*
-              편집기 — 바탕은 «진짜 결과물» PNG다. 브라우저에서 흉내 내지 않아서
-              미리보기와 내려받을 이미지가 어긋날 수가 없다.
-            */}
-            {freeMode && editingSlide?.elements && (
-              <div className="flex flex-col gap-2">
-                <SlideEditor
-                  imageUrl={slideUrls[selectedSlide] ?? null}
-                  elements={editingSlide.elements}
-                  selectedId={selectedElId}
-                  onSelect={setSelectedElId}
-                  disabled={saving}
-                  onCommit={(next) => saveElements(next)}
-                />
-                <p className="text-caption text-sub">
-                  끌어서 옮기고, 모서리 점으로 크기를 바꿔요. 상자를 고른 뒤 방향키로도
-                  움직일 수 있어요.
-                </p>
-              </div>
-            )}
-
-            {/*
-              레이아웃 고르기 (08-31) — 이 «한 장»에만 걸린다. 그래서 카드 전체에
-              걸리는 테마와 달리 여기 편집 패널 안에 둔다.
-
-              못 고르는 것을 숨기지 않고 이유와 함께 보여준다 —
-              «사진이 없어요»는 사진을 넣으면 풀린다는 뜻이라 숨기면 알 길이 없다.
-            */}
-            {(() => {
-              const currentSlide = card?.slides.find((s) => s.order === selectedSlide);
-              // 자유 배치로 옮긴 슬라이드는 레이아웃을 고를 수 없다 — 좌표가 무의미해진다
-              if (!currentSlide || freeMode) return null;
-              // 판정 기준은 «지금 편집칸에 있는 문구»다 — 저장 전 내용까지 반영한다
-              const options = layoutOptionsFor({ ...currentSlide, texts: slideDraft });
-
-              return (
-                <div className="flex flex-col gap-2">
-                  <span className="text-label font-semibold text-sub">레이아웃</span>
-                  <div role="radiogroup" aria-label="레이아웃" className="flex flex-wrap gap-2">
-                    {options.map((o) => {
-                      const active = o.id === currentSlide.layoutId;
-                      const blocked = o.disabledReason !== null;
-                      return (
-                        <button
-                          key={o.id}
-                          type="button"
-                          role="radio"
-                          aria-checked={active}
-                          disabled={blocked || saving}
-                          title={o.disabledReason ?? undefined}
-                          onClick={() => selectLayout(o.id)}
-                          className={`rounded-pill border px-3 py-2 text-caption font-semibold ${
-                            active
-                              ? "border-berry bg-berry-light text-berry-dark"
-                              : blocked
-                                ? "cursor-not-allowed border-line bg-surface-muted text-sub opacity-60"
-                                : "border-line bg-surface text-sub hover:text-ink"
-                          }`}
-                        >
-                          {o.label}
-                          {blocked && (
-                            <span className="ml-1 font-normal">· {o.disabledReason}</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <p className="text-caption text-sub">
-                    지금은 「{LAYOUT_LABELS[currentSlide.layoutId]}」예요. 바꾸면 문구가 새 자리로
-                    옮겨져요.
-                  </p>
-                </div>
-              );
-            })()}
-
-            <p className="text-label font-semibold text-sub">문구</p>
-            {/*
-              슬롯마다 «문구 + 그 줄의 조절»을 붙여 둔다 (08-31).
-              캔버스에서 요소를 클릭해 잡는 대신, 이미 이름으로 나뉜 슬롯을 쓴다 —
-              무엇을 조절하는지가 분명하고 히트 테스트가 필요 없다.
-            */}
-            {/*
-              툴바는 «고른 줄 하나»에만 붙는다 (08-31 수정).
-              처음에는 줄마다 뒀는데, 번호 목록처럼 줄이 다섯이면 툴바가 다섯 벌
-              펼쳐져 편집 패널이 칩으로 도배됐다.
-            */}
-            {/*
-              사진 교체 (08-31). 사진을 쓰는 레이아웃일 때만 보여준다 —
-              글자만 있는 레이아웃에 사진 고르기가 뜨면 무엇에 쓰이는지 알 수 없다.
-            */}
-            {editingSlide && IMAGE_LAYOUTS.includes(editingSlide.layoutId) && card && (
-              <div className="flex flex-col gap-2">
-                <span className="text-label font-semibold text-sub">사진</span>
-                {card.photoUrls.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {card.photoUrls.map((url) => {
-                      const active = editingSlide.imageUrl === url;
-                      return (
-                        <button
-                          key={url}
-                          type="button"
-                          aria-pressed={active}
-                          aria-label="이 사진으로 바꾸기"
-                          disabled={saving}
-                          onClick={() => replacePhoto(url)}
-                          className={`h-16 w-16 overflow-hidden rounded-md border-2 disabled:opacity-60 ${
-                            active ? "border-berry" : "border-line hover:border-berry"
-                          }`}
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element -- Storage 주소는 next/image 대상이 아니다 */}
-                          <img src={url} alt="" className="h-full w-full object-cover" />
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-caption text-sub">
-                    아직 올린 사진이 없어요. 아래에서 올리면 여기서 고를 수 있어요.
-                  </p>
-                )}
-
-                <CardPhotoUploader
-                  cardId={cardId}
-                  photoUrls={card.photoUrls}
-                  maxPhotos={MAX_PHOTOS_PER_CARD}
-                  getToken={async () => {
-                    const user = userRef.current;
-                    if (!user) throw new Error("로그인이 필요해요.");
-                    return user.getIdToken();
-                  }}
-                  onChange={(urls) =>
-                    setCard((prev) => (prev ? { ...prev, photoUrls: urls } : prev))
-                  }
-                />
-              </div>
-            )}
-
-            <SlotToolbar
-              slotLabel={selectedSlot ? (SLOT_LABELS[selectedSlot] ?? selectedSlot) : null}
-              value={selectedSlot ? styleDraft[selectedSlot] : undefined}
-              disabled={saving}
-              onChange={(next) => {
-                if (!selectedSlot) return;
-                const merged = { ...styleDraft };
-                if (next) merged[selectedSlot] = next;
-                else delete merged[selectedSlot];
-                setStyleDraft(merged);
-              }}
-            />
-
-            {Object.entries(slideDraft).map(([key, value]) => {
-              const active = selectedSlot === key;
-              return (
-                <label key={key} className="flex flex-col gap-1">
-                  <span
-                    className={`text-label font-semibold ${active ? "text-berry-dark" : "text-sub"}`}
-                  >
-                    {SLOT_LABELS[key] ?? key}
-                  </span>
-                  <textarea
-                    value={value}
-                    rows={value.length > 40 ? 3 : 1}
-                    // 누르거나 탭으로 들어오면 그 줄이 툴바의 대상이 된다
-                    onFocus={() => setSelectedSlot(key)}
-                    onChange={(e) => setSlideDraft({ ...slideDraft, [key]: e.target.value })}
-                    className={`${inputClass} ${active ? "border-berry" : ""}`}
-                  />
-                </label>
-              );
-            })}
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={saveSlideTexts}
-                disabled={!slideDirty || saving}
-                className="h-11 rounded-md bg-berry px-5 text-body font-semibold text-white
-                           hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
-              >
-                {saving ? "···" : "저장"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSlideDraft({ ...editingSlide?.texts });
-                  setStyleDraft({ ...(editingSlide?.styleOverrides ?? {}) });
-                }}
-                className="text-body text-sub"
-              >
-                닫기
-              </button>
-            </div>
-          </div>
-        )}
       </section>
 
       {/* 캡션 편집 */}
