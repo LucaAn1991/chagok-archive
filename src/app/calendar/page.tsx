@@ -15,7 +15,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
 import CardTile from "@/components/CardTile";
@@ -119,6 +119,15 @@ function weekTitle(startKey: string, endKey: string): string {
 }
 
 /**
+ * 업로드 요일인가 — uploadDays는 월=0…일=6 (users/me), getDay()는 일=0이라 변환한다.
+ * 설정이 없으면(빈 배열 포함) null — 아무 표시도 하지 않는다.
+ */
+function isUploadDayOf(uploadDays: number[] | null, dateKey: string): boolean | null {
+  if (!uploadDays || uploadDays.length === 0) return null;
+  return uploadDays.includes((parseDateKey(dateKey).getDay() + 6) % 7);
+}
+
+/**
  * 과도기 방어 (08-31 상태 개편) — 옛 코드가 쓴 'crafted'는 pending으로 읽는다.
  * 팀원 브랜치가 개편 커밋을 pull하면 더는 생기지 않는다. @TODO: 정착 후 제거
  */
@@ -179,6 +188,8 @@ function CalendarView({ uid }: { uid: string }) {
   // 올렸어요 — 실제 올린 날짜를 물어보는 다이얼로그 (놓친 카드와 같은 규칙)
   const [publishTarget, setPublishTarget] = useState<Card | null>(null);
   const [publishDate, setPublishDate] = useState("");
+  // 온보딩에서 고른 업로드 요일 (월=0…일=6) — 쉬는 날/채울 날 구분에 쓴다 (08-31)
+  const [uploadDays, setUploadDays] = useState<number[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,6 +206,7 @@ function CalendarView({ uid }: { uid: string }) {
           router.replace("/onboarding");
           return;
         }
+        setUploadDays((userSnap.data().uploadDays as number[] | undefined) ?? null);
 
         const { start, end } = rangeFor(view, anchor);
         const cardsRef = collection(db, "cards");
@@ -522,6 +534,11 @@ function CalendarView({ uid }: { uid: string }) {
                             onSelect={() => setSelectedDate(dateKey)}
                             onDragStartCard={setDraggingId}
                             onDropCard={(cardId) => handleDrop(cardId, dateKey)}
+                            showPlus={
+                              (byDate.get(dateKey) ?? []).length === 0 &&
+                              dateKey >= todayKey &&
+                              isUploadDayOf(uploadDays, dateKey) === true
+                            }
                           />
                         ),
                       )}
@@ -552,6 +569,16 @@ function CalendarView({ uid }: { uid: string }) {
                           onSelect={() => setSelectedDate(dateKey)}
                           onDragStartCard={setDraggingId}
                           onDropCard={(cardId) => handleDrop(cardId, dateKey)}
+                          emptyHint={
+                            (byDate.get(dateKey) ?? []).length > 0
+                              ? "none"
+                              : isUploadDayOf(uploadDays, dateKey) === false
+                                ? "rest"
+                                : isUploadDayOf(uploadDays, dateKey) === true &&
+                                    dateKey >= todayKey
+                                  ? "invite"
+                                  : "none"
+                          }
                         />
                       ))}
                     </div>
@@ -596,7 +623,7 @@ function CalendarView({ uid }: { uid: string }) {
                       href="/plan/new"
                       className="flex h-11 items-center rounded-md bg-berry px-5 text-body font-semibold text-white hover:bg-berry-dark"
                     >
-                      AI 기획으로 채우기
+                      기획하기
                     </Link>
                   </div>
                 )}
@@ -642,6 +669,7 @@ function CalendarView({ uid }: { uid: string }) {
                   dateKey={selectedDate}
                   cards={selectedCards}
                   todayKey={todayKey}
+                  restDay={isUploadDayOf(uploadDays, selectedDate) === false}
                   onPublish={openPublish}
                 />
               </aside>
@@ -776,6 +804,7 @@ function DayCell({
   onSelect,
   onDragStartCard,
   onDropCard,
+  showPlus,
 }: {
   dateKey: string;
   cards: Card[];
@@ -785,6 +814,8 @@ function DayCell({
   onSelect: () => void;
   onDragStartCard: (id: string | null) => void;
   onDropCard: (cardId: string) => void;
+  /** 업로드 요일인데 비어 있는 미래 날 — «채울 수 있어요» 표시 (08-31) */
+  showPlus?: boolean;
 }) {
   const dayNum = Number(dateKey.slice(8, 10));
   const [over, setOver] = useState(false);
@@ -868,6 +899,8 @@ function DayCell({
         {cards.length > maxDesktop && (
           <span className="px-1 text-caption text-sub">+{cards.length - maxDesktop}건</span>
         )}
+        {/* 업로드 요일인데 비어 있는 미래 날 — 채울 수 있다는 신호 (클릭 = 선택 → 패널 기획하기) */}
+        {showPlus && <Plus size={14} aria-hidden className="mx-auto mt-1 text-berry/40" />}
       </span>
     </div>
   );
@@ -887,6 +920,7 @@ function WeekColumn({
   onSelect,
   onDragStartCard,
   onDropCard,
+  emptyHint,
 }: {
   dateKey: string;
   cards: Card[];
@@ -896,6 +930,8 @@ function WeekColumn({
   onSelect: () => void;
   onDragStartCard: (id: string | null) => void;
   onDropCard: (cardId: string) => void;
+  /** 빈 날 표현 — rest: 업로드 요일 아님(쉬어가는 날) · invite: 채울 수 있는 날 */
+  emptyHint: "none" | "rest" | "invite";
 }) {
   const [over, setOver] = useState(false);
   const dayNum = Number(dateKey.slice(8, 10));
@@ -940,7 +976,20 @@ function WeekColumn({
       </div>
 
       {cards.length === 0 ? (
-        <p className="px-1 text-caption text-sub/40">예정 없음</p>
+        emptyHint === "rest" ? (
+          <p className="px-1 text-caption text-sub/40">쉬어가는 날</p>
+        ) : emptyHint === "invite" ? (
+          <Link
+            href="/plan/new"
+            onClick={(e) => e.stopPropagation()}
+            className="flex h-14 items-center justify-center gap-1 rounded-md border border-dashed border-line text-caption text-sub hover:border-berry hover:text-berry-dark"
+          >
+            <Plus size={14} aria-hidden />
+            기획하기
+          </Link>
+        ) : (
+          <p className="px-1 text-caption text-sub/40">예정 없음</p>
+        )
       ) : (
         cards.map((card) => (
           <CardTile
@@ -969,11 +1018,13 @@ function DayPanel({
   dateKey,
   cards,
   todayKey,
+  restDay,
   onPublish,
 }: {
   dateKey: string;
   cards: Card[];
   todayKey: string;
+  restDay: boolean; // 업로드 요일이 아닌 빈 날 — 문구를 바꾼다 (08-31)
   onPublish: (card: Card) => void;
 }) {
   const dow = DAY_HEADS[parseDateKey(dateKey).getDay()];
@@ -991,12 +1042,14 @@ function DayPanel({
 
       {cards.length === 0 ? (
         <div className="mt-3">
-          <p className="text-body text-sub">이 날에는 예정된 콘텐츠가 없어요.</p>
+          <p className="text-body text-sub">
+            {restDay ? "쉬어가는 날이에요." : "이 날에는 예정된 콘텐츠가 없어요."}
+          </p>
           <Link
             href="/plan/new"
             className="mt-2 inline-block text-body font-semibold text-berry-dark underline"
           >
-            AI 기획으로 채우기
+            기획하기
           </Link>
         </div>
       ) : (

@@ -30,17 +30,34 @@ export default function CardTile({
   onDragStart?: (e: React.DragEvent) => void;
   onDragEnd?: () => void;
 }) {
+  /*
+    제작이 끝난 카드(pending·published)는 대표 비주얼을 보여준다 (08-31):
+    사용자 사진 → 슬라이드 이미지 → 글자 표지 미니어처(첫 슬라이드 문구) 순.
+    완성 PNG는 저장하지 않으므로(PLAN §9) 재료로 표지를 흉내 낸다.
+  */
+  const thumbUrl = card.photoUrls?.[0] ?? card.slides?.find((s) => s.imageUrl)?.imageUrl ?? null;
+  const crafted = card.status === "pending" || card.status === "published";
+  const coverText =
+    crafted && !thumbUrl && card.slides?.length
+      ? (Object.values(card.slides[0].texts ?? {})[0] ?? null)
+      : null;
+
   if (variant === "row") {
     return (
       <Link
         href={`/card/${card.id}`}
         className="flex items-center gap-3 rounded-lg border border-line bg-surface p-3 hover:bg-surface-muted"
       >
-        {card.photoUrls?.[0] ? (
+        {thumbUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={card.photoUrls[0]} alt="" className="size-12 shrink-0 rounded-sm object-cover" />
+          <img src={thumbUrl} alt="" className="size-12 shrink-0 rounded-sm object-cover" />
         ) : (
-          <span className="size-12 shrink-0 rounded-sm bg-surface-muted" />
+          <span
+            className={[
+              "size-12 shrink-0 rounded-sm",
+              coverText ? "bg-berry-light" : "bg-surface-muted",
+            ].join(" ")}
+          />
         )}
         <span className="min-w-0 flex-1">
           <span className="block truncate text-body font-semibold text-ink">{card.title}</span>
@@ -68,10 +85,16 @@ export default function CardTile({
         onDragStart != null ? "cursor-grab" : "",
       ].join(" ")}
     >
-      {card.photoUrls?.[0] && (
+      {thumbUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={card.photoUrls[0]} alt="" className="aspect-video w-full object-cover" />
-      )}
+        <img src={thumbUrl} alt="" className="aspect-video w-full object-cover" />
+      ) : coverText ? (
+        <div className="flex aspect-video w-full items-center justify-center bg-berry-light px-3">
+          <span className="line-clamp-2 break-keep text-center text-caption font-semibold text-berry-dark">
+            {coverText}
+          </span>
+        </div>
+      ) : null}
       <div className="flex flex-col items-start gap-1.5 p-2">
         {/* break-keep — 한국어를 단어 중간에서 끊지 않는다. 2줄 넘으면 … (08-31) */}
         <span className="line-clamp-2 break-keep text-caption font-semibold text-ink">
