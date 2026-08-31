@@ -64,13 +64,6 @@ const STATUS_COLOR: Record<CardStatus, string> = {
   discarded: "var(--st-discarded)",
 };
 
-/** 범례 — 색만으로는 상태를 해석할 수 없다는 지적 보완 (08-31). discarded는 캘린더에 없다 */
-const LEGEND: { status: CardStatus; label: string }[] = [
-  { status: "planned", label: "제작 대기" },
-  { status: "pending", label: "업로드 대기" },
-  { status: "published", label: "발행 완료" },
-];
-
 /** 해당 월의 캘린더 격자 — 앞뒤 빈칸(null) 포함, 일요일 시작 */
 function monthGrid(year: number, month: number): (string | null)[] {
   const first = new Date(year, month, 1);
@@ -188,9 +181,8 @@ function CalendarView({ uid }: { uid: string }) {
   // 올렸어요 — 실제 올린 날짜를 물어보는 다이얼로그 (놓친 카드와 같은 규칙)
   const [publishTarget, setPublishTarget] = useState<Card | null>(null);
   const [publishDate, setPublishDate] = useState("");
-  // 온보딩에서 고른 업로드 요일 (월=0…일=6)·주기 — 쉬는 날/채울 날 구분과 주간 헤더에 쓴다 (08-31)
+  // 온보딩에서 고른 업로드 요일 (월=0…일=6) — 쉬는 날/채울 날 구분·목표 개수에 쓴다 (08-31)
   const [uploadDays, setUploadDays] = useState<number[] | null>(null);
-  const [uploadFrequency, setUploadFrequency] = useState<number | null>(null);
   // [실험] 아코디언 — 기본은 순수 월간. «주 펼치기»를 눌러야 그 주만 보드로 확장 (주 시작일 키)
   const [expandedWeekKey, setExpandedWeekKey] = useState<string | null>(null);
 
@@ -210,7 +202,6 @@ function CalendarView({ uid }: { uid: string }) {
           return;
         }
         setUploadDays((userSnap.data().uploadDays as number[] | undefined) ?? null);
-        setUploadFrequency((userSnap.data().uploadFrequency as number | undefined) ?? null);
 
         const { start, end } = rangeFor(view, anchor);
         const cardsRef = collection(db, "cards");
@@ -352,6 +343,12 @@ function CalendarView({ uid }: { uid: string }) {
   const cells =
     view === "month" ? monthGrid(anchorDate.getFullYear(), anchorDate.getMonth()) : weekDates(anchor);
   const range = rangeFor(view, anchor);
+  // 목표 N개 — 보는 범위(월/주) 안의 업로드 요일 수. 예: 월수금 유저의 8월 = 그 달 월수금 일수
+  const goalCount =
+    uploadDays && uploadDays.length > 0
+      ? cells.filter((d): d is string => d !== null && isUploadDayOf(uploadDays, d) === true)
+          .length
+      : null;
   const title =
     view === "month"
       ? `${anchorDate.getFullYear()}년 ${anchorDate.getMonth() + 1}월`
@@ -423,16 +420,7 @@ function CalendarView({ uid }: { uid: string }) {
                 >
                   <ChevronRight size={20} aria-hidden />
                 </button>
-                {/* 오늘 — invisible 처리 (08-31 요청). 필요해지면 hidden만 지우면 된다 */}
-                <button
-                  type="button"
-                  onClick={goToday}
-                  className="ml-1 hidden h-9 whitespace-nowrap rounded-md border border-line bg-surface px-3 text-body text-ink hover:bg-surface-muted"
-                >
-                  오늘
-                </button>
-
-                {/* 월간/주간 — 밑줄 탭, 오늘 버튼이 있던 자리 (08-31 v6) */}
+                {/* 월간/주간 — 밑줄 탭 (08-31 v6) */}
                 <div className="ml-2 flex gap-5">
                   {(["month", "week"] as const).map((v) => (
                     <button
@@ -450,6 +438,15 @@ function CalendarView({ uid }: { uid: string }) {
                     </button>
                   ))}
                 </div>
+
+                {/* 오늘 — 탭 오른쪽, 라운드는 한 단계 작게 (08-31 복원) */}
+                <button
+                  type="button"
+                  onClick={goToday}
+                  className="ml-3 h-9 whitespace-nowrap rounded-sm border border-line bg-surface px-3 text-body text-ink hover:bg-surface-muted"
+                >
+                  오늘
+                </button>
               </div>
             </div>
 
@@ -498,36 +495,63 @@ function CalendarView({ uid }: { uid: string }) {
 
           {state.phase === "ready" && (
             <>
-              {/* 상태 범례 — 캘린더 오른편 정렬. desktop에서는 패널 폭(300)+간격(24)만큼
-                  안쪽으로 들여 격자의 오른끝과 맞춘다 (08-31 v4) */}
-              {view === "month" && (
-                <div className="mt-3 flex flex-wrap items-center justify-end gap-x-4 gap-y-1 desktop:pr-[324px]">
-                  {LEGEND.map(({ status, label }) => (
-                    <span key={status} className="flex items-center gap-1.5 text-caption text-sub">
-                      {status === "published" ? (
-                        <span aria-hidden className="font-semibold">
-                          ✓
-                        </span>
-                      ) : (
-                        <span
-                          aria-hidden
-                          className="h-2 w-2 rounded-pill"
-                          style={{ background: STATUS_COLOR[status] }}
-                        />
-                      )}
-                      {label}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-            <div className={view === "month" ? "mt-1 flex gap-6" : "mt-4 flex gap-6"}>
+            <div className="mt-4 flex gap-6">
               {/* 격자 영역 */}
               <div className="min-w-0 flex-1">
+                {/* 요약 헤더 — 왼쪽 계획, 오른쪽 진행 상태. 월간·주간 공통 (08-31).
+                    상태 집계가 범례 역할도 겸한다 */}
+                <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+                  <div>
+                    <h2 className="text-body-l font-semibold text-ink">
+                      {view === "month"
+                        ? todayKey.slice(0, 7) === range.start.slice(0, 7)
+                          ? "이번 달 콘텐츠"
+                          : "이 달의 콘텐츠"
+                        : todayKey >= range.start && todayKey <= range.end
+                          ? "이번 주 콘텐츠"
+                          : "이 주의 콘텐츠"}
+                    </h2>
+                    {/* 목표 대비 실제 발행 — 발행률이 우리 북극성 지표다 */}
+                    <p className="mt-0.5 text-caption text-sub">
+                      {goalCount != null ? `목표 ${goalCount}개 · ` : ""}
+                      {state.cards.filter((c) => c.status === "published").length}개 발행
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+                    {(
+                      [
+                        ["planned", "제작 대기"],
+                        ["pending", "업로드 대기"],
+                        ["published", "발행"],
+                      ] as const
+                    ).map(([status, label]) => (
+                      <span
+                        key={status}
+                        className="flex items-center gap-1.5 text-caption text-sub"
+                      >
+                        {status === "published" ? (
+                          <span aria-hidden className="font-semibold">
+                            ✓
+                          </span>
+                        ) : (
+                          <span
+                            aria-hidden
+                            className="h-2 w-2 rounded-pill"
+                            style={{ background: STATUS_COLOR[status] }}
+                          />
+                        )}
+                        {label}{" "}
+                        <span className="font-medium">
+                          {state.cards.filter((c) => c.status === status).length}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
                 {view === "month" ? (
                   <>
                     {/* 요일 헤더 */}
-                    <div className="grid grid-cols-7">
+                    <div className="mt-3 grid grid-cols-7">
                       {DAY_HEADS.map((d) => (
                         <div key={d} className="py-2 text-center text-caption text-sub">
                           {d}
@@ -577,7 +601,9 @@ function CalendarView({ uid }: { uid: string }) {
                         }
                         return (
                           <div key={`w-${wi}`}>
-                            <div className="grid grid-cols-7 gap-2 rounded-lg bg-berry-tint p-1.5">
+                            {/* 주 전체 tint는 선택 날짜를 묻히게 해서 제거 — 선택 컬럼만 칠한다 (08-31).
+                                모바일(md 미만)은 펼치지 않는다 — 칸이 좁아 보드가 깨진다 */}
+                            <div className="hidden grid-cols-7 gap-2 rounded-lg p-1.5 md:grid">
                               {week.map((dateKey, i) =>
                                 dateKey === null ? (
                                   <div key={`empty-${wi}-${i}`} />
@@ -606,6 +632,27 @@ function CalendarView({ uid }: { uid: string }) {
                                 ),
                               )}
                             </div>
+
+                            {/* Mobile — 펼침 없이 기존 칸 유지, 상세는 아래 리스트가 맡는다 */}
+                            <div className="grid grid-cols-7 gap-1 md:hidden">
+                              {week.map((dateKey, i) =>
+                                dateKey === null ? (
+                                  <div key={`m-empty-${wi}-${i}`} />
+                                ) : (
+                                  <DayCell
+                                    key={dateKey}
+                                    dateKey={dateKey}
+                                    cards={byDate.get(dateKey) ?? []}
+                                    isToday={dateKey === todayKey}
+                                    isSelected={dateKey === selectedDate}
+                                    dragging={draggingId != null}
+                                    onSelect={() => selectDate(dateKey)}
+                                    onDragStartCard={setDraggingId}
+                                    onDropCard={(cardId) => handleDrop(cardId, dateKey)}
+                                  />
+                                ),
+                              )}
+                            </div>
                           </div>
                         );
                       })}
@@ -613,52 +660,6 @@ function CalendarView({ uid }: { uid: string }) {
                   </>
                 ) : (
                   <>
-                    {/* 주간 헤더 — 왼쪽은 계획(목표·기획 수), 오른쪽은 진행 상태 (08-31 v4).
-                        상태는 큰 badge로 만들지 않는다 — dot + text 그대로, 우측 정렬만 */}
-                    <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
-                      <div>
-                        <h2 className="text-body-l font-semibold text-ink">
-                          {todayKey >= range.start && todayKey <= range.end
-                            ? "이번 주 콘텐츠"
-                            : "이 주의 콘텐츠"}
-                        </h2>
-                        <p className="mt-0.5 text-caption text-sub">
-                          {uploadFrequency ? `목표 주 ${uploadFrequency}회 · ` : ""}
-                          {state.cards.length}개 기획
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
-                        {(
-                          [
-                            ["planned", "제작 대기"],
-                            ["pending", "업로드 대기"],
-                            ["published", "발행"],
-                          ] as const
-                        ).map(([status, label]) => (
-                          <span
-                            key={status}
-                            className="flex items-center gap-1.5 text-caption text-sub"
-                          >
-                            {status === "published" ? (
-                              <span aria-hidden className="font-semibold">
-                                ✓
-                              </span>
-                            ) : (
-                              <span
-                                aria-hidden
-                                className="h-2 w-2 rounded-pill"
-                                style={{ background: STATUS_COLOR[status] }}
-                              />
-                            )}
-                            {label}{" "}
-                            <span className="font-medium">
-                              {state.cards.filter((c) => c.status === status).length}
-                            </span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
                     {/* Desktop/Tablet — 플래너 컬럼 */}
                     <div className="mt-3 hidden grid-cols-7 gap-2 md:grid">
                       {(cells as string[]).map((dateKey) => (
@@ -743,7 +744,7 @@ function CalendarView({ uid }: { uid: string }) {
                       )}
                     </h2>
                     {selectedCards.length === 0 ? (
-                      <p className="mt-3 text-body text-sub">이 날에는 예정된 콘텐츠가 없어요.</p>
+                      <p className="mt-3 text-body text-sub">아직 예정된 콘텐츠가 없어요.</p>
                     ) : (
                       <ul className="mt-3 flex flex-col gap-2">
                         {selectedCards.map((card) => (
@@ -767,11 +768,13 @@ function CalendarView({ uid }: { uid: string }) {
               </div>
 
               {/* 오른쪽 미리보기 패널 — Desktop(≥1200)만 (08-31 시안 01·06).
-                  월간에서는 요일 헤더(34px)만큼 내려 1일 칸 시작선과 맞춘다 */}
+                  월간은 1일 칸 시작선(요일 헤더 34px), 주간은 카드 타일 시작선
+                  (주 헤더 58 + 날짜 라벨 30 = 88px)에 맞춘다 */}
               <aside
                 className={[
                   "sticky top-6 hidden w-[300px] shrink-0 self-start desktop:block",
-                  view === "month" ? "mt-[34px]" : "",
+                  // 요약 헤더(58) + 월간 요일 줄(46)/주간 날짜 라벨(30) 아래 — 칸·타일 시작선 정렬
+                  view === "month" ? "mt-[92px]" : "mt-[88px]",
                 ].join(" ")}
               >
                 <DayPanel
@@ -947,7 +950,7 @@ function DayCell({
         if (cardId) onDropCard(cardId);
       }}
       className={[
-        "min-h-14 cursor-pointer rounded-sm border p-1 md:min-h-24 md:p-1.5",
+        "relative min-h-14 cursor-pointer rounded-sm border p-1 md:min-h-24 md:p-1.5",
         isSelected ? "border-berry" : "border-line",
         over && dragging ? "bg-berry-tint" : "bg-surface",
       ].join(" ")}
@@ -1009,9 +1012,14 @@ function DayCell({
         {cards.length > maxDesktop && (
           <span className="px-1 text-caption text-sub">+{cards.length - maxDesktop}건</span>
         )}
-        {/* 업로드 요일인데 비어 있는 미래 날 — 채울 수 있다는 신호 (클릭 = 선택 → 패널 기획하기) */}
-        {showPlus && <Plus size={14} aria-hidden className="mx-auto mt-1 text-berry/40" />}
       </span>
+
+      {/* 업로드 요일인데 비어 있는 미래 날 — 칸 정중앙에 채움 신호 (클릭 = 선택 → 패널) */}
+      {showPlus && (
+        <span className="pointer-events-none absolute inset-0 hidden items-center justify-center md:flex">
+          <Plus size={14} aria-hidden className="text-berry/40" />
+        </span>
+      )}
     </div>
   );
 }
@@ -1065,7 +1073,7 @@ function WeekColumn({
       className={[
         // 박스 없이 — 드롭 대상으로 살아 있도록 최소 높이와 hover 배경만
         "flex min-h-32 cursor-pointer flex-col gap-2 rounded-md p-1",
-        over && dragging ? "bg-berry-tint" : "",
+        over && dragging ? "bg-berry-tint" : isSelected ? "bg-berry-tint" : "",
       ].join(" ")}
     >
       {/* 날짜 라벨 — 카드보다 약하게 */}
@@ -1106,7 +1114,6 @@ function WeekColumn({
             key={card.id}
             card={card}
             variant="tile"
-            selected={isSelected}
             onClick={onSelect}
             onDragStart={(e) => {
               e.dataTransfer.setData("text/card-id", card.id);
@@ -1153,13 +1160,13 @@ function DayPanel({
       {cards.length === 0 ? (
         <div className="mt-3">
           <p className="text-body text-sub">
-            {restDay ? "쉬어가는 날이에요." : "이 날에는 예정된 콘텐츠가 없어요."}
+            {restDay ? "쉬어가는 날이에요." : "아직 예정된 콘텐츠가 없어요."}
           </p>
           <Link
             href="/plan/new"
             className="mt-2 inline-block text-body font-semibold text-berry-dark underline"
           >
-            기획하기
+            {restDay ? "콘텐츠 추가하기" : "기획하기"}
           </Link>
         </div>
       ) : (
