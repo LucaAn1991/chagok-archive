@@ -5,9 +5,19 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { ChevronLeft, MoreHorizontal } from "lucide-react";
+import {
+  Bookmark,
+  ChevronLeft,
+  ChevronRight,
+  Heart,
+  MessageCircle,
+  MoreHorizontal,
+  Send,
+  X,
+} from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
-import type { Card, CardStatus } from "@/types";
+import StatusBadge from "@/components/StatusBadge";
+import type { Card } from "@/types";
 
 /**
  * 카드 상세 (F6) — 기획 정보 확인 · 제작 진입.
@@ -23,21 +33,6 @@ import type { Card, CardStatus } from "@/types";
 
 type Phase = "loading" | "ready" | "not-found" | "error";
 
-const STATUS_LABELS: Record<CardStatus, string> = {
-  planned: "제작 대기",
-  pending: "업로드 대기",
-  published: "발행 완료",
-  discarded: "버림",
-};
-
-/** 상태 배지 색 — 명도 계단 (DESIGN.md §2). 색만으로 구분하지 않고 라벨 병행 (§15) */
-const STATUS_DOT_CLASS: Record<CardStatus, string> = {
-  planned: "bg-st-planned",
-  pending: "bg-st-pending",
-  published: "bg-st-published",
-  discarded: "bg-st-discarded",
-};
-
 export default function CardDetailPage() {
   const router = useRouter();
   const { cardId } = useParams<{ cardId: string }>();
@@ -52,6 +47,8 @@ export default function CardDetailPage() {
   // 카드뉴스 미리보기 — 완성 PNG는 저장하지 않으므로(PLAN §9) 즉석 렌더 API에서 받는다
   const [slideUrls, setSlideUrls] = useState<string[]>([]);
   const [slideError, setSlideError] = useState(false);
+  // 인스타 미리보기 모달 — 열려 있는 슬라이드 index (08-31)
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [discarding, setDiscarding] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -178,30 +175,34 @@ export default function CardDetailPage() {
         <ChevronLeft size={20} aria-hidden />
       </button>
 
-      {/* 상태 + 주제 */}
-      <header className="flex flex-col gap-3">
-        <span className="flex items-center gap-2 self-start rounded-pill border border-line bg-surface px-3 py-1 text-caption font-semibold text-ink">
-          <span aria-hidden className={`h-2 w-2 rounded-pill ${STATUS_DOT_CLASS[card.status]}`} />
-          {STATUS_LABELS[card.status]}
-        </span>
-        <h1 className="text-h3 font-bold text-ink">{card.title}</h1>
+      {/* 주제 + 상태 — 배지는 제목과 같은 라인 오른쪽 (08-31) */}
+      <header className="flex flex-col gap-2">
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="min-w-0 break-keep text-h3 font-bold text-ink">{card.title}</h1>
+          <span className="mt-1 shrink-0">
+            <StatusBadge status={card.status} />
+          </span>
+        </div>
         {overdue && (
           <p className="text-body text-sub">예정일이 지났어요. 날짜를 다시 잡아볼까요?</p>
         )}
       </header>
 
-      {/* 기획 정보 — 기획의도는 상세에서만 노출 */}
-      <section aria-label="기획 정보" className="flex flex-col gap-4 rounded-lg border border-line bg-surface p-6">
-        <div className="flex flex-col gap-1">
-          <span className="text-label font-semibold text-sub">대상</span>
-          <p className="text-body text-ink">{card.audience}</p>
+      {/* 기획 정보 — 라벨·값 한 줄씩, 압축형 (08-31). 기획의도는 상세에서만 노출 */}
+      <section
+        aria-label="기획 정보"
+        className="flex flex-col gap-2.5 rounded-lg border border-line bg-surface p-4"
+      >
+        <div className="flex gap-3">
+          <span className="w-16 shrink-0 text-label font-semibold text-sub">대상</span>
+          <p className="min-w-0 break-keep text-body text-ink">{card.audience}</p>
         </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-label font-semibold text-sub">기획의도</span>
-          <p className="text-body text-ink">{card.intent}</p>
+        <div className="flex gap-3">
+          <span className="w-16 shrink-0 text-label font-semibold text-sub">기획의도</span>
+          <p className="min-w-0 break-keep text-body text-ink">{card.intent}</p>
         </div>
-        <div className="flex flex-col gap-2">
-          <label htmlFor="scheduledDate" className="text-label font-semibold text-sub">
+        <div className="flex items-center gap-3">
+          <label htmlFor="scheduledDate" className="w-16 shrink-0 text-label font-semibold text-sub">
             예정일
           </label>
           <div className="flex items-center gap-2">
@@ -211,14 +212,14 @@ export default function CardDetailPage() {
               value={dateDraft}
               disabled={discarded}
               onChange={(e) => setDateDraft(e.target.value)}
-              className="h-11 rounded-md border border-line bg-surface px-3 text-body text-ink"
+              className="h-9 rounded-md border border-line bg-surface px-3 text-body text-ink"
             />
             {dateDraft !== card.scheduledDate && (
               <button
                 type="button"
                 onClick={saveScheduledDate}
                 disabled={savingDate}
-                className="h-11 rounded-md border-2 border-berry bg-surface px-4 text-body font-semibold text-berry disabled:border-line disabled:text-sub"
+                className="h-9 rounded-md border-2 border-berry bg-surface px-3 text-body font-semibold text-berry disabled:border-line disabled:text-sub"
               >
                 {savingDate ? "···" : "날짜 저장"}
               </button>
@@ -235,32 +236,36 @@ export default function CardDetailPage() {
         )}
       </section>
 
-      {/* 카드뉴스 미리보기 — 제작이 끝났으면 이미지가 당연히 보여야 한다 (08-31).
-          가로 스크롤 = 인스타 캐러셀 감각. 편집은 제작 결과 페이지의 몫 */}
+      {/* 카드뉴스 — 박스 없이 온보딩 취향 캐러셀처럼 큼직하게 넘겨본다 (08-31 v2).
+          카드를 누르면 인스타 구성 그대로의 미리보기 모달 */}
       {card.slides.length > 0 && (
-        <section
-          aria-label="카드뉴스 미리보기"
-          className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-6"
-        >
+        <section aria-label="카드뉴스" className="flex flex-col gap-2">
           <span className="text-label font-semibold text-sub">
             카드뉴스 · {card.slides.length}장
           </span>
-          <div className="-mx-2 flex gap-2 overflow-x-auto px-2 pb-1">
+          <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2">
             {slideUrls.map((url, i) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <button
                 key={url}
-                src={url}
-                alt={`슬라이드 ${i + 1}`}
-                className="aspect-square w-40 shrink-0 rounded-md border border-line object-cover"
-              />
+                type="button"
+                onClick={() => setPreviewIndex(i)}
+                className="shrink-0 snap-start"
+                aria-label={`슬라이드 ${i + 1} 미리보기`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={url}
+                  alt=""
+                  className="aspect-square w-56 rounded-lg border border-line object-cover transition-transform duration-200 hover:scale-[1.02]"
+                />
+              </button>
             ))}
             {!slideError &&
               slideUrls.length < card.slides.length &&
               Array.from({ length: card.slides.length - slideUrls.length }).map((_, i) => (
                 <div
                   key={`sk-${i}`}
-                  className="aspect-square w-40 shrink-0 animate-pulse rounded-md bg-surface-muted"
+                  className="aspect-square w-56 shrink-0 animate-pulse rounded-lg bg-surface-muted"
                 />
               ))}
           </div>
@@ -309,7 +314,7 @@ export default function CardDetailPage() {
             href={`/card/${cardId}/result`}
             className="flex h-12 items-center justify-center rounded-md bg-berry text-[15px] font-semibold text-white hover:bg-berry-dark"
           >
-            {card.status === "planned" ? "콘텐츠 제작하기" : "제작 결과 보기"}
+            {card.status === "planned" ? "콘텐츠 제작하기" : "캡션·카드뉴스 수정하기"}
           </Link>
           <div className="flex items-center justify-between">
             <Link
@@ -351,6 +356,108 @@ export default function CardDetailPage() {
         <p className="text-body text-sub">
           버린 카드예요. 목록에는 보이지 않지만 기록에는 남아 있어요.
         </p>
+      )}
+
+      {/* 인스타 미리보기 — 실제 게시물과 같은 구성: 사진 1장 + 좌우 슬라이드 + 캡션·해시태그 (08-31) */}
+      {previewIndex !== null && slideUrls[previewIndex] && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="인스타그램 미리보기"
+          onClick={() => setPreviewIndex(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex max-h-[92vh] w-full max-w-[400px] flex-col overflow-hidden rounded-xl bg-surface shadow-lg"
+          >
+            {/* 상단 바 — 계정 자리 */}
+            <div className="flex items-center gap-2.5 px-3 py-2.5">
+              <span aria-hidden className="size-8 rounded-pill bg-berry-light" />
+              <span className="text-body font-semibold text-ink">내 계정</span>
+              <button
+                type="button"
+                onClick={() => setPreviewIndex(null)}
+                aria-label="닫기"
+                className="ml-auto flex size-9 items-center justify-center rounded-md text-sub hover:bg-surface-muted"
+              >
+                <X size={18} aria-hidden />
+              </button>
+            </div>
+
+            {/* 사진 — 한 장씩, 좌우로 넘긴다 */}
+            <div className="relative shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={slideUrls[previewIndex]}
+                alt={`슬라이드 ${previewIndex + 1}`}
+                className="aspect-square w-full object-cover"
+              />
+              {previewIndex > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPreviewIndex(previewIndex - 1)}
+                  aria-label="이전 슬라이드"
+                  className="absolute left-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-pill bg-surface/90 text-ink shadow-sm hover:bg-surface"
+                >
+                  <ChevronLeft size={18} aria-hidden />
+                </button>
+              )}
+              {previewIndex < slideUrls.length - 1 && (
+                <button
+                  type="button"
+                  onClick={() => setPreviewIndex(previewIndex + 1)}
+                  aria-label="다음 슬라이드"
+                  className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-pill bg-surface/90 text-ink shadow-sm hover:bg-surface"
+                >
+                  <ChevronRight size={18} aria-hidden />
+                </button>
+              )}
+            </div>
+
+            {/* 위치 점 — 흰 슬라이드 위에선 안 보여서 실제 피드처럼 사진 아래에 (08-31) */}
+            {slideUrls.length > 1 && (
+              <div className="flex justify-center gap-1 pt-2.5">
+                {slideUrls.map((_, i) => (
+                  <span
+                    key={i}
+                    aria-hidden
+                    className={[
+                      "size-1.5 rounded-pill",
+                      i === previewIndex ? "bg-berry" : "bg-line",
+                    ].join(" ")}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* 액션 아이콘 줄 — 구성 재현용, 동작은 없다 */}
+            <div aria-hidden className="flex items-center gap-4 px-3 pt-2 text-ink">
+              <Heart size={22} />
+              <MessageCircle size={22} />
+              <Send size={22} />
+              <Bookmark size={22} className="ml-auto" />
+            </div>
+
+            {/* 캡션 + 해시태그 */}
+            {card.caption && (
+              <div className="min-h-0 overflow-y-auto px-3 pb-4 pt-2">
+                <p className="whitespace-pre-wrap break-keep text-body leading-relaxed text-ink">
+                  <span className="font-semibold">내 계정</span> {card.caption.hook}
+                  {"\n\n"}
+                  {card.caption.body}
+                  {"\n\n"}
+                  {card.caption.cta}
+                </p>
+                {card.caption.hashtags.length > 0 && (
+                  <p className="mt-2 break-keep text-body text-berry-dark">
+                    {card.caption.hashtags.map((tag) => `#${tag}`).join(" ")}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* 버리기 확인 모달 — 되돌릴 수 없는 행동에만 (DESIGN.md §13) */}
