@@ -79,6 +79,25 @@ export type Slide = {
    * 사용자 사진이거나 사진이 없으면 null.
    */
   imageCredit?: StockCredit | null;
+  /**
+   * 슬롯별 글자 조절 (08-31 · DESIGN.md §12). 키는 슬롯 이름(`title`·`body`…).
+   *
+   * **없는 슬롯은 레이아웃·테마가 정한 그대로 그린다.** 전부 «몇 단계 중 하나»고
+   * 자유값이 아니다 — 색도 `#RRGGBB`가 아니라 역할 3종(기본·여리게·강조)이라
+   * 브랜드 색을 바꾸면 이미 만든 카드도 따라 바뀐다.
+   *
+   * 값의 뜻과 검증은 `lib/slot-style.ts`.
+   */
+  styleOverrides?: Record<string, SlotStyle>;
+};
+
+/** 슬롯 하나의 조절값. 안 고른 항목은 없다 (undefined) */
+export type SlotStyle = {
+  size?: "xs" | "s" | "m" | "l" | "xl";
+  weight?: "regular" | "bold";
+  align?: "left" | "center" | "right";
+  color?: "ink" | "sub" | "accent";
+  tracking?: "tight" | "normal" | "wide";
 };
 
 /** 스톡 사진 출처 — 사진가 이름과 사진 페이지 주소 */

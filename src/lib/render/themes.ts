@@ -33,6 +33,11 @@ export type Theme = {
     soft: string;
     /** image-full 글자 가독용 덮개 */
     scrim: string;
+    /**
+     * 강조색 (08-31). 슬롯 툴바에서 「강조」를 고른 글자에 쓴다.
+     * 「내 스타일」이 없으면 테마의 기본 강조색을 쓴다.
+     */
+    accent: string;
   };
   type: {
     /** 모든 글자 크기에 곱한다. 레이아웃 구조는 건드리지 않는다 */
@@ -62,6 +67,7 @@ export const THEMES: Record<ThemeId, Theme> = {
       sub: "#8A7F76",
       soft: "#F0E9E1",
       scrim: "rgba(58,50,44,0.42)",
+      accent: "#A8705A", // 베이지와 어울리는 흙빛
     },
     type: { scale: 0.95, tracking: 0.5, lineHeight: 1.7, pad: 112, align: "left" },
   },
@@ -75,6 +81,7 @@ export const THEMES: Record<ThemeId, Theme> = {
       sub: "#6B6360",
       soft: "#F1EFEE",
       scrim: "rgba(0,0,0,0.50)",
+      accent: "#14100F", // 흑백 대비가 이 테마의 성격이다
     },
     type: { scale: 1.1, tracking: -1, lineHeight: 1.5, pad: 88, align: "left" },
   },
@@ -88,6 +95,7 @@ export const THEMES: Record<ThemeId, Theme> = {
       sub: "#7A756E",
       soft: "#E4E1DA",
       scrim: "rgba(28,27,25,0.45)",
+      accent: "#7A756E",
     },
     type: { scale: 1.25, tracking: -0.5, lineHeight: 1.5, pad: 120, align: "center" },
   },
@@ -215,6 +223,9 @@ export function applyBrand(theme: Theme, brand?: Brand | null): Theme {
       soft: softFor(bg, ink),
       // 사진 위 덮개는 늘 어둡게 — 밝은 사진에서 흰 글자가 읽히려면 필요하다
       scrim: "rgba(0,0,0,0.45)",
+      // 강조색은 사용자가 고른 것을 그대로 쓴다. 작은 면에만 쓰이므로
+      // 배경과 붙어도 §15의 «텍스트 대비»를 크게 해치지 않는다
+      accent: isHexColor(brand.accent) ? brand.accent : theme.color.accent,
     },
   };
 }

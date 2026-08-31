@@ -1,6 +1,12 @@
 import type { LayoutId } from "../../types/card";
 import { applyBrand, resolveTheme, type Theme } from "./themes";
 import type { Brand } from "../../types/user";
+import type { SlotStyle } from "../../types/card";
+import {
+  DEFAULT_SLOT_STYLE,
+  SIZE_SCALE,
+  TRACKING_DELTA,
+} from "../slot-style";
 
 /**
  * 카드뉴스 레이아웃 6종의 satori 템플릿 골격.
@@ -23,6 +29,8 @@ export type SlideContent = {
    * 계정 톤이 테마 3종보다 우선한다 (DESIGN.md §12).
    */
   brand?: Brand | null;
+  /** 슬롯별 글자 조절 (08-31). 없는 슬롯은 레이아웃·테마 그대로 */
+  styleOverrides?: Record<string, SlotStyle>;
   /** 레이아웃별 텍스트 슬롯. @TODO: 슬롯 키는 시안 확정 시 재정의 (아래 통상값) */
   texts: Record<string, string>;
   /** @TODO: 골격 단계에서는 data URI만 지원. 원격 URL 페치는 render API에서 처리 */
@@ -72,26 +80,66 @@ function root(th: Theme, children: unknown[]): Node {
 }
 
 /**
+ * 그리기에 필요한 것 한 묶음 — 테마와 슬롯 조절값.
+ * 레이아웃 함수마다 두 개를 따로 들고 다니면 인자가 계속 늘어난다.
+ */
+type Ctx = {
+  th: Theme;
+  ov: Record<string, SlotStyle>;
+};
+
+/**
  * 글자 한 덩이. `size`는 «기준 크기»이고 테마의 `scale`이 곱해진다 —
  * 레이아웃끼리의 크기 관계(제목이 본문보다 얼마나 큰가)는 그대로 두고
  * 전체만 키우거나 줄이려는 것이다.
+ *
+ * `slot`을 받는 이유는 **사용자가 그 슬롯만 따로 조절했을 수 있어서**다 (08-31).
+ * 조절값도 곱셈·덧셈이라 레이아웃이 정한 관계를 완전히 깨뜨리지는 않는다.
  */
 function text(
-  th: Theme,
+  ctx: Ctx,
+  slot: string,
   value: string,
   size: number,
   weight: 400 | 600 | 700,
   extra: Record<string, unknown> = {},
 ): Node {
+  const { th } = ctx;
+  const o = { ...DEFAULT_SLOT_STYLE, ...(ctx.ov[slot] ?? {}) };
+  const adjusted = ctx.ov[slot] ?? {};
+
+  const color =
+    o.color === "accent"
+      ? th.color.accent
+      : o.color === "sub"
+        ? th.color.sub
+        : undefined; // 기본은 부모(root)가 정한 색을 물려받는다
+
+  /*
+    정렬은 `textAlign`이 아니라 `justifyContent`다. 이 div는 `display: flex`라
+    글자가 flex 아이템이 되고, flex 컨테이너에서는 textAlign이 아이템을 옮기지 못한다.
+    (처음에 textAlign으로 썼다가 부제가 안 움직여서 08-31에 고쳤다)
+  */
+  const JUSTIFY = { left: "flex-start", center: "center", right: "flex-end" } as const;
+
   return el(
     "div",
     {
       display: "flex",
-      fontSize: Math.round(size * th.type.scale),
-      fontWeight: weight,
-      letterSpacing: th.type.tracking,
+      fontSize: Math.round(size * th.type.scale * SIZE_SCALE[o.size]),
+      // 볼드를 고르지 않았으면 레이아웃이 정한 굵기를 그대로 쓴다
+      fontWeight: adjusted.weight ? (o.weight === "bold" ? 700 : 400) : weight,
+      letterSpacing: th.type.tracking + TRACKING_DELTA[o.tracking],
       lineHeight: 1.4,
       ...extra,
+      /*
+        조절값은 `extra`보다 **뒤에** 온다. 레이아웃이 박아둔 색
+        (예: 부제의 `color: sub`)이 사용자가 고른 강조색을 덮어쓰면 안 된다.
+      */
+      ...(color ? { color } : {}),
+      ...(adjusted.align
+        ? { justifyContent: JUSTIFY[o.align], width: "100%", textAlign: o.align }
+        : {}),
     },
     value,
   );
@@ -119,8 +167,9 @@ function alignStyle(th: Theme): Record<string, unknown> {
 /* ── 레이아웃 6종 ─────────────────────────────────────────── */
 
 /** cover — 표지. 캡션의 hook을 크게 싣는다 */
-function cover(th: Theme, t: Record<string, string>): Node {
-  return root(th, [
+function cover(ctx: Ctx, t: Record<string, string>): Node {
+  const th = ctx.th;
+  return root(ctx.th, [
     el(
       "div",
       {
@@ -129,19 +178,20 @@ function cover(th: Theme, t: Record<string, string>): Node {
         flexGrow: 1,
         justifyContent: "center",
         gap: 32,
-        ...alignStyle(th),
+        ...alignStyle(ctx.th),
       },
       [
-        text(th, t.title ?? "", 76, 700, { lineHeight: 1.3 }),
-        text(th, t.subtitle ?? "", 34, 400, { color: th.color.sub }),
+        text(ctx, "title", t.title ?? "", 76, 700, { lineHeight: 1.3 }),
+        text(ctx, "subtitle", t.subtitle ?? "", 34, 400, { color: th.color.sub }),
       ],
     ),
   ]);
 }
 
 /** text-only — 글자만. 이미지 폴백 3순위의 착지점 */
-function textOnly(th: Theme, t: Record<string, string>): Node {
-  return root(th, [
+function textOnly(ctx: Ctx, t: Record<string, string>): Node {
+  const th = ctx.th;
+  return root(ctx.th, [
     el(
       "div",
       {
@@ -150,18 +200,19 @@ function textOnly(th: Theme, t: Record<string, string>): Node {
         flexGrow: 1,
         justifyContent: "center",
         gap: 40,
-        ...alignStyle(th),
+        ...alignStyle(ctx.th),
       },
       [
-        text(th, t.title ?? "", 52, 700),
-        text(th, t.body ?? "", 36, 400, { lineHeight: th.type.lineHeight, color: th.color.ink }),
+        text(ctx, "title", t.title ?? "", 52, 700),
+        text(ctx, "body", t.body ?? "", 36, 400, { lineHeight: th.type.lineHeight, color: th.color.ink }),
       ],
     ),
   ]);
 }
 
 /** image-top — 위 이미지 + 아래 글 */
-function imageTop(th: Theme, t: Record<string, string>, imageUrl: string | null): Node {
+function imageTop(ctx: Ctx, t: Record<string, string>, imageUrl: string | null): Node {
+  const th = ctx.th;
   return el(
     "div",
     {
@@ -173,7 +224,7 @@ function imageTop(th: Theme, t: Record<string, string>, imageUrl: string | null)
       color: th.color.ink,
     },
     [
-      imageArea(th, imageUrl, { width: "100%", height: 560 }),
+      imageArea(ctx.th, imageUrl, { width: "100%", height: 560 }),
       el(
         "div",
         {
@@ -184,8 +235,8 @@ function imageTop(th: Theme, t: Record<string, string>, imageUrl: string | null)
           gap: 28,
         },
         [
-          text(th, t.title ?? "", 46, 700),
-          text(th, t.body ?? "", 32, 400, { lineHeight: th.type.lineHeight }),
+          text(ctx, "title", t.title ?? "", 46, 700),
+          text(ctx, "body", t.body ?? "", 32, 400, { lineHeight: th.type.lineHeight }),
         ],
       ),
     ],
@@ -193,9 +244,10 @@ function imageTop(th: Theme, t: Record<string, string>, imageUrl: string | null)
 }
 
 /** image-full — 전면 이미지 + 오버레이 글 */
-function imageFull(th: Theme, t: Record<string, string>, imageUrl: string | null): Node {
+function imageFull(ctx: Ctx, t: Record<string, string>, imageUrl: string | null): Node {
+  const th = ctx.th;
   return el("div", { width: "100%", height: "100%", display: "flex", position: "relative" }, [
-    imageArea(th, imageUrl, {
+    imageArea(ctx.th, imageUrl, {
       position: "absolute",
       top: 0,
       left: 0,
@@ -215,13 +267,14 @@ function imageFull(th: Theme, t: Record<string, string>, imageUrl: string | null
         backgroundColor: th.color.scrim,
       },
       // 사진 위 글자는 늘 흰색이다 — 테마 색을 쓰면 밝은 사진에서 읽히지 않는다
-      [text(th, t.title ?? "", 52, 700, { color: "#FFFFFF", lineHeight: 1.35 })],
+      [text(ctx, "title", t.title ?? "", 52, 700, { color: "#FFFFFF", lineHeight: 1.35 })],
     ),
   ]);
 }
 
 /** list — 번호 목록. «3가지 이유» 같은 구조. 슬롯 키 item1~item4 @TODO */
-function list(th: Theme, t: Record<string, string>): Node {
+function list(ctx: Ctx, t: Record<string, string>): Node {
+  const th = ctx.th;
   const items = ["item1", "item2", "item3", "item4"]
     .map((k) => t[k])
     .filter((v): v is string => Boolean(v));
@@ -229,8 +282,8 @@ function list(th: Theme, t: Record<string, string>): Node {
   // 번호 원도 글자와 같이 커져야 한다 — 원만 그대로면 큰 글자 옆에서 단추처럼 보인다
   const dot = Math.round(72 * th.type.scale);
 
-  return root(th, [
-    text(th, t.title ?? "", 48, 700, { marginBottom: 48 }),
+  return root(ctx.th, [
+    text(ctx, "title", t.title ?? "", 48, 700, { marginBottom: 48 }),
     el(
       "div",
       { display: "flex", flexDirection: "column", gap: 36 },
@@ -252,7 +305,7 @@ function list(th: Theme, t: Record<string, string>): Node {
             },
             String(i + 1),
           ),
-          text(th, item, 34, 400, { lineHeight: 1.5, flexGrow: 1 }),
+          text(ctx, `item${i + 1}`, item, 34, 400, { lineHeight: 1.5, flexGrow: 1 }),
         ]),
       ),
     ),
@@ -260,8 +313,9 @@ function list(th: Theme, t: Record<string, string>): Node {
 }
 
 /** closing — 마무리. 캡션의 cta·팔로우 유도 */
-function closing(th: Theme, t: Record<string, string>): Node {
-  return root(th, [
+function closing(ctx: Ctx, t: Record<string, string>): Node {
+  const th = ctx.th;
+  return root(ctx.th, [
     el(
       "div",
       {
@@ -273,8 +327,8 @@ function closing(th: Theme, t: Record<string, string>): Node {
         gap: 40,
       },
       [
-        text(th, t.message ?? "", 56, 700, { textAlign: "center", lineHeight: 1.4 }),
-        text(th, t.cta ?? "", 34, 600, { color: th.color.sub }),
+        text(ctx, "message", t.message ?? "", 56, 700, { textAlign: "center", lineHeight: 1.4 }),
+        text(ctx, "cta", t.cta ?? "", 34, 600, { color: th.color.sub }),
       ],
     ),
   ]);
@@ -285,21 +339,22 @@ function closing(th: Theme, t: Record<string, string>): Node {
 export function buildLayout(content: SlideContent): Node {
   const { layoutId, texts, imageUrl } = content;
   const th = applyBrand(resolveTheme(content.themeId), content.brand);
+  const ctx: Ctx = { th, ov: content.styleOverrides ?? {} };
 
   switch (layoutId) {
     case "cover":
-      return cover(th, texts);
+      return cover(ctx, texts);
     case "text-only":
-      return textOnly(th, texts);
+      return textOnly(ctx, texts);
     case "image-top":
-      return imageTop(th, texts, imageUrl);
+      return imageTop(ctx, texts, imageUrl);
     case "image-full":
-      return imageFull(th, texts, imageUrl);
+      return imageFull(ctx, texts, imageUrl);
     case "list":
-      return list(th, texts);
+      return list(ctx, texts);
     case "closing":
-      return closing(th, texts);
+      return closing(ctx, texts);
     default:
-      return textOnly(th, texts);
+      return textOnly(ctx, texts);
   }
 }

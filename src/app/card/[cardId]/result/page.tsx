@@ -12,7 +12,8 @@ import StockAttribution from "@/components/StockAttribution";
 import { THEMES, THEME_ORDER, resolveTheme } from "@/lib/render/themes";
 import { LAYOUT_LABELS, layoutOptionsFor } from "@/lib/slide-layout";
 import { CARD_TEMPLATES, TEMPLATE_ORDER, worksWithoutPhotos } from "@/lib/card-templates";
-import type { Card, Caption, LayoutId, ThemeId, TemplateId } from "@/types";
+import SlotToolbar from "@/components/SlotToolbar";
+import type { Card, Caption, LayoutId, SlotStyle, ThemeId, TemplateId } from "@/types";
 
 /**
  * 제작 결과 (F7·F8) — 슬라이드 · 캡션 · 부분 수정.
@@ -74,6 +75,8 @@ export default function CardResultPage() {
   const [hashtagInput, setHashtagInput] = useState("");
   const [selectedSlide, setSelectedSlide] = useState<number | null>(null);
   const [slideDraft, setSlideDraft] = useState<Record<string, string> | null>(null);
+  /** 슬롯별 글자 조절 초안 (08-31). 문구와 함께 저장된다 */
+  const [styleDraft, setStyleDraft] = useState<Record<string, SlotStyle>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -95,10 +98,16 @@ export default function CardResultPage() {
       ? JSON.stringify(card.caption) !== JSON.stringify(captionDraft)
       : false;
 
+  const editingSlide =
+    selectedSlide !== null && card
+      ? (card.slides.find((s) => s.order === selectedSlide) ?? null)
+      : null;
+
+  /** 문구든 조절이든 하나라도 달라지면 «저장할 게 있다» */
   const slideDirty =
-    selectedSlide !== null && slideDraft && card
-      ? JSON.stringify(card.slides.find((s) => s.order === selectedSlide)?.texts) !==
-        JSON.stringify(slideDraft)
+    editingSlide && slideDraft
+      ? JSON.stringify(editingSlide.texts) !== JSON.stringify(slideDraft) ||
+        JSON.stringify(editingSlide.styleOverrides ?? {}) !== JSON.stringify(styleDraft)
       : false;
 
   /**
@@ -326,7 +335,9 @@ export default function CardResultPage() {
 
   async function saveSlideTexts() {
     if (selectedSlide === null || !slideDraft) return;
-    const next = await saveContent({ slides: [{ order: selectedSlide, texts: slideDraft }] });
+    const next = await saveContent({
+      slides: [{ order: selectedSlide, texts: slideDraft, styleOverrides: styleDraft }],
+    });
     if (!next) return;
 
     // 문구가 바뀌었으니 그 슬라이드만 다시 렌더링해서 교체한다
@@ -438,12 +449,18 @@ export default function CardResultPage() {
     if (selectedSlide === null || !slideDraft || saving) return;
 
     const updated = await saveContent({
-      slides: [{ order: selectedSlide, texts: slideDraft, layoutId: next }],
+      slides: [
+        { order: selectedSlide, texts: slideDraft, styleOverrides: styleDraft, layoutId: next },
+      ],
     });
     if (!updated) return;
 
     const moved = updated.slides.find((s) => s.order === selectedSlide);
-    if (moved) setSlideDraft({ ...moved.texts });
+    if (moved) {
+      setSlideDraft({ ...moved.texts });
+      // 조절값도 새 슬롯 이름으로 옮겨져 돌아온다 (remapOverrides)
+      setStyleDraft({ ...(moved.styleOverrides ?? {}) });
+    }
 
     const user = userRef.current;
     if (!user) return;
@@ -466,10 +483,13 @@ export default function CardResultPage() {
     if (selectedSlide === order) {
       setSelectedSlide(null);
       setSlideDraft(null);
+      setStyleDraft({});
       return;
     }
+    const slide = card.slides.find((s) => s.order === order);
     setSelectedSlide(order);
-    setSlideDraft({ ...card.slides.find((s) => s.order === order)?.texts });
+    setSlideDraft({ ...slide?.texts });
+    setStyleDraft({ ...(slide?.styleOverrides ?? {}) });
   }
 
   function addHashtag() {
@@ -767,18 +787,35 @@ export default function CardResultPage() {
             })()}
 
             <p className="text-label font-semibold text-sub">문구</p>
+            {/*
+              슬롯마다 «문구 + 그 줄의 조절»을 붙여 둔다 (08-31).
+              캔버스에서 요소를 클릭해 잡는 대신, 이미 이름으로 나뉜 슬롯을 쓴다 —
+              무엇을 조절하는지가 분명하고 히트 테스트가 필요 없다.
+            */}
             {Object.entries(slideDraft).map(([key, value]) => (
-              <label key={key} className="flex flex-col gap-1">
-                <span className="text-label font-semibold text-sub">
-                  {SLOT_LABELS[key] ?? key}
-                </span>
-                <textarea
-                  value={value}
-                  rows={value.length > 40 ? 3 : 1}
-                  onChange={(e) => setSlideDraft({ ...slideDraft, [key]: e.target.value })}
-                  className={inputClass}
+              <div key={key} className="flex flex-col gap-1">
+                <label className="flex flex-col gap-1">
+                  <span className="text-label font-semibold text-sub">
+                    {SLOT_LABELS[key] ?? key}
+                  </span>
+                  <textarea
+                    value={value}
+                    rows={value.length > 40 ? 3 : 1}
+                    onChange={(e) => setSlideDraft({ ...slideDraft, [key]: e.target.value })}
+                    className={inputClass}
+                  />
+                </label>
+                <SlotToolbar
+                  value={styleDraft[key]}
+                  disabled={saving}
+                  onChange={(next) => {
+                    const merged = { ...styleDraft };
+                    if (next) merged[key] = next;
+                    else delete merged[key];
+                    setStyleDraft(merged);
+                  }}
                 />
-              </label>
+              </div>
             ))}
             <div className="flex items-center gap-3">
               <button
@@ -792,7 +829,10 @@ export default function CardResultPage() {
               </button>
               <button
                 type="button"
-                onClick={() => selectSlide(selectedSlide)}
+                onClick={() => {
+                  setSlideDraft({ ...editingSlide?.texts });
+                  setStyleDraft({ ...(editingSlide?.styleOverrides ?? {}) });
+                }}
                 className="text-body text-sub"
               >
                 닫기

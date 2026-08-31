@@ -4,8 +4,14 @@ import { adminDb } from "@/lib/firebase/admin";
 import { getUidFromRequest } from "@/lib/api/auth";
 import type { Card, Caption, Slide, ThemeId } from "@/types";
 import { THEMES } from "@/lib/render/themes";
-import { IMAGE_LAYOUTS, LAYOUT_SLOTS, remapTexts } from "@/lib/slide-layout";
-import type { LayoutId } from "@/types";
+import {
+  IMAGE_LAYOUTS,
+  LAYOUT_SLOTS,
+  remapOverrides,
+  remapTexts,
+} from "@/lib/slide-layout";
+import { parseSlotStyle } from "@/lib/slot-style";
+import type { LayoutId, SlotStyle } from "@/types";
 
 /**
  * PATCH /api/cards/[cardId]/content — 제작 결과 수정 (캡션 · 슬라이드 문구).
@@ -16,6 +22,9 @@ import type { LayoutId } from "@/types";
  * 편집 범위(DESIGN.md §12)를 서버에서 강제한다 —
  * 슬라이드는 **texts(글자 내용)와 layoutId**만 바꿀 수 있고,
  * imageUrl·order는 요청에 무엇이 오든 기존 값을 유지한다.
+ *
+ * 슬롯 조절(`styleOverrides`)도 마찬가지다 — **정해진 단계 값만** 받는다.
+ * 자유값(픽셀·색상 코드)을 실어 보내는 요청은 형식 자체가 없다 (DESIGN.md §0).
  *
  * layoutId는 «6종 중 선택»이라 **화면과 같은 규칙으로 여기서 다시 판정한다**
  * (`lib/slide-layout.ts`). 화면이 막아둔 것을 믿지 않는다 —
@@ -116,7 +125,16 @@ function parseCaption(raw: unknown): Caption | null {
   return { hook: c.hook, body: c.body, cta: c.cta, hashtags: c.hashtags };
 }
 
-type SlideEdit = { texts?: Record<string, string>; layoutId?: LayoutId };
+type SlideEdit = {
+  texts?: Record<string, string>;
+  layoutId?: LayoutId;
+  styleOverrides?: Record<string, SlotStyle>;
+};
+
+/** 빈 객체는 저장하지 않는다 — Firestore에 «조절 없음»을 굳이 적을 이유가 없다 */
+function withOverrides(ov: Record<string, SlotStyle> | undefined) {
+  return ov && Object.keys(ov).length > 0 ? { styleOverrides: ov } : {};
+}
 
 /**
  * 요청의 {order, texts?, layoutId?}를 기존 슬라이드에 합친다.
@@ -132,7 +150,7 @@ function mergeSlideTexts(current: Slide[], raw: unknown): Slide[] | null {
   const edits = new Map<number, SlideEdit>();
   for (const item of raw) {
     if (typeof item !== "object" || item === null) return null;
-    const { order, texts, layoutId } = item as Record<string, unknown>;
+    const { order, texts, layoutId, styleOverrides } = item as Record<string, unknown>;
     if (typeof order !== "number" || !current.some((s) => s.order === order)) return null;
 
     const edit: SlideEdit = {};
@@ -149,7 +167,25 @@ function mergeSlideTexts(current: Slide[], raw: unknown): Slide[] | null {
       edit.layoutId = layoutId as LayoutId;
     }
 
-    if (edit.texts === undefined && edit.layoutId === undefined) return null;
+    if (styleOverrides !== undefined) {
+      if (typeof styleOverrides !== "object" || styleOverrides === null) return null;
+      const parsed: Record<string, SlotStyle> = {};
+      for (const [slot, v] of Object.entries(styleOverrides as Record<string, unknown>)) {
+        if (slot.length > 20) return null;
+        const st = parseSlotStyle(v);
+        // 값을 하나도 못 건진 슬롯은 «조절 해제»라 그냥 빠진다
+        if (st) parsed[slot] = st;
+      }
+      edit.styleOverrides = parsed;
+    }
+
+    if (
+      edit.texts === undefined &&
+      edit.layoutId === undefined &&
+      edit.styleOverrides === undefined
+    ) {
+      return null;
+    }
     edits.set(order, edit);
   }
 
@@ -163,9 +199,13 @@ function mergeSlideTexts(current: Slide[], raw: unknown): Slide[] | null {
 
     // imageUrl·order는 건드리지 않는다 (DESIGN.md §12)
     const texts = edit.texts ?? slide.texts;
+    const overrides = edit.styleOverrides ?? slide.styleOverrides;
 
     if (edit.layoutId === undefined || edit.layoutId === slide.layoutId) {
-      merged.push({ ...slide, texts });
+      // 옛 조절값을 떨어내고 새 것만 붙인다 — 안 그러면 지운 슬롯이 남는다
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { styleOverrides: _drop, ...rest } = slide;
+      merged.push({ ...rest, texts, ...withOverrides(overrides) });
       continue;
     }
 
@@ -176,7 +216,16 @@ function mergeSlideTexts(current: Slide[], raw: unknown): Slide[] | null {
     const moved = remapTexts(slide.layoutId, edit.layoutId, texts);
     if (!moved) return null;
 
-    merged.push({ ...slide, layoutId: edit.layoutId, texts: moved });
+    // 레이아웃이 바뀌면 조절값도 새 슬롯으로 따라간다 — 안 그러면 조절이 사라진다
+    const movedOv = remapOverrides(slide.layoutId, edit.layoutId, texts, overrides);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { styleOverrides: _drop, ...rest } = slide;
+    merged.push({
+      ...rest,
+      layoutId: edit.layoutId,
+      texts: moved,
+      ...withOverrides(movedOv),
+    });
   }
 
   return merged;

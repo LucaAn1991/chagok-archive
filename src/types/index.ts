@@ -13,6 +13,7 @@ export type {
   VisualType,
   Caption,
   Slide,
+  SlotStyle,
   LayoutId,
   ThemeId,
   TemplateId,

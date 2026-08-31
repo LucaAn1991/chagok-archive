@@ -1,4 +1,4 @@
-import type { LayoutId, Slide } from "../types/card";
+import type { LayoutId, Slide, SlotStyle } from "../types/card";
 
 /**
  * 레이아웃 6종의 «슬롯 규칙» — 서버와 화면이 **같은 정의를 본다**.
@@ -105,6 +105,33 @@ export function remapTexts(
   }
 
   return next;
+}
+
+/**
+ * 문구를 옮길 때 **슬롯 조절값도 같이 옮긴다** (08-31).
+ *
+ * 안 그러면 「제목을 크게」 해둔 게 레이아웃을 바꾸는 순간 사라진다.
+ * `remapTexts`와 같은 역할 짝짓기를 쓰므로 결과가 어긋나지 않는다.
+ */
+export function remapOverrides(
+  from: LayoutId,
+  to: LayoutId,
+  texts: Record<string, string>,
+  overrides: Record<string, SlotStyle> | undefined,
+): Record<string, SlotStyle> | undefined {
+  if (!overrides || Object.keys(overrides).length === 0) return undefined;
+  if (from === to) return overrides;
+
+  const next: Record<string, SlotStyle> = {};
+  for (const role of ["primary", "secondary", "item"] as SlotRole[]) {
+    const fromSlots = slotsOfRole(from, role).filter((k) => texts[k]?.trim());
+    const toSlots = slotsOfRole(to, role);
+    fromSlots.forEach((k, i) => {
+      const target = toSlots[i];
+      if (target && overrides[k]) next[target] = overrides[k];
+    });
+  }
+  return Object.keys(next).length > 0 ? next : undefined;
 }
 
 /** 왜 못 고르는지 — 화면에 그대로 보여준다 */
