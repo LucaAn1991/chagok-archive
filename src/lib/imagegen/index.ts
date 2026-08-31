@@ -75,7 +75,16 @@ export async function generateImage(prompt: string): Promise<Buffer | null> {
       }),
     });
     if (!submit.ok) {
-      console.error(`[imagegen] submit ${submit.status}`);
+      /*
+        실패 사유를 반드시 남긴다. 이 단계가 실패하면 카드는 조용히 ④ text-only로
+        내려앉아 화면상 아무 문제가 없어 보인다 — 로그에 상태 코드만 있으면
+        «왜 이미지가 안 나오지»의 답을 찾을 수가 없다.
+
+        문서상 403은 «크레딧 부족», 401은 «키 문제», 429는 «호출 제한»이다.
+        오류 응답은 성공과 봉투 모양이 달라서(`{error:{message}}`) 따로 읽는다.
+      */
+      const detail = await submit.text().catch(() => "");
+      console.error(`[imagegen] submit ${submit.status} ${detail.slice(0, 300)}`);
       return null;
     }
 
