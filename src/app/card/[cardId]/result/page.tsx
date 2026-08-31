@@ -186,12 +186,22 @@ export default function CardResultPage() {
     [cardId],
   );
 
-  /** 전체 슬라이드를 순서대로 받아 하나씩 공개 */
+  /**
+   * 전체 슬라이드를 순서대로 받아 하나씩 공개.
+   *
+   * **다시 만든 뒤에는 반드시 `fresh`를 켠다.** 슬라이드 주소는 그대로인데
+   * 이미지 라우트가 5분짜리 캐시(`private, max-age=300`)를 주기 때문에,
+   * 그냥 부르면 브라우저가 방금 새로 만든 게 아니라 옛 PNG를 돌려준다 (08-31).
+   */
   const fetchAllSlideImages = useCallback(
-    async (slideCount: number, token: string) => {
+    async (slideCount: number, token: string, fresh = false) => {
+      // 갈아끼우기 전에 지금 것을 해제한다 — 안 하면 다시 만들 때마다 blob이 쌓인다
+      const stale = urlsRef.current;
       setSlideUrls([]);
+      stale.forEach((u) => URL.revokeObjectURL(u));
+
       for (let order = 0; order < slideCount; order++) {
-        const url = await fetchSlideImage(order, token);
+        const url = await fetchSlideImage(order, token, fresh);
         setSlideUrls((prev) => [...prev, url]);
       }
     },
@@ -232,7 +242,8 @@ export default function CardResultPage() {
       setCaptionDraft(fresh.caption);
 
       setPhase("ready");
-      await fetchAllSlideImages(renderData.slides.length, token);
+      // 「다시 만들기」로 재진입할 수 있다 — 이때도 옛 PNG가 나오면 안 된다
+      await fetchAllSlideImages(renderData.slides.length, token, true);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "생성에 실패했어요.");
       setPhase("error");
@@ -323,7 +334,13 @@ export default function CardResultPage() {
     if (!user) return;
     try {
       const url = await fetchSlideImage(selectedSlide, await user.getIdToken(), true);
-      setSlideUrls((prev) => prev.map((u, i) => (i === selectedSlide ? url : u)));
+      setSlideUrls((prev) =>
+        prev.map((u, i) => {
+          if (i !== selectedSlide) return u;
+          URL.revokeObjectURL(u); // 화면에서 내려가는 것만 해제한다
+          return url;
+        }),
+      );
     } catch {
       /* 이미지 갱신 실패는 다음 진입 때 다시 그려진다 — 저장 자체는 성공 */
     }
@@ -368,7 +385,8 @@ export default function CardResultPage() {
       const fresh = snap.data() as Card | undefined;
       if (fresh) setCard(fresh);
 
-      await fetchAllSlideImages(data.slides.length, token);
+      // 방금 서버에서 새로 만들었다 — 캐시를 반드시 지나쳐야 한다
+      await fetchAllSlideImages(data.slides.length, token, true);
       showToast(`「${t.label}」 구성으로 다시 만들었어요.`);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "다시 만들지 못했어요.");
@@ -397,7 +415,9 @@ export default function CardResultPage() {
       const urls = await Promise.all(
         updated.slides.map((s) => fetchSlideImage(s.order, token, true)),
       );
+      const stale = urlsRef.current;
       setSlideUrls(urls);
+      stale.forEach((u) => URL.revokeObjectURL(u));
     } catch {
       /* 저장은 됐다 — 다음 진입 때 새 테마로 그려진다 */
       showToast("테마는 바뀌었어요. 미리보기는 잠시 후 반영돼요.");
@@ -429,7 +449,13 @@ export default function CardResultPage() {
     if (!user) return;
     try {
       const url = await fetchSlideImage(selectedSlide, await user.getIdToken(), true);
-      setSlideUrls((prev) => prev.map((u, i) => (i === selectedSlide ? url : u)));
+      setSlideUrls((prev) =>
+        prev.map((u, i) => {
+          if (i !== selectedSlide) return u;
+          URL.revokeObjectURL(u); // 화면에서 내려가는 것만 해제한다
+          return url;
+        }),
+      );
     } catch {
       /* 저장은 됐다 — 다음 진입 때 새 레이아웃으로 그려진다 */
     }
