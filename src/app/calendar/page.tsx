@@ -15,7 +15,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
 import CardTile from "@/components/CardTile";
@@ -284,12 +284,11 @@ function CalendarView({ uid }: { uid: string }) {
     setState({ phase: "loading" });
   }
 
-  /** 날짜 선택 — 패널만 갱신. 펼쳐진 주 밖을 고르면 접는다 (08-31 아코디언 v2) */
+  /** 날짜 선택 — 패널 갱신 + 그 주를 바로 펼친다 (v3: 펼치기 버튼은 불편해서 제거).
+      초기 진입·월 이동 때는 순수 월간 — 클릭해야만 펼쳐진다 */
   function selectDate(dateKey: string) {
     setSelectedDate(dateKey);
-    if (expandedWeekKey && weekDates(dateKey)[0] !== expandedWeekKey) {
-      setExpandedWeekKey(null);
-    }
+    setExpandedWeekKey(weekDates(dateKey)[0]);
   }
 
   /** 드래그로 예정일 변경 — 실패 시 원위치 + 안내 (PLAN §3-1) */
@@ -542,7 +541,6 @@ function CalendarView({ uid }: { uid: string }) {
                       ).map((week, wi) => {
                         const days = week.filter((d): d is string => d !== null);
                         const weekStart = days.length > 0 ? weekDates(days[0])[0] : null;
-                        const hasSelected = days.includes(selectedDate);
                         const expanded = weekStart !== null && weekStart === expandedWeekKey;
 
                         if (!expanded) {
@@ -572,17 +570,6 @@ function CalendarView({ uid }: { uid: string }) {
                                   ),
                                 )}
                               </div>
-                              {/* 선택한 주에만 펼치기 초대장이 붙는다 */}
-                              {hasSelected && weekStart && (
-                                <button
-                                  type="button"
-                                  onClick={() => setExpandedWeekKey(weekStart)}
-                                  className="mt-0.5 flex h-6 w-full items-center justify-center gap-1 rounded-md text-caption text-sub hover:bg-surface-muted hover:text-berry-dark"
-                                >
-                                  <ChevronDown size={14} aria-hidden />
-                                  주 펼치기
-                                </button>
-                              )}
                             </div>
                           );
                         }
@@ -617,14 +604,6 @@ function CalendarView({ uid }: { uid: string }) {
                                 ),
                               )}
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => setExpandedWeekKey(null)}
-                              className="mt-0.5 flex h-6 w-full items-center justify-center gap-1 rounded-md text-caption text-sub hover:bg-surface-muted hover:text-berry-dark"
-                            >
-                              <ChevronUp size={14} aria-hidden />
-                              주 접기
-                            </button>
                           </div>
                         );
                       })}
