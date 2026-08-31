@@ -6,7 +6,7 @@ import type { CardStatus } from "@/types";
  * 글자는 --sub로 쓴다. 색만으로 상태를 구분하지 않는다는 규칙(§15)도 라벨 병행으로 지킨다.
  */
 const STATUS_LABEL: Record<CardStatus, string> = {
-  planned: "기획 완료",
+  planned: "제작 대기",
   crafted: "제작 완료",
   pending: "업로드 대기",
   published: "발행 완료",

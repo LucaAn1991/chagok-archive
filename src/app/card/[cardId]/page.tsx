@@ -24,7 +24,7 @@ import type { Card, CardStatus } from "@/types";
 type Phase = "loading" | "ready" | "not-found" | "error";
 
 const STATUS_LABELS: Record<CardStatus, string> = {
-  planned: "기획 완료",
+  planned: "제작 대기",
   crafted: "제작 완료",
   pending: "업로드 대기",
   published: "발행 완료",
