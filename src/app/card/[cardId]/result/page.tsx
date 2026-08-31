@@ -10,6 +10,8 @@ import AppShell from "@/components/AppShell";
 import BackLink from "@/components/BackLink";
 import StockAttribution from "@/components/StockAttribution";
 import { THEMES, THEME_ORDER, resolveTheme } from "@/lib/render/themes";
+import { LAYOUT_LABELS, layoutOptionsFor } from "@/lib/slide-layout";
+import type { LayoutId } from "@/types";
 import type { Card, Caption, ThemeId } from "@/types";
 
 /**
@@ -20,7 +22,8 @@ import type { Card, Caption, ThemeId } from "@/types";
  * - 수정은 «부분 수정이 기본»(PRD §5-7) — 캡션·슬라이드 문구를 인라인으로 고쳐
  *   PATCH .../content 로 저장한다. 글자 «내용»만 수정 가능 (DESIGN.md §12)
  *
- * @TODO: 슬라이드 순서·개수 변경, 레이아웃 선택, 사진 교체 — 다음 단계
+ * @TODO: 슬라이드 순서·개수 변경, 사진 교체 — 다음 단계
+ *   (레이아웃 선택·테마 선택은 08-31 구현)
  * @TODO: 발행 의향 팝업(F9) 연결 — 발행 상태 관리 구현 시
  */
 
@@ -352,6 +355,37 @@ export default function CardResultPage() {
     }
   }
 
+  /**
+   * 레이아웃 바꾸기 (08-31).
+   *
+   * 테마와 달리 **이 한 장에만** 걸리므로 그 장만 다시 그린다.
+   * 고치던 문구(`slideDraft`)를 함께 보내는 게 중요하다 — 안 보내면
+   * 저장돼 있던 옛 문구가 새 레이아웃으로 옮겨져 편집 중이던 내용이 사라진다.
+   *
+   * 문구가 새 슬롯으로 옮겨지므로(`remapTexts`) 응답으로 온 값을
+   * 편집칸에 다시 채운다. 안 그러면 없어진 슬롯이 화면에 남는다.
+   */
+  async function selectLayout(next: LayoutId) {
+    if (selectedSlide === null || !slideDraft || saving) return;
+
+    const updated = await saveContent({
+      slides: [{ order: selectedSlide, texts: slideDraft, layoutId: next }],
+    });
+    if (!updated) return;
+
+    const moved = updated.slides.find((s) => s.order === selectedSlide);
+    if (moved) setSlideDraft({ ...moved.texts });
+
+    const user = userRef.current;
+    if (!user) return;
+    try {
+      const url = await fetchSlideImage(selectedSlide, await user.getIdToken(), true);
+      setSlideUrls((prev) => prev.map((u, i) => (i === selectedSlide ? url : u)));
+    } catch {
+      /* 저장은 됐다 — 다음 진입 때 새 레이아웃으로 그려진다 */
+    }
+  }
+
   function selectSlide(order: number) {
     if (!card) return;
     if (selectedSlide === order) {
@@ -543,8 +577,63 @@ export default function CardResultPage() {
         {selectedSlide !== null && slideDraft && (
           <div className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-5">
             <h2 className="text-body font-semibold text-ink">
-              슬라이드 {selectedSlide + 1} 문구 수정
+              슬라이드 {selectedSlide + 1} 수정
             </h2>
+
+            {/*
+              레이아웃 고르기 (08-31) — 이 «한 장»에만 걸린다. 그래서 카드 전체에
+              걸리는 테마와 달리 여기 편집 패널 안에 둔다.
+
+              못 고르는 것을 숨기지 않고 이유와 함께 보여준다 —
+              «사진이 없어요»는 사진을 넣으면 풀린다는 뜻이라 숨기면 알 길이 없다.
+            */}
+            {(() => {
+              const currentSlide = card?.slides.find((s) => s.order === selectedSlide);
+              if (!currentSlide) return null;
+              // 판정 기준은 «지금 편집칸에 있는 문구»다 — 저장 전 내용까지 반영한다
+              const options = layoutOptionsFor({ ...currentSlide, texts: slideDraft });
+
+              return (
+                <div className="flex flex-col gap-2">
+                  <span className="text-label font-semibold text-sub">레이아웃</span>
+                  <div role="radiogroup" aria-label="레이아웃" className="flex flex-wrap gap-2">
+                    {options.map((o) => {
+                      const active = o.id === currentSlide.layoutId;
+                      const blocked = o.disabledReason !== null;
+                      return (
+                        <button
+                          key={o.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          disabled={blocked || saving}
+                          title={o.disabledReason ?? undefined}
+                          onClick={() => selectLayout(o.id)}
+                          className={`rounded-pill border px-3 py-2 text-caption font-semibold ${
+                            active
+                              ? "border-berry bg-berry-light text-berry-dark"
+                              : blocked
+                                ? "cursor-not-allowed border-line bg-surface-muted text-sub opacity-60"
+                                : "border-line bg-surface text-sub hover:text-ink"
+                          }`}
+                        >
+                          {o.label}
+                          {blocked && (
+                            <span className="ml-1 font-normal">· {o.disabledReason}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-caption text-sub">
+                    지금은 「{LAYOUT_LABELS[currentSlide.layoutId]}」예요. 바꾸면 문구가 새 자리로
+                    옮겨져요.
+                  </p>
+                </div>
+              );
+            })()}
+
+            <p className="text-label font-semibold text-sub">문구</p>
             {Object.entries(slideDraft).map(([key, value]) => (
               <label key={key} className="flex flex-col gap-1">
                 <span className="text-label font-semibold text-sub">

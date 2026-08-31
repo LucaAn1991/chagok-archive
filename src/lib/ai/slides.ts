@@ -5,6 +5,13 @@ import { toneDirective } from "../tone";
 import { isStockConfigured, pickStockPhotos } from "../stock";
 import { BASE_SYSTEM, STR, callJson, isClaudeConfigured, obj } from "./client";
 import { buildPreferenceDirective } from "./preferences";
+import {
+  ALL_LAYOUTS,
+  DOWNGRADE,
+  IMAGE_LAYOUTS,
+  LAYOUT_SLOTS,
+  TEXT_ONLY_LAYOUTS,
+} from "../slide-layout";
 import type { LayoutId, Slide, StockCredit, VisualType } from "../../types/card";
 import type { ToneKey, User } from "../../types/user";
 
@@ -36,36 +43,22 @@ export type SlidesInput = {
   photoUrls: string[];
 };
 
-/** 사진을 넣는 레이아웃 — 나머지는 사진이 있어도 자리가 없다 */
-const IMAGE_LAYOUTS: LayoutId[] = ["image-top", "image-full"];
-
 /**
- * 사진이 없는 이미지 레이아웃은 회색 빈 면이 된다 (`lib/render/layouts.ts`의 `imageArea`).
- * 그래서 글자만 있는 레이아웃으로 내려앉힌다 — 빈 면보다 낫다 (DESIGN §12 폴백 사슬).
+ * 프롬프트에 넣을 슬롯 안내 — 정의 자체는 `lib/slide-layout.ts`가 든다.
+ * 여기서 다시 적으면 화면·서버와 어긋난다.
  */
-const DOWNGRADE: Record<string, LayoutId> = {
-  "image-top": "text-only",
-  "image-full": "text-only",
+const SLOT_HINT: Record<LayoutId, string> = {
+  cover: "",
+  "text-only": "",
+  "image-top": "",
+  "image-full": "",
+  list: " (item은 3~4개)",
+  closing: "",
 };
 
-/**
- * 레이아웃별로 렌더러가 **실제로 읽는** 텍스트 슬롯 (`lib/render/layouts.ts`).
- *
- * 여기 없는 키를 넣으면 조용히 사라지고, 빠뜨리면 그 자리가 빈다.
- * 그래서 프롬프트에 그대로 넣어 모델이 지어내지 못하게 한다.
- */
-const LAYOUT_SLOTS: Record<LayoutId, string> = {
-  cover: "title, subtitle",
-  "text-only": "title, body",
-  "image-top": "title, body",
-  "image-full": "title",
-  list: "title, item1, item2, item3, item4 (item은 3~4개)",
-  closing: "message, cta",
-};
-
-/** 이미지가 없으면 이미지 레이아웃은 빈 면이 된다 — 아예 후보에서 뺀다 */
-const TEXT_ONLY_LAYOUTS: LayoutId[] = ["cover", "text-only", "list", "closing"];
-const ALL_LAYOUTS = Object.keys(LAYOUT_SLOTS) as LayoutId[];
+function slotLine(id: LayoutId): string {
+  return `${LAYOUT_SLOTS[id].join(", ")}${SLOT_HINT[id]}`;
+}
 
 const MIN_SLIDES = 5;
 const MAX_SLIDES = 8;
@@ -100,16 +93,6 @@ const SLIDES_SCHEMA = obj(
   },
   ["slides"],
 );
-
-/** 레이아웃별로 렌더러가 받아들이는 슬롯 이름 — 모르는 키는 버린다 */
-const ALLOWED_KEYS: Record<LayoutId, string[]> = {
-  cover: ["title", "subtitle"],
-  "text-only": ["title", "body"],
-  "image-top": ["title", "body"],
-  "image-full": ["title"],
-  list: ["title", "item1", "item2", "item3", "item4"],
-  closing: ["message", "cta"],
-};
 
 export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
   if (!isClaudeConfigured()) {
@@ -151,7 +134,7 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
       `이 게시물의 카드뉴스를 ${MIN_SLIDES}~${MAX_SLIDES}장으로 구성해라. 넘겨보는 순서가 곧 이야기 흐름이다.`,
       "",
       "쓸 수 있는 레이아웃과 **정해진 텍스트 슬롯** (다른 키를 만들면 화면에서 사라진다):",
-      ...usable.map((id) => `- ${id}: ${LAYOUT_SLOTS[id]}`),
+      ...usable.map((id) => `- ${id}: ${slotLine(id)}`),
       "",
       "규칙:",
       "- 첫 장은 반드시 `cover`, 마지막 장은 반드시 `closing`.",
@@ -222,7 +205,7 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
     }
 
     // 그 레이아웃이 읽지 않는 키는 버린다 — 남겨둬도 화면에 안 나오고 문서만 커진다
-    const allowed = ALLOWED_KEYS[layoutId];
+    const allowed = LAYOUT_SLOTS[layoutId];
     const texts: Record<string, string> = {};
     for (const { key, value } of s.texts ?? []) {
       if (allowed.includes(key) && typeof value === "string") texts[key] = value;
