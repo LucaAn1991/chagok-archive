@@ -395,7 +395,8 @@ function NewPlanScreen() {
       <AppSidebar />
 
       <div className="flex min-w-0 flex-1 flex-col lg:h-dvh lg:overflow-hidden">
-        <main className="mx-auto flex w-full max-w-[560px] flex-1 flex-col px-4 pb-36 pt-3 md:px-6 lg:max-w-[1080px] lg:min-h-0 lg:pb-6 lg:pt-4">
+        {/* 간격은 --plan-gap 하나로 관리 (08-31) — 바깥 좌우 여백 = 열 사이 간격 */}
+        <main className="mx-auto flex w-full max-w-[560px] flex-1 flex-col px-[var(--plan-gap)] pb-36 pt-3 [--plan-gap:1rem] md:[--plan-gap:1.5rem] lg:max-w-[1080px] lg:min-h-0 lg:pb-[var(--plan-gap)] lg:pt-4">
           {/* 헤더·탭 — 그대로 (지시 §0) */}
           <header>
             <PageHeader
@@ -428,10 +429,10 @@ function NewPlanScreen() {
 
           {/* 2열 (08-31 최종) — 좌 대화 5 : 우 기획안 박스 7, 간격 24px.
               1024px 미만은 1열 세로 누적(대화 → 기획안 박스) */}
-          <div className="mt-3 flex flex-1 flex-col gap-6 lg:grid lg:min-h-0 lg:grid-cols-12">
+          <div className="mt-3 flex flex-1 flex-col gap-[var(--plan-gap)] lg:grid lg:min-h-0 lg:grid-cols-12">
             {/* 좌 — 대화만 (말풍선 + 추천 칩). 사진·버튼은 오른쪽 박스로 옮겼다 (§3) */}
             <section className="flex min-w-0 flex-col lg:col-span-5 lg:min-h-0">
-              <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+              <div className="flex flex-col gap-4 [scrollbar-gutter:stable] lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
                 {restored && <RestoreBanner />}
 
                 {messages.map((m, i) => (
@@ -612,7 +613,7 @@ function PlanBox({
   }
 
   return (
-    <div className="flex max-h-full flex-col overflow-y-auto rounded-lg border border-line bg-surface p-5">
+    <div className="flex max-h-full flex-col overflow-y-auto rounded-lg border border-line bg-surface p-5 lg:h-full">
       <div className="flex items-start justify-between gap-2">
         {editing ? (
           <div className="flex min-w-0 flex-1 flex-col gap-2">
