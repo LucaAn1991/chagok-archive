@@ -103,7 +103,7 @@ export default function PlanPhotoPicker({
       <div
         className={
           wrap
-            ? "mt-2 grid grid-cols-2 gap-2"
+            ? "mt-2 grid grid-cols-3 gap-2"
             : "mt-2 flex gap-2 overflow-x-auto pb-1 lg:grid lg:grid-cols-2 lg:overflow-visible lg:pb-0"
         }
       >

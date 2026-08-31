@@ -406,11 +406,10 @@ function NewPlanScreen() {
     <div className="flex flex-1">
       <AppSidebar />
 
-      <div className="flex h-dvh min-w-0 flex-1 flex-col overflow-hidden">
-        <main className="mx-auto flex w-full max-w-[560px] min-h-0 flex-1 flex-col px-4 pt-3 md:px-6 md:pt-4">
-          {/* 헤더·탭 — 그대로. 2열보다 위에 두어 오른쪽 박스가 «탭 아래부터» 시작하게 한다 */}
+      <div className="flex min-w-0 flex-1 flex-col lg:h-dvh lg:overflow-hidden">
+        <main className="mx-auto flex w-full max-w-[560px] flex-1 flex-col px-4 pb-36 pt-3 md:px-6 lg:max-w-[1080px] lg:min-h-0 lg:pb-6 lg:pt-4">
+          {/* 헤더·탭 — 그대로 (지시 §0) */}
           <header>
-            {/* 탭 [새 기획]/[지난 기획] · 기본값 새 기획 (IA 2) */}
             <PageHeader
               title="AI 기획"
               action={
@@ -422,10 +421,9 @@ function NewPlanScreen() {
                     sending ||
                     confirming
                   }
-                  /* 중성 회색 알약 칩 (08-31 확정 지시 — 말풍선과 색·형태 모두 구분).
-                     값은 지시서의 고정 색(#EDEDED/#DCDCDC/#444444, hover #E4E4E4) —
-                     DESIGN §2 팔레트 밖이라 토큰 승격은 DESIGN 반영과 함께 필요 (보고됨).
-                     대비 #444 on #EDEDED ≈ 8.2:1 (AA 통과). 주 버튼과 무관한 독립 스타일 */
+                  /* 중성 회색 알약 칩 (08-31 확정 지시). 값은 지시서 고정 색 —
+                     DESIGN §2 팔레트 밖(토큰 승격은 DESIGN 반영과 함께, 보고됨).
+                     대비 #444 on #EDEDED ≈ 8.2:1 (AA 통과) */
                   className="flex h-[30px] items-center rounded-pill border border-[#DCDCDC] bg-[#EDEDED] px-3 text-[13px] font-medium text-[#444444] transition-colors duration-200 hover:bg-[#E4E4E4] active:bg-[#E4E4E4] disabled:opacity-50"
                 >
                   다시 시작
@@ -440,11 +438,13 @@ function NewPlanScreen() {
             )}
           </header>
 
-          {/* 1열 (08-31 최종) — 대화(스크롤) → 기획안 카드 → 버튼. 반응형 열 분기 없음 */}
-          <div className="mt-3 flex min-h-0 flex-1 flex-col">
-            <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-              <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
-              {restored && <RestoreBanner />}
+          {/* 2열 (08-31 최종) — 좌 대화 5 : 우 기획안 박스 7, 간격 24px.
+              1024px 미만은 1열 세로 누적(대화 → 기획안 박스) */}
+          <div className="mt-3 flex flex-1 flex-col gap-6 lg:grid lg:min-h-0 lg:grid-cols-12">
+            {/* 좌 — 대화만 (말풍선 + 추천 칩). 사진·버튼은 오른쪽 박스로 옮겼다 (§3) */}
+            <section className="flex min-w-0 flex-col lg:col-span-5 lg:min-h-0">
+              <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+                {restored && <RestoreBanner />}
 
                 {messages.map((m, i) => (
                   <div key={i} className="flex flex-col gap-4">
@@ -459,8 +459,7 @@ function NewPlanScreen() {
                         }
                       />
                     )}
-                    {/* ① 주제 후보 — 첫 안내 말풍선 아래 고정 (08-31).
-                        골라도 목록을 지우지 않고 선택 상태로 남는다. 다음 말풍선은 아래로 */}
+                    {/* ① 주제 후보 — 첫 안내 말풍선 아래 고정, 선택 상태 유지 (08-31) */}
                     {i === 0 && topicSuggestions && !failed && (
                       <TopicSuggestionPicker
                         suggestions={topicSuggestions}
@@ -468,7 +467,7 @@ function NewPlanScreen() {
                         onToggle={(t) => {
                           dismissBanner();
                           if (topicPick === t) {
-                            setTopicPick(null); // 다시 누르면 해제
+                            setTopicPick(null);
                             if (chatText === t) setChatText("");
                           } else {
                             setTopicPick(t);
@@ -481,7 +480,7 @@ function NewPlanScreen() {
                   </div>
                 ))}
 
-                {/* ② 대상 후보 — sending 중에도 유지: 주제 저장 중 선택이 사라지면 안 된다 */}
+                {/* ② 대상 후보 — sending 중에도 유지 (선택이 사라지면 안 된다) */}
                 {proposal && !failed && (
                   <ProposalPicker
                     base={proposal.audiences}
@@ -525,39 +524,41 @@ function NewPlanScreen() {
                 <div ref={bottomRef} className="scroll-mb-40 md:scroll-mb-32 lg:scroll-mb-2" />
               </div>
 
-              {/* 하단 고정 — 기획안 카드와 버튼은 대화를 스크롤해도 항상 보인다 (08-31 §1·§3) */}
-              <div className="shrink-0 pb-16 pt-2 md:pb-4">
-                {showActionBar ? (
-                  <>
-                    <PlanCard
-                      summary={summary}
-                      photos={summaryProps.photos}
-                      onSave={saveSummaryPatch}
-                    />
-                    <ReadyActionBar
-                      onConfirm={() => void confirmPlan()}
-                      confirming={confirming}
-                      error={confirmError}
-                      onEditByChat={() => {
-                        setChatMode(true);
-                        setFocusToken((k) => k + 1);
-                      }}
-                    />
-                  </>
-                ) : (
-                  <ChatInputBar
-                    disabled={sending || !planId}
-                    value={chatText}
-                    onChange={setChatText}
-                    focusToken={focusToken}
-                    placeholder={
-                      ready ? "바꾸고 싶은 부분을 알려주세요 (예: 대상을 직장인으로)" : undefined
-                    }
-                    onSend={sendText}
-                  />
-                )}
-              </div>
+              {/* 좌측 하단 — 대화 입력만. ready 상태의 버튼은 오른쪽 박스에 있다 (§2) */}
+              {(!ready || chatMode) && (
+                <ChatInputBar
+                  disabled={sending || !planId}
+                  value={chatText}
+                  onChange={setChatText}
+                  focusToken={focusToken}
+                  placeholder={
+                    ready ? "바꾸고 싶은 부분을 알려주세요 (예: 대상을 직장인으로)" : undefined
+                  }
+                  onSend={sendText}
+                />
+              )}
             </section>
+
+            {/* 우 — 기획안 박스: 주제·대상 + 사진 그리드 + 버튼 전부 (§2).
+                sticky·자체 스크롤 — 왼쪽 스크롤에 따라 움직이지 않는다 */}
+            {ready && (
+              <aside className="min-h-0 lg:col-span-7 lg:h-full">
+                <div className="lg:sticky lg:top-0 lg:h-full">
+                  <PlanBox
+                    summary={summary}
+                    photos={summaryProps.photos}
+                    onSave={saveSummaryPatch}
+                    onConfirm={() => void confirmPlan()}
+                    confirming={confirming}
+                    confirmError={confirmError}
+                    onEditByChat={() => {
+                      setChatMode(true);
+                      setFocusToken((k) => k + 1);
+                    }}
+                  />
+                </div>
+              </aside>
+            )}
           </div>
         </main>
       </div>
@@ -587,15 +588,19 @@ function NewPlanScreen() {
 }
 
 /* ============================================================
-   기획안 카드 (08-31 최종) — 사진과 내용을 한 상자에.
-   라벨 없이 값만(주제 굵게 · «{대상}에게» 회색), 기획의도는 internal — 표시하지 않는다.
-   연필은 카드 오른쪽 위 하나 — 주제·대상을 함께 편집한다.
+   기획안 박스 (08-31 최종·2열) — 주제·대상 + 사진 그리드 + 버튼을 전부 담는다.
+   라벨 없이 값만, 기획의도(intent)는 internal — 표시하지 않는다.
+   연필은 박스 오른쪽 위 하나 — 주제·대상을 함께 편집한다.
    ============================================================ */
 
-function PlanCard({
+function PlanBox({
   summary,
   photos,
   onSave,
+  onConfirm,
+  confirming,
+  confirmError,
+  onEditByChat,
 }: {
   summary: PlanSummary;
   photos: {
@@ -606,16 +611,14 @@ function PlanCard({
     onRemoveUserPhoto: (url: string) => void;
   };
   onSave: (patch: PlanSummaryPatch) => void;
+  onConfirm: () => void;
+  confirming: boolean;
+  confirmError: boolean;
+  onEditByChat: () => void;
 }) {
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [topicDraft, setTopicDraft] = useState("");
   const [audDraft, setAudDraft] = useState("");
-
-  // 폴백 사슬 순서 — 내 사진이 있으면 그것, 없으면 고른 추천 (DESIGN §12)
-  const imageSrc =
-    photos.userPhotos[0] ??
-    (STOCK_SUGGESTIONS.find((s) => s.id === photos.selectedStockId) ?? STOCK_SUGGESTIONS[0]).src;
 
   function startEdit() {
     setTopicDraft(summary.topic);
@@ -636,113 +639,90 @@ function PlanCard({
   }
 
   return (
-    <div className="relative rounded-lg border border-line bg-surface p-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-label font-semibold text-sub">기획안</h2>
+    <div className="flex max-h-full flex-col overflow-y-auto rounded-lg border border-line bg-surface p-5">
+      <div className="flex items-start justify-between gap-2">
+        {editing ? (
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <input
+              autoFocus
+              value={topicDraft}
+              onChange={(e) => setTopicDraft(e.target.value)}
+              aria-label="주제 입력"
+              className="h-10 w-full rounded-md border border-line bg-surface px-3 text-body font-semibold text-ink"
+            />
+            <input
+              value={audDraft}
+              onChange={(e) => setAudDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  saveEdit();
+                }
+                if (e.key === "Escape") setEditing(false);
+              }}
+              aria-label="대상 입력"
+              className="h-10 w-full rounded-md border border-line bg-surface px-3 text-caption text-ink"
+            />
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={saveEdit}
+                aria-label="기획안 확정"
+                className="flex h-10 w-10 items-center justify-center rounded-md bg-berry text-white"
+              >
+                <Check size={16} aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="px-1 text-body text-sub hover:text-ink"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="min-w-0 flex-1">
+            {/* 라벨 없이 값만 — 읽으면 무엇인지 안다 (08-31 §2) */}
+            <p className="truncate text-body-l font-bold text-ink">{summary.topic}</p>
+            <p className="mt-0.5 truncate text-caption text-sub">
+              {summary.audiences.join(" · ")}에게
+            </p>
+          </div>
+        )}
         {!editing && (
           <button
             type="button"
             onClick={startEdit}
             aria-label="기획안 수정"
-            className="flex h-8 w-8 items-center justify-center rounded-sm text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
           >
             <Pencil size={14} aria-hidden />
           </button>
         )}
       </div>
 
-      {/* 고른 사진 한 장 — 1:1 · 카드 안쪽 폭. 짧은 화면에서 카드가 잘리지 않게 40dvh 상한 */}
-      <div
-        className="mx-auto mt-2 aspect-square w-full overflow-hidden rounded-md"
-        style={{ maxWidth: "min(100%, 40dvh)" }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={imageSrc} alt="" className="h-full w-full object-cover" />
-      </div>
+      <div className="my-4 border-t border-line" />
 
-      {editing ? (
-        <div className="mt-3 flex flex-col gap-2">
-          <input
-            autoFocus
-            value={topicDraft}
-            onChange={(e) => setTopicDraft(e.target.value)}
-            aria-label="주제 입력"
-            className="h-10 w-full rounded-md border border-line bg-surface px-3 text-body font-semibold text-ink"
-          />
-          <input
-            value={audDraft}
-            onChange={(e) => setAudDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                saveEdit();
-              }
-              if (e.key === "Escape") setEditing(false);
-            }}
-            aria-label="대상 입력"
-            className="h-10 w-full rounded-md border border-line bg-surface px-3 text-caption text-ink"
-          />
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={saveEdit}
-              aria-label="기획안 확정"
-              className="flex h-10 w-10 items-center justify-center rounded-md bg-berry text-white"
-            >
-              <Check size={16} aria-hidden />
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditing(false)}
-              className="px-1 text-body text-sub hover:text-ink"
-            >
-              취소
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-3">
-          {/* 라벨 없이 값만 — 읽으면 무엇인지 안다 (08-31 §2) */}
-          <p className="truncate text-body-l font-bold text-ink">{summary.topic}</p>
-          <p className="mt-0.5 truncate text-caption text-sub">
-            {summary.audiences.join(" · ")}에게
-          </p>
-        </div>
-      )}
+      {/* 사진 — 내 사진 + 추천 5, 한 줄 3개 × 2줄. 가로 스크롤 없음 (§2) */}
+      <PlanPhotoPicker
+        wrap
+        selectedStockId={photos.selectedStockId}
+        userPhotos={photos.userPhotos}
+        onSelectStock={photos.onSelectStock}
+        onAddUserPhotos={photos.onAddUserPhotos}
+        onRemoveUserPhoto={photos.onRemoveUserPhoto}
+      />
 
-      {/* 다른 사진 고르기 — 접힘. 고르면 다시 접히고 맨 위 사진이 바뀐다 */}
-      <button
-        type="button"
-        onClick={() => setPickerOpen((o) => !o)}
-        aria-expanded={pickerOpen}
-        className="mt-3 flex items-center gap-1 text-body text-sub transition-colors duration-200 hover:text-ink"
-      >
-        <ChevronRight
-          size={16}
-          aria-hidden
-          className={`transition-transform duration-200 ${pickerOpen ? "rotate-90" : ""}`}
+      {/* 버튼 — 박스 맨 아래, 안쪽 폭 전체 (§2) */}
+      <div className="mt-4">
+        <ReadyActionBar
+          onConfirm={onConfirm}
+          confirming={confirming}
+          error={confirmError}
+          onEditByChat={onEditByChat}
         />
-        다른 사진 고르기
-      </button>
-      {pickerOpen && (
-        <div className="mt-2">
-          <PlanPhotoPicker
-            wrap
-            hideIntro
-            selectedStockId={photos.selectedStockId}
-            userPhotos={photos.userPhotos}
-            onSelectStock={(id) => {
-              photos.onSelectStock(id);
-              setPickerOpen(false);
-            }}
-            onAddUserPhotos={(files) => {
-              photos.onAddUserPhotos(files);
-              setPickerOpen(false);
-            }}
-            onRemoveUserPhoto={photos.onRemoveUserPhoto}
-          />
-        </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -789,7 +769,7 @@ function ReadyActionBar({
   onEditByChat: () => void;
 }) {
   return (
-    <div className="pt-3">
+    <div>
       <div className="flex w-full flex-col gap-2">
         {confirming ? (
           <div className="flex h-12 items-center justify-center">
@@ -1058,13 +1038,13 @@ function ChatInputBar({
   }
 
   return (
-    <div>
+    <div className="fixed inset-x-0 bottom-14 z-10 border-t border-line bg-bg p-3 md:bottom-0 lg:static lg:inset-auto lg:z-auto lg:border-t-0 lg:bg-transparent lg:p-0 lg:pt-3">
       <form
         onSubmit={(e) => {
           e.preventDefault();
           submit();
         }}
-        className="flex w-full items-end gap-2 rounded-lg border border-line bg-surface p-3 focus-within:border-berry"
+        className="mx-auto flex w-full max-w-[720px] items-end gap-2 rounded-lg border border-line bg-surface p-3 focus-within:border-berry lg:mx-0 lg:max-w-none"
       >
         <label htmlFor="chat-input" className="sr-only">
           메시지 입력
