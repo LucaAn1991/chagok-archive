@@ -6,6 +6,7 @@ import { generateSlides } from "@/lib/ai/slides";
 import { isClaudeConfigured } from "@/lib/ai/caption";
 import { isStockConfigured } from "@/lib/stock";
 import { isImageGenConfigured } from "@/lib/imagegen";
+import { IMAGE_LAYOUTS } from "@/lib/slide-layout";
 import { CARD_TEMPLATES } from "@/lib/card-templates";
 import type { Card, VisualType, User, TemplateId } from "@/types";
 
@@ -15,6 +16,11 @@ import type { Card, VisualType, User, TemplateId } from "@/types";
  * 이미지 폴백 사슬로 visualType을 판정하고, 슬라이드 구성(레이아웃·텍스트)을
  * 생성해 저장한 뒤 status를 '업로드 대기(pending)'로 바꾼다 (08-31: crafted 단계 제거).
  * 완성 PNG는 저장하지 않는다 — slides/[order]/image 가 요청 시 렌더링한다.
+ *
+ * **AI 이미지는 여기서 만들지 않는다** (08-31). 장당 25~40초라 기다리면
+ * 사용자가 그동안 skeleton만 본다. 글자가 든 슬라이드를 곧바로 돌려주고,
+ * 이어서 `POST .../render/images`가 사진을 채운다. 응답의 `imagesPending`이
+ * 채울 자리가 남았는지 알려준다.
  *
  * body의 `templateId`(선택)로 **구성을 지정해 다시 만들 수 있다** (08-31).
  * 결과 화면의 「다른 구성으로」가 이 경로를 쓴다. 주지 않으면 카드에 저장된
@@ -87,6 +93,7 @@ export async function POST(
       visualType,
       photoUrls: card.photoUrls ?? [], // 이미지 레이아웃에 순서대로 배정된다 (08-31)
       templateId, // 주면 장수·순서가 고정된다 (08-31)
+      deferImages: true, // AI 이미지는 2단계에서 (08-31)
     });
 
     await cardSnap.ref.update({
@@ -97,7 +104,16 @@ export async function POST(
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    return NextResponse.json({ slides, visualType, templateId, mock: !isClaudeConfigured() });
+    // 이미지 레이아웃인데 사진이 비어 있으면 2단계가 채울 자리다
+    const imagesPending = slides.some((s) => IMAGE_LAYOUTS.includes(s.layoutId) && !s.imageUrl);
+
+    return NextResponse.json({
+      slides,
+      visualType,
+      templateId,
+      imagesPending,
+      mock: !isClaudeConfigured(),
+    });
   } catch (e) {
     // 사용자에게는 사정을 감추되 서버에는 남긴다 — 삼켜버리면 원인을 못 찾는다
     console.error("[render]", e);
