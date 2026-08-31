@@ -117,31 +117,28 @@ async function callJson<T>({ system, user, schema, effort }: CallOptions): Promi
 
 /* ── 스키마 ────────────────────────────────────────────────
    additionalProperties: false + required로 모양을 못박는다.
-   느슨하게 두면 모델이 필드를 덧붙여 파싱 이후 코드가 흔들린다.        */
+   느슨하게 두면 모델이 필드를 덧붙여 파싱 이후 코드가 흔들린다.
+
+   ⚠️ **배열 개수는 스키마로 못 정한다.** 구조화 출력은 `minItems`를 0이나 1
+   외의 값으로 받지 않는다("For 'array' type, 'minItems' values other than
+   0 or 1 are not supported"). 개수는 프롬프트로 요청하고 **코드에서 맞춘다.**  */
 
 function obj(properties: Record<string, unknown>, required: string[]) {
   return { type: "object", properties, required, additionalProperties: false };
 }
 
 const STR = { type: "string" } as const;
+const STR_ARRAY = { type: "array", items: STR } as const;
 
-const GREETING_SCHEMA = obj(
-  {
-    reply: STR,
-    topicSuggestions: { type: "array", items: STR, minItems: 3, maxItems: 3 },
-  },
-  ["reply", "topicSuggestions"],
-);
+const GREETING_SCHEMA = obj({ reply: STR, topicSuggestions: STR_ARRAY }, [
+  "reply",
+  "topicSuggestions",
+]);
 
 const IDEA_SCHEMA = obj({ reply: STR, topic: STR }, ["reply", "topic"]);
 
 const SELECTION_SCHEMA = obj(
-  {
-    reply: STR,
-    purposes: { type: "array", items: STR, minItems: 1, maxItems: 3 },
-    intent: STR,
-    seriesTitle: STR,
-  },
+  { reply: STR, purposes: STR_ARRAY, intent: STR, seriesTitle: STR },
   ["reply", "purposes", "intent", "seriesTitle"],
 );
 
@@ -179,13 +176,16 @@ export const claudePlanningAI: PlanningAI = {
       effort: EFFORT_TURN,
     });
 
-    // 길이 규칙은 모델을 믿지 않고 여기서도 확인한다 — 넘치면 칩이 두 줄로 접힌다
-    const suggestions = result.topicSuggestions.filter((t) => t.length <= 16).slice(0, 3);
+    /*
+      개수·길이를 스키마로 못 박았으므로 여기서 맞춘다.
+      16자를 넘는 칩은 두 줄로 접혀 화면이 흔들린다 — 길이로 먼저 거르고,
+      3개가 안 되면 걸러낸 것이라도 채워 넣는다(빈 칩 줄이 더 나쁘다).
+    */
+    const all = result.topicSuggestions.filter((t) => typeof t === "string" && t.trim());
+    const fits = all.filter((t) => t.length <= 16);
+    const topicSuggestions = [...fits, ...all.filter((t) => !fits.includes(t))].slice(0, 3);
 
-    return {
-      reply: result.reply,
-      topicSuggestions: suggestions.length === 3 ? suggestions : result.topicSuggestions.slice(0, 3),
-    };
+    return { reply: result.reply, topicSuggestions };
   },
 
   async ideaTurn(idea, ctx): Promise<PlanTurnResult> {
@@ -244,11 +244,14 @@ export const claudePlanningAI: PlanningAI = {
       effort: EFFORT_TURN,
     });
 
+    // 목적은 1~3개. 스키마로 못 정해서 여기서 자른다 — 비면 화면에 빈 자리가 남는다
+    const purposes = result.purposes.filter((p) => typeof p === "string" && p.trim()).slice(0, 3);
+
     return {
       reply: result.reply,
       topic,
       audiences,
-      purposes: result.purposes,
+      purposes: purposes.length > 0 ? purposes : ["공감 얻기"],
       intent: result.intent,
       seriesTitle: result.seriesTitle,
       readyToConfirm: true,
@@ -268,7 +271,9 @@ export const claudePlanningAI: PlanningAI = {
         "이 대상 한 명을 위한 게시물 카드 하나를 만들어라.",
         "",
         "- title — 게시물 제목. 대상별 지시를 반영해 이 사람에게 말 거는 제목으로.",
-        "- shortTitle — **12자 이내.** 캘린더 칸이 좁아 길면 잘린다. 주제를 알아볼 수 있게.",
+        "- shortTitle — **12자 이내.** 캘린더 칸이 좁아 길면 잘린다.",
+        "  ⚠️ **같은 주제로 만든 다른 카드들이 캘린더에 나란히 놓인다.** 주제만 반복하면",
+        "  전부 같은 글자가 되어 구분할 수 없다. **이 카드만의 각도**가 드러나게 지어라.",
         "- intent — 이 카드 하나의 기획의도 한 문장. 시리즈 기획의도를 그대로 베끼지 않는다.",
       ]
         .filter(Boolean)
