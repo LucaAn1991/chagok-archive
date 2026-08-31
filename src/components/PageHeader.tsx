@@ -11,7 +11,13 @@ import { ChevronLeft } from "lucide-react";
  */
 const subscribe = () => () => {};
 
-export default function PageHeader({ title }: { title?: string }) {
+export default function PageHeader({
+  title,
+  action,
+}: {
+  title?: string;
+  action?: React.ReactNode; // 오른쪽 끝 텍스트 버튼 자리 (예: AI 기획의 [새 기획])
+}) {
   const router = useRouter();
   // SSR에서는 false → 첫 진입 하이드레이션과 일치. 클라이언트에서만 히스토리를 본다
   const canGoBack = useSyncExternalStore(
@@ -20,7 +26,7 @@ export default function PageHeader({ title }: { title?: string }) {
     () => false,
   );
 
-  if (!canGoBack && !title) return null;
+  if (!canGoBack && !title && !action) return null;
 
   return (
     <div className="-ml-2 flex h-10 items-center gap-1">
@@ -35,6 +41,7 @@ export default function PageHeader({ title }: { title?: string }) {
         </button>
       )}
       {title && <h1 className="text-title font-bold text-ink">{title}</h1>}
+      {action && <div className="ml-auto">{action}</div>}
     </div>
   );
 }

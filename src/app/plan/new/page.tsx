@@ -122,6 +122,23 @@ function NewPlanScreen() {
   // CTA와 입력창이 동시에 보이면 다음 행동이 흐려진다 (DESIGN §16, 08-27 피드백)
   const [chatMode, setChatMode] = useState(false);
 
+  /*
+   * [새 기획] 되돌리기 (08-31) — 되돌릴 수 없는 동작이라 확인 모달 대신 5초 복구를 준다.
+   * 스냅샷은 메모리에만 — 5초가 지나거나 화면을 벗어나면 복구할 수 없다.
+   */
+  const [undoOpen, setUndoOpen] = useState(false);
+  const undoSnapshot = useRef<{
+    planId: string | null;
+    messages: Msg[];
+    summary: PlanSummary;
+    picked: string[];
+    proposal: Proposal | null;
+    topicSuggestions: string[] | null;
+    ready: boolean;
+    chatText: string;
+  } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const didInit = useRef(false); // StrictMode의 이중 실행으로 plan이 2개 생기는 것을 막는다
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -237,8 +254,8 @@ function NewPlanScreen() {
     void runTurn({ kind: "text", text });
   }
 
-  /** 초안 배너의 「새로 시작」 — 초안을 지우고 빈 상태에서 시작한다 */
-  function startFresh() {
+  /** 화면 상태를 첫 화면으로 되돌린다 — 서버의 확정 세션·카드는 건드리지 않는다 */
+  function resetToFirstScreen() {
     clearDraft();
     setRestored(false);
     setMessages([]);
@@ -248,7 +265,51 @@ function NewPlanScreen() {
     setTopicSuggestions(null);
     setReady(false);
     setPlanId(null);
+    setChatText("");
     void runTurn({ kind: "init", idea: "", from: null });
+  }
+
+  /**
+   * [새 기획] (08-31 확정) — 말풍선을 비우고 첫 화면으로.
+   * 카드를 만든 대화는 이미 확정 세션으로 저장돼 「지난 기획」에 남아 있고,
+   * 카드 없이 쏟아낸 메모는 버려진다(5초 되돌리기만 제공). 확인 모달은 띄우지 않는다.
+   */
+  function startNewPlan() {
+    undoSnapshot.current = {
+      planId,
+      messages,
+      summary,
+      picked,
+      proposal,
+      topicSuggestions,
+      ready,
+      chatText,
+    };
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    setUndoOpen(true);
+    undoTimer.current = setTimeout(() => {
+      setUndoOpen(false);
+      undoSnapshot.current = null; // 5초가 지나면 복구 불가
+    }, 5000);
+    resetToFirstScreen();
+  }
+
+  /** 토스트의 [되돌리기] — 직전 말풍선을 그대로 복구한다 */
+  function undoNewPlan() {
+    const snap = undoSnapshot.current;
+    if (!snap) return;
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    setUndoOpen(false);
+    undoSnapshot.current = null;
+    setPlanId(snap.planId);
+    setMessages(snap.messages);
+    setSummary(snap.summary);
+    setPicked(snap.picked);
+    setProposal(snap.proposal);
+    setTopicSuggestions(snap.topicSuggestions);
+    setReady(snap.ready);
+    setChatText(snap.chatText);
+    // 자동 저장 효과가 복구된 상태를 다시 localStorage에 남긴다
   }
 
   /** 사용자가 무언가 하면 복구 배너는 역할이 끝난다 */
@@ -344,7 +405,23 @@ function NewPlanScreen() {
           <section className="flex min-w-0 flex-1 flex-col gap-4 min-[1280px]:min-w-[560px]">
             <header>
               {/* 탭 [새 기획]/[지난 기획] · 기본값 새 기획 (IA 2) */}
-              <PageHeader title="AI 기획" />
+              <PageHeader
+                title="AI 기획"
+                action={
+                  <button
+                    type="button"
+                    onClick={startNewPlan}
+                    disabled={
+                      !(summary.topic !== "" || messages.some((m) => m.role === "user")) ||
+                      sending ||
+                      confirming
+                    }
+                    className="px-1 text-body font-semibold text-berry transition-colors duration-200 hover:text-berry-dark disabled:text-sub/50"
+                  >
+                    새 기획
+                  </button>
+                }
+              />
               <PlanTabs />
               {isMock && (
                 <p className="mt-2 text-caption text-sub">
@@ -354,7 +431,7 @@ function NewPlanScreen() {
             </header>
 
             <div className="flex flex-col gap-4">
-              {restored && <RestoreBanner onFresh={startFresh} />}
+              {restored && <RestoreBanner />}
 
               {messages.map((m, i) =>
                 m.role === "system" ? (
@@ -458,6 +535,25 @@ function NewPlanScreen() {
         )}
       </div>
 
+      {undoOpen && (
+        /* 5초 되돌리기 토스트 — 확인 모달 대신 (DESIGN §13 Toast) */
+        <div
+          role="status"
+          className="fixed inset-x-0 bottom-32 z-30 flex justify-center px-4 md:bottom-24"
+        >
+          <div className="flex items-center gap-3 rounded-md bg-ink px-4 py-3 text-body text-white shadow-lg">
+            새 기획으로 넘어왔어요
+            <button
+              type="button"
+              onClick={undoNewPlan}
+              className="shrink-0 font-semibold underline underline-offset-2"
+            >
+              되돌리기
+            </button>
+          </div>
+        </div>
+      )}
+
       <MobileBottomNav />
     </div>
   );
@@ -551,20 +647,11 @@ function ReadyActionBar({
    F11 「이어서 기획하기」와 다른 기능 — 그 라벨을 쓰지 않는다
    ============================================================ */
 
-function RestoreBanner({ onFresh }: { onFresh: () => void }) {
+function RestoreBanner() {
+  // 대화를 비우는 방법은 헤더의 [새 기획] 하나뿐 (08-31) — 배너는 정보만 전한다
   return (
-    <div
-      role="status"
-      className="flex items-center justify-between rounded-md bg-surface-muted px-3 py-2"
-    >
+    <div role="status" className="flex items-center rounded-md bg-surface-muted px-3 py-2">
       <span className="text-[13px] text-sub">하던 기획을 이어서 열었어요</span>
-      <button
-        type="button"
-        onClick={onFresh}
-        className="shrink-0 px-1 text-[13px] font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
-      >
-        새로 시작
-      </button>
     </div>
   );
 }
