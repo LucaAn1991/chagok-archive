@@ -47,7 +47,9 @@ export async function GET(
         "Cache-Control": "private, max-age=300",
       },
     });
-  } catch {
+  } catch (e) {
+    // 사용자에게는 사정을 감추되 서버에는 남긴다 — 삼켜버리면 원인을 못 찾는다
+    console.error(`[slide-render] card=${cardId} order=${order}`, e);
     return NextResponse.json(
       { error: "이미지를 그리지 못했어요. 다시 시도해주세요." },
       { status: 502 },
