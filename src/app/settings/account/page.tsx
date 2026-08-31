@@ -15,6 +15,7 @@ import { auth } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import InlineAlert from "@/components/InlineAlert";
+import BackLink from "@/components/BackLink";
 import PasswordInput from "@/components/PasswordInput";
 
 /**
@@ -127,7 +128,9 @@ export default function AccountSettingsPage() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <main className="mx-auto w-full max-w-[720px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
-          <header className="flex flex-col gap-1">
+          <BackLink fallbackHref="/">돌아가기</BackLink>
+
+          <header className="mt-3 flex flex-col gap-1">
             <h1 className="text-h3 font-bold text-ink">계정 설정</h1>
           </header>
 

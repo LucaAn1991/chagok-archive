@@ -6,6 +6,8 @@ import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged, type User as AuthUser } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
+import AppShell from "@/components/AppShell";
+import BackLink from "@/components/BackLink";
 import StockAttribution from "@/components/StockAttribution";
 import type { Card, Caption } from "@/types";
 
@@ -259,12 +261,14 @@ export default function CardResultPage() {
 
   if (phase === "not-found") {
     return (
-      <main className="mx-auto flex w-full max-w-[720px] flex-1 flex-col items-center justify-center gap-3 p-4">
+      <AppShell>
+        <div className="flex flex-col items-center justify-center gap-3 py-16">
         <h1 className="text-title font-bold">카드를 찾을 수 없어요</h1>
         <Link href="/" className="text-body text-berry-dark underline underline-offset-4">
           홈으로 돌아가기
         </Link>
-      </main>
+      </div>
+      </AppShell>
     );
   }
 
@@ -272,7 +276,9 @@ export default function CardResultPage() {
     "w-full rounded-md border border-line bg-surface px-3 py-2 text-body text-ink";
 
   return (
-    <main className="mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-6 p-4 pb-16">
+    <AppShell>
+      <BackLink fallbackHref="/">돌아가기</BackLink>
+      <div className="mt-3 flex flex-col gap-6">
       <header className="flex flex-col gap-1 pt-4">
         <h1 className="text-h3 font-bold text-ink">제작 결과</h1>
         {card && <p className="text-body text-sub">{card.title}</p>}
@@ -495,6 +501,7 @@ export default function CardResultPage() {
           저장됐어요.
         </div>
       )}
-    </main>
+    </div>
+      </AppShell>
   );
 }

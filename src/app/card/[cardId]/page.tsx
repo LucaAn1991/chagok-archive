@@ -6,6 +6,8 @@ import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
+import AppShell from "@/components/AppShell";
+import BackLink from "@/components/BackLink";
 import type { Card, CardStatus } from "@/types";
 
 /**
@@ -120,24 +122,28 @@ export default function CardDetailPage() {
 
   if (phase === "loading") {
     return (
-      <main className="mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-4 p-4 pt-8">
-        <div className="h-6 w-24 animate-pulse rounded-pill bg-surface-muted" />
-        <div className="h-8 w-3/4 animate-pulse rounded-md bg-surface-muted" />
-        <div className="h-40 animate-pulse rounded-lg bg-surface-muted" />
-      </main>
+      <AppShell>
+        <div aria-hidden className="flex flex-col gap-4">
+          <div className="h-6 w-24 animate-pulse rounded-pill bg-surface-muted" />
+          <div className="h-8 w-3/4 animate-pulse rounded-md bg-surface-muted" />
+          <div className="h-40 animate-pulse rounded-lg bg-surface-muted" />
+        </div>
+      </AppShell>
     );
   }
 
   if (phase === "not-found" || phase === "error" || !card) {
     return (
-      <main className="mx-auto flex w-full max-w-[720px] flex-1 flex-col items-center justify-center gap-3 p-4">
-        <h1 className="text-title font-bold">
-          {phase === "error" ? "카드를 불러오지 못했어요" : "카드를 찾을 수 없어요"}
-        </h1>
-        <Link href="/" className="text-body text-berry-dark underline underline-offset-4">
-          홈으로 돌아가기
-        </Link>
-      </main>
+      <AppShell>
+        <div className="flex flex-col items-center justify-center gap-3 py-16">
+          <h1 className="text-title font-bold">
+            {phase === "error" ? "카드를 불러오지 못했어요" : "카드를 찾을 수 없어요"}
+          </h1>
+          <Link href="/" className="text-body text-berry-dark underline underline-offset-4">
+            홈으로 돌아가기
+          </Link>
+        </div>
+      </AppShell>
     );
   }
 
@@ -146,7 +152,10 @@ export default function CardDetailPage() {
   const discarded = card.status === "discarded";
 
   return (
-    <main className="mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-6 p-4 pb-16 pt-8">
+    <AppShell>
+      <BackLink fallbackHref="/">돌아가기</BackLink>
+
+      <div className="mt-3 flex flex-col gap-6">
       {/* 상태 + 주제 */}
       <header className="flex flex-col gap-3">
         <span className="flex items-center gap-2 self-start rounded-pill border border-line bg-surface px-3 py-1 text-caption font-semibold text-ink">
@@ -285,6 +294,7 @@ export default function CardDetailPage() {
           {toast}
         </div>
       )}
-    </main>
+      </div>
+    </AppShell>
   );
 }
