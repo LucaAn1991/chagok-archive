@@ -381,6 +381,8 @@ export default function SlideEditPage() {
           mode={freeMode ? "edit" : "select"}
           bg={canvas.color.bg}
           ink={canvas.color.ink}
+          tracking={canvas.type.tracking}
+          family={brand?.fontId ?? "pretendard"}
           onEditText={(id, text) => {
             /*
               그 자리에서 고친 글을 저장한다 (08-31).

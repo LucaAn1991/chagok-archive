@@ -110,14 +110,24 @@ function styleOf(ctx: Ctx, o: ResolvedSlotStyle): Record<string, unknown> {
   const { th } = ctx;
   const roleColor =
     o.color === "accent" ? th.color.accent : o.color === "sub" ? th.color.sub : undefined;
-  const decoration = [o.underline && "underline", o.strike && "line-through"]
-    .filter(Boolean)
-    .join(" ");
+  const color = o.colorHex ?? roleColor;
+
+  /*
+    밑줄·취소선을 `textDecoration`으로 하지 않는다 (08-31 실측).
+
+    satori는 이 속성을 **글자가 아니라 상자에** 걸어서, 밑줄이 글자 «위»에
+    그어지고 취소선과 겹치면 한 줄로 뭉친다. 대신 테두리로 긋는다 —
+    `borderBottom`은 글자 아래에 정확히 붙고, 취소선은 가운데 놓은 얇은 면으로 만든다.
+
+    **글자 상자가 글자에 딱 맞아야** 선 길이가 맞으므로 `alignSelf`로 폭을 좁힌다.
+  */
+  const line = color ?? th.color.ink;
+  const width = Math.max(2, Math.round(2 * SIZE_SCALE[o.size]));
 
   return {
     fontFamily: o.fontId ?? ctx.family,
-    ...(o.colorHex ? { color: o.colorHex } : roleColor ? { color: roleColor } : {}),
-    ...(decoration ? { textDecoration: decoration } : {}),
+    ...(color ? { color } : {}),
+    ...(o.underline ? { borderBottom: `${width}px solid ${line}`, alignSelf: "flex-start" } : {}),
     ...(o.opacity !== "100" ? { opacity: OPACITY_VALUE[o.opacity] } : {}),
   };
 }
@@ -149,7 +159,14 @@ function text(
   */
   const JUSTIFY = { left: "flex-start", center: "center", right: "flex-end" } as const;
 
-  return el(
+  const styled = styleOf(ctx, o);
+
+  /*
+    취소선은 글자 «가운데»를 지나야 해서 테두리로는 안 된다.
+    글자 위에 얇은 면을 겹쳐 놓는다 — 상자가 글자에 맞아야 길이가 맞으므로
+    `alignSelf: flex-start`로 폭을 좁힌 뒤 그 안에 절대 위치로 얹는다.
+  */
+  const node = el(
     "div",
     {
       display: "flex",
@@ -163,13 +180,28 @@ function text(
         조절값은 `extra`보다 **뒤에** 온다. 레이아웃이 박아둔 색
         (예: 부제의 `color: sub`)이 사용자가 고른 색을 덮어쓰면 안 된다.
       */
-      ...styleOf(ctx, o),
+      ...styled,
       ...(adjusted.align
         ? { justifyContent: JUSTIFY[o.align], width: "100%", textAlign: o.align }
         : {}),
+      ...(o.strike ? { position: "relative" } : {}),
     },
-    value,
+    o.strike
+      ? [
+          value,
+          el("div", {
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: "50%",
+            height: Math.max(2, Math.round(2 * SIZE_SCALE[o.size])),
+            backgroundColor: (styled.color as string) ?? th.color.ink,
+          }),
+        ]
+      : value,
   );
+
+  return node;
 }
 
 /** 사진이 없을 때의 자리 표시 면. 폴백 사슬의 마지막은 text-only라 여기 안 온다 */

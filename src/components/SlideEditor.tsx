@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { clampElement } from "@/lib/free-layout";
-import { DEFAULT_SLOT_STYLE, SIZE_SCALE } from "@/lib/slot-style";
+import {
+  DEFAULT_SLOT_STYLE,
+  LINE_HEIGHT_VALUE,
+  OPACITY_VALUE,
+  SIZE_SCALE,
+  TRACKING_DELTA,
+} from "@/lib/slot-style";
 import type { SlideElement } from "@/types";
 
 /** 렌더러(`lib/render/layouts.ts`)와 같은 식 — 상자 높이에서 글자 크기를 뽑는다 */
@@ -57,6 +63,10 @@ type Props = {
    */
   bg: string;
   ink: string;
+  /** 캔버스의 자간 기준(테마 값) — 편집칸을 그려진 글자와 맞추려면 필요하다 */
+  tracking?: number;
+  /** 브랜드가 고른 폰트 이름 — 요소가 따로 안 고르면 이걸 쓴다 */
+  family?: string;
   /** 글자를 그 자리에서 고쳤을 때. 없으면 그 자리 편집이 꺼진다 */
   onEditText?: (id: string, text: string) => void;
   /** 손을 뗐을 때만 부른다 — 끄는 동안 저장하면 요청이 폭주한다 */
@@ -72,6 +82,8 @@ export default function SlideEditor({
   mode = "edit",
   bg,
   ink,
+  tracking = 0,
+  family,
   onEditText,
   onCommit,
 }: Props) {
@@ -234,11 +246,22 @@ export default function SlideEditor({
                 height: `${el.h * 100}%`,
                 background: bg,
                 color: o.colorHex ?? ink,
-                // 미리보기 폭에 맞춰 줄인다 — 캔버스는 1080 기준으로 계산했다
+                /*
+                  캔버스는 1080 기준으로 계산했다. 미리보기는 그보다 작으므로
+                  `cqw`(이 상자 폭의 %)로 환산해 **어느 크기에서도 같은 비율**로 보이게 한다.
+                  자간·줄 간격·폰트까지 렌더러와 같은 값을 써야 «치는 동안»과
+                  «그려진 뒤»가 어긋나지 않는다 (08-31).
+                */
                 fontSize: `${(fontSize / SLIDE_SIZE) * 100}cqw`,
+                letterSpacing: `${((tracking + TRACKING_DELTA[o.tracking]) / SLIDE_SIZE) * 100}cqw`,
+                lineHeight: LINE_HEIGHT_VALUE[o.lineHeight],
+                fontFamily: o.fontId ?? family,
                 textAlign: o.align,
                 fontWeight: o.weight === "bold" ? 700 : 400,
-                lineHeight: 1.3,
+                opacity: OPACITY_VALUE[o.opacity],
+                textDecoration: [o.underline && "underline", o.strike && "line-through"]
+                  .filter(Boolean)
+                  .join(" "),
               }}
               className="absolute resize-none overflow-hidden rounded-sm border-2 border-berry p-0 outline-none"
             />
