@@ -56,6 +56,7 @@ export async function POST(
       avoidExpressions: user.avoidExpressions,
       visualPreferences: user.visualPreferences ?? null, // 취향의 문구 톤 반영 (08-31)
       visualType,
+      photoUrls: card.photoUrls ?? [], // 이미지 레이아웃에 순서대로 배정된다 (08-31)
     });
 
     await cardSnap.ref.update({

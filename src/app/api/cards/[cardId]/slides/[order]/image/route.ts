@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { getUidFromRequest } from "@/lib/api/auth";
 import { renderSlidePng } from "@/lib/render/render-slide";
+import { toDataUri } from "@/lib/render/fetch-image";
 import type { Card } from "@/types";
 
 /**
@@ -37,7 +38,9 @@ export async function GET(
     const png = await renderSlidePng({
       layoutId: slide.layoutId,
       texts: slide.texts,
-      imageUrl: slide.imageUrl,
+      // satori는 원격 URL을 못 받아온다 — 여기서 data URI로 바꿔 넘긴다.
+      // 실패하면 null이 되어 사진 없이 그려진다 (카드 전체를 못 쓰게 하지 않는다)
+      imageUrl: await toDataUri(slide.imageUrl),
     });
 
     return new NextResponse(new Uint8Array(png), {
