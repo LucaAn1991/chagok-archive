@@ -1,5 +1,5 @@
 import type { ThemeId } from "../../types/card";
-import type { StyleAttributes } from "../../types/user";
+import type { Brand, StyleAttributes } from "../../types/user";
 
 /**
  * 카드뉴스 산출물의 «테마» 3종 — 색과 글자 비율.
@@ -133,4 +133,88 @@ export function themeFromAttributes(attributes: StyleAttributes[] | undefined | 
 
   // 동점이면 THEME_ORDER의 앞선 것이 이긴다 — warm이 맨 앞이라 기본값과 같아진다
   return THEME_ORDER.reduce((best, id) => (votes[id] > votes[best] ? id : best), DEFAULT_THEME_ID);
+}
+
+/* ── 「내 스타일」 적용 ──────────────────────────────────── */
+
+/** `#RRGGBB` 인지. 세 자리 축약(#abc)은 받지 않는다 — 저장할 때 여섯 자리로 맞춘다 */
+export function isHexColor(v: unknown): v is string {
+  return typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v);
+}
+
+/** 0~1. WCAG 상대 휘도 — 대비 계산의 근거 (DESIGN.md §15) */
+function luminance(hex: string): number {
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const lin = c.map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+}
+
+function contrast(a: string, b: string): number {
+  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+}
+
+/**
+ * 배경색에 얹을 글자색을 **고르지 않고 계산한다.**
+ *
+ * 사용자가 배경과 글자를 둘 다 고르면 「연회색 배경 + 연노랑 글자」 같은 조합이
+ * 나와서 DESIGN.md §15의 대비 기준을 못 넘긴다. 그래서 배경만 받고,
+ * 어두운 먹과 흰색 중 **대비가 큰 쪽**을 쓴다. 어떤 색을 넣어도 항상 읽힌다.
+ *
+ * 먹은 순수 검정(#000)이 아니라 `--ink` 계열이다 — 순수 검정은 종이 위에서
+ * 눈이 아프고, 이 제품의 톤과도 안 맞는다(DESIGN.md §2).
+ */
+const INK_DARK = "#2D292B";
+const INK_LIGHT = "#FFFFFF";
+
+export function inkFor(bg: string): string {
+  return contrast(bg, INK_DARK) >= contrast(bg, INK_LIGHT) ? INK_DARK : INK_LIGHT;
+}
+
+/** 보조 글자색 — 본문보다 여리게. 배경 쪽으로 섞어 만든다 */
+function subFor(bg: string, ink: string): string {
+  const mix = (i: number) => {
+    const a = parseInt(ink.slice(i, i + 2), 16);
+    const b = parseInt(bg.slice(i, i + 2), 16);
+    return Math.round(a * 0.62 + b * 0.38)
+      .toString(16)
+      .padStart(2, "0");
+  };
+  return `#${mix(1)}${mix(3)}${mix(5)}`;
+}
+
+/** 사진이 없을 때의 자리 면 — 배경보다 살짝 진하게 */
+function softFor(bg: string, ink: string): string {
+  const mix = (i: number) => {
+    const a = parseInt(ink.slice(i, i + 2), 16);
+    const b = parseInt(bg.slice(i, i + 2), 16);
+    return Math.round(a * 0.12 + b * 0.88)
+      .toString(16)
+      .padStart(2, "0");
+  };
+  return `#${mix(1)}${mix(3)}${mix(5)}`;
+}
+
+/**
+ * 테마 위에 「내 스타일」을 덮는다 (08-31).
+ *
+ * **글자 비율(크기·자간·여백·정렬)은 테마 것을 그대로 둔다** — 브랜드가 정하는 건
+ * 색과 폰트지 레이아웃 감각이 아니다. 브랜드가 없으면 테마가 그대로 쓰인다.
+ */
+export function applyBrand(theme: Theme, brand?: Brand | null): Theme {
+  if (!brand || !isHexColor(brand.bg)) return theme;
+
+  const bg = brand.bg;
+  const ink = inkFor(bg);
+  return {
+    ...theme,
+    color: {
+      bg,
+      ink,
+      sub: subFor(bg, ink),
+      soft: softFor(bg, ink),
+      // 사진 위 덮개는 늘 어둡게 — 밝은 사진에서 흰 글자가 읽히려면 필요하다
+      scrim: "rgba(0,0,0,0.45)",
+    },
+  };
 }

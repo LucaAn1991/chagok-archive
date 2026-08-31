@@ -1,5 +1,6 @@
 import type { LayoutId } from "../../types/card";
-import { resolveTheme, type Theme } from "./themes";
+import { applyBrand, resolveTheme, type Theme } from "./themes";
+import type { Brand } from "../../types/user";
 
 /**
  * 카드뉴스 레이아웃 6종의 satori 템플릿 골격.
@@ -17,6 +18,11 @@ export type SlideContent = {
   layoutId: LayoutId;
   /** 산출물 테마 (08-31). 없으면 기본 테마로 그린다 — 옛 카드엔 이 값이 없다 */
   themeId?: string;
+  /**
+   * 「내 스타일」 (08-31). 있으면 테마의 색·폰트를 덮어쓴다 —
+   * 계정 톤이 테마 3종보다 우선한다 (DESIGN.md §12).
+   */
+  brand?: Brand | null;
   /** 레이아웃별 텍스트 슬롯. @TODO: 슬롯 키는 시안 확정 시 재정의 (아래 통상값) */
   texts: Record<string, string>;
   /** @TODO: 골격 단계에서는 data URI만 지원. 원격 URL 페치는 render API에서 처리 */
@@ -278,7 +284,7 @@ function closing(th: Theme, t: Record<string, string>): Node {
 
 export function buildLayout(content: SlideContent): Node {
   const { layoutId, texts, imageUrl } = content;
-  const th = resolveTheme(content.themeId);
+  const th = applyBrand(resolveTheme(content.themeId), content.brand);
 
   switch (layoutId) {
     case "cover":

@@ -1,7 +1,7 @@
 import satori from "satori";
 import sharp from "sharp";
 import type { ReactNode } from "react";
-import { loadPretendardFonts } from "./fonts";
+import { loadCardFonts } from "./fonts";
 import { buildLayout, SLIDE_SIZE, type SlideContent } from "./layouts";
 
 /**
@@ -43,7 +43,7 @@ function ensureSvgLoaderAllowed(): void {
 export async function renderSlidePng(content: SlideContent): Promise<Buffer> {
   ensureSvgLoaderAllowed();
 
-  const fonts = await loadPretendardFonts();
+  const fonts = await loadCardFonts(content.brand);
 
   const svg = await satori(buildLayout(content) as unknown as ReactNode, {
     width: SLIDE_SIZE,
