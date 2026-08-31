@@ -16,7 +16,7 @@ import PlanningSummaryPanel, {
   type PlanSummary,
   type PlanSummaryPatch,
 } from "@/components/PlanningSummaryPanel";
-import { STOCK_SUGGESTIONS } from "@/components/PlanPhotoPicker";
+import PlanPhotoPicker, { STOCK_SUGGESTIONS } from "@/components/PlanPhotoPicker";
 import PageHeader from "@/components/PageHeader";
 import PlanTabs from "@/components/PlanTabs";
 
@@ -399,144 +399,165 @@ function NewPlanScreen() {
     <div className="flex flex-1">
       <AppSidebar />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <main className="mx-auto flex w-full max-w-[1080px] flex-1 gap-8 p-4 pb-40 md:p-6 md:pb-36 min-[1200px]:p-8 min-[1200px]:pb-36">
-          {/* 좌 — 대화 (min 560은 >=1280에서만 의미가 있다, DESIGN §7) */}
-          <section className="flex min-w-0 flex-1 flex-col gap-4 min-[1280px]:min-w-[560px]">
-            <header>
-              {/* 탭 [새 기획]/[지난 기획] · 기본값 새 기획 (IA 2) */}
-              <PageHeader
-                title="AI 기획"
-                action={
-                  <button
-                    type="button"
-                    onClick={startNewPlan}
-                    disabled={
-                      !(summary.topic !== "" || messages.some((m) => m.role === "user")) ||
-                      sending ||
-                      confirming
-                    }
-                    /* 중성 회색 알약 칩 (08-31 확정 지시 — 말풍선과 색·형태 모두 구분).
-                       값은 지시서의 고정 색(#EDEDED/#DCDCDC/#444444, hover #E4E4E4) —
-                       DESIGN §2 팔레트 밖이라 토큰 승격은 DESIGN 반영과 함께 필요 (보고됨).
-                       대비 #444 on #EDEDED ≈ 8.2:1 (AA 통과). 주 버튼과 무관한 독립 스타일 */
-                    className="flex h-[30px] items-center rounded-pill border border-[#DCDCDC] bg-[#EDEDED] px-3 text-[13px] font-medium text-[#444444] transition-colors duration-200 hover:bg-[#E4E4E4] active:bg-[#E4E4E4] disabled:opacity-50"
-                  >
-                    새 기획
-                  </button>
-                }
-              />
-              <PlanTabs />
-              {isMock && (
-                <p className="mt-2 text-caption text-sub">
-                  모의 AI로 동작 중이에요 — API 키 연결 전 개발용 응답입니다.
-                </p>
-              )}
-            </header>
+      <div className="flex min-w-0 flex-1 flex-col lg:h-dvh lg:overflow-hidden">
+        <main className="mx-auto flex w-full max-w-[1080px] flex-1 flex-col p-4 pb-40 md:p-6 md:pb-36 min-[1200px]:p-8 lg:min-h-0 lg:pb-6">
+          {/* 헤더·탭 — 그대로. 2열보다 위에 두어 오른쪽 박스가 «탭 아래부터» 시작하게 한다 */}
+          <header>
+            {/* 탭 [새 기획]/[지난 기획] · 기본값 새 기획 (IA 2) */}
+            <PageHeader
+              title="AI 기획"
+              action={
+                <button
+                  type="button"
+                  onClick={startNewPlan}
+                  disabled={
+                    !(summary.topic !== "" || messages.some((m) => m.role === "user")) ||
+                    sending ||
+                    confirming
+                  }
+                  /* 중성 회색 알약 칩 (08-31 확정 지시 — 말풍선과 색·형태 모두 구분).
+                     값은 지시서의 고정 색(#EDEDED/#DCDCDC/#444444, hover #E4E4E4) —
+                     DESIGN §2 팔레트 밖이라 토큰 승격은 DESIGN 반영과 함께 필요 (보고됨).
+                     대비 #444 on #EDEDED ≈ 8.2:1 (AA 통과). 주 버튼과 무관한 독립 스타일 */
+                  className="flex h-[30px] items-center rounded-pill border border-[#DCDCDC] bg-[#EDEDED] px-3 text-[13px] font-medium text-[#444444] transition-colors duration-200 hover:bg-[#E4E4E4] active:bg-[#E4E4E4] disabled:opacity-50"
+                >
+                  새 기획
+                </button>
+              }
+            />
+            <PlanTabs />
+            {isMock && (
+              <p className="mt-2 text-caption text-sub">
+                모의 AI로 동작 중이에요 — API 키 연결 전 개발용 응답입니다.
+              </p>
+            )}
+          </header>
 
-            <div className="flex flex-col gap-4">
+          {/* 2열 (08-31) — 왼쪽 대화 5 : 오른쪽 기획 박스 7, 간격 24px.
+              1024px 미만은 기존 1열 그대로 */}
+          <div className="mt-4 flex flex-1 flex-col lg:grid lg:min-h-0 lg:grid-cols-12 lg:gap-6">
+            {/* 좌 — 대화 + 추천 칩 + 하단 버튼. 대화만 열 안에서 스크롤된다 */}
+            <section className="flex min-w-0 flex-col lg:col-span-5 lg:min-h-0">
+              <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
               {restored && <RestoreBanner />}
 
-              {messages.map((m, i) =>
-                m.role === "system" ? (
-                  <SystemEventLine key={i} text={m.text} />
-                ) : (
-                  <AIChatBubble
-                    key={i}
-                    role={m.role}
-                    text={m.text}
-                    showAvatar={m.role === "assistant" && messages[i - 1]?.role !== "assistant"}
+                {messages.map((m, i) =>
+                  m.role === "system" ? (
+                    <SystemEventLine key={i} text={m.text} />
+                  ) : (
+                    <AIChatBubble
+                      key={i}
+                      role={m.role}
+                      text={m.text}
+                      showAvatar={m.role === "assistant" && messages[i - 1]?.role !== "assistant"}
+                    />
+                  ),
+                )}
+
+                {/* ① 주제 후보 — 열린 질문 금지 (IA 2.1-①).
+                    칩은 바로 전송하지 않고 입력창을 채운다 — 다듬어 보내는 건 사용자 몫 */}
+                {topicSuggestions && !sending && !failed && (
+                  <TopicSuggestionPicker
+                    suggestions={topicSuggestions}
+                    onPick={(t) => {
+                      dismissBanner();
+                      setChatText(t);
+                      setFocusToken((k) => k + 1);
+                    }}
                   />
-                ),
-              )}
+                )}
 
-              {/* ① 주제 후보 — 열린 질문 금지 (IA 2.1-①).
-                  칩은 바로 전송하지 않고 입력창을 채운다 — 다듬어 보내는 건 사용자 몫 */}
-              {topicSuggestions && !sending && !failed && (
-                <TopicSuggestionPicker
-                  suggestions={topicSuggestions}
-                  onPick={(t) => {
-                    dismissBanner();
-                    setChatText(t);
-                    setFocusToken((k) => k + 1);
-                  }}
-                />
-              )}
+                {/* ② 대상 후보 — sending 중에도 유지: 주제 저장 중 선택이 사라지면 안 된다 */}
+                {proposal && !failed && (
+                  <ProposalPicker
+                    base={proposal.audiences}
+                    extras={extraOptions.filter((o) => !proposal.audiences.includes(o))}
+                    picked={picked}
+                    topic={summary.topic}
+                    onSaveTopic={(next) => {
+                      dismissBanner();
+                      saveSummaryPatch({ topic: next });
+                    }}
+                    onToggle={(a) => {
+                      dismissBanner();
+                      setPicked((prev) =>
+                        prev.includes(a) ? prev.filter((v) => v !== a) : [...prev, a],
+                      );
+                    }}
+                    onAddOption={(a) => {
+                      dismissBanner();
+                      setExtraOptions(addCustomAudience(a));
+                      setPicked((prev) => (prev.includes(a) ? prev : [...prev, a]));
+                    }}
+                    onSubmit={() => sendSelection(picked)}
+                  />
+                )}
 
-              {/* ② 대상 후보 — sending 중에도 유지한다: 주제 저장 중 선택이 사라지면 안 된다 (08-28) */}
-              {proposal && !failed && (
-                <ProposalPicker
-                  base={proposal.audiences}
-                  extras={extraOptions.filter((o) => !proposal.audiences.includes(o))}
-                  picked={picked}
-                  topic={summary.topic}
-                  onSaveTopic={(next) => {
-                    dismissBanner();
-                    saveSummaryPatch({ topic: next });
-                  }}
-                  onToggle={(a) => {
-                    dismissBanner();
-                    setPicked((prev) =>
-                      prev.includes(a) ? prev.filter((v) => v !== a) : [...prev, a],
-                    );
-                  }}
-                  onAddOption={(a) => {
-                    dismissBanner();
-                    setExtraOptions(addCustomAudience(a)); // localStorage에도 남긴다
-                    setPicked((prev) => (prev.includes(a) ? prev : [...prev, a]));
-                  }}
-                  onSubmit={() => sendSelection(picked)}
-                />
-              )}
+                {/* <lg — 기획안 인라인 카드 (사진 포함, 기존 그대로) */}
+                {summaryStarted && !sending && <PlanningSummaryInline {...summaryProps} />}
 
-              {/* <1280 — 기획안 인라인 카드. 수정도 여기서 한다 (DESIGN §7) */}
-              {summaryStarted && !sending && <PlanningSummaryInline {...summaryProps} />}
+                {/* lg+ — 사진 추천은 왼쪽 열에서 2개씩 3줄로 (08-31 2열) */}
+                {ready && !sending && !failed && (
+                  <div className="hidden lg:block">
+                    <PlanPhotoPicker {...summaryProps.photos} />
+                  </div>
+                )}
 
-              {sending && <WaitingIndicator />}
+                {sending && <WaitingIndicator />}
 
-              {failed && (
-                <div className="flex flex-col items-start gap-2">
-                  <p className="text-body text-ink">응답을 만들지 못했어요.</p>
-                  <button
-                    type="button"
-                    onClick={() => void runTurn(failed)}
-                    className="flex h-11 items-center justify-center rounded-md border-2 border-berry bg-surface px-5 text-body font-semibold text-berry transition-colors duration-200 hover:bg-berry-tint"
-                  >
-                    다시 보내기
-                  </button>
-                </div>
-              )}
-            </div>
-            <div ref={bottomRef} className="scroll-mb-40 md:scroll-mb-32" />
-          </section>
+                {failed && (
+                  <div className="flex flex-col items-start gap-2">
+                    <p className="text-body text-ink">응답을 만들지 못했어요.</p>
+                    <button
+                      type="button"
+                      onClick={() => void runTurn(failed)}
+                      className="flex h-11 items-center justify-center rounded-md border-2 border-berry bg-surface px-5 text-body font-semibold text-berry transition-colors duration-200 hover:bg-berry-tint"
+                    >
+                      다시 보내기
+                    </button>
+                  </div>
+                )}
 
-          {/* 우 — 기획안 패널 (>=1280 전용, DESIGN §7). 빈 껍데기로 먼저 띄우지 않는다 */}
-          {summaryStarted && <PlanningSummaryPanel {...summaryProps} />}
+                <div ref={bottomRef} className="scroll-mb-40 md:scroll-mb-32 lg:scroll-mb-2" />
+              </div>
+
+              {/* 좌측 열 하단 고정 버튼 — 대화를 스크롤해도 항상 보인다 (08-31 §3) */}
+              <div className="lg:pt-3">
+                {showActionBar ? (
+                  <ReadyActionBar
+                    onConfirm={() => void confirmPlan()}
+                    confirming={confirming}
+                    error={confirmError}
+                    onEditByChat={() => {
+                      setChatMode(true);
+                      setFocusToken((k) => k + 1);
+                    }}
+                  />
+                ) : (
+                  <ChatInputBar
+                    disabled={sending || !planId}
+                    value={chatText}
+                    onChange={setChatText}
+                    focusToken={focusToken}
+                    placeholder={
+                      ready ? "바꾸고 싶은 부분을 알려주세요 (예: 대상을 직장인으로)" : undefined
+                    }
+                    onSend={sendText}
+                  />
+                )}
+              </div>
+            </section>
+
+            {/* 우 — 기획 박스 (lg+ · 5:7의 7) — 비어 있으면 안내 한 줄 */}
+            <PlanningSummaryPanel
+              summary={summary}
+              onSave={saveSummaryPatch}
+              topicLocked={confirmedLock}
+              continueHref={planId ? `/plan/new?from=${planId}` : undefined}
+              started={summaryStarted}
+            />
+          </div>
         </main>
-
-        {/* 하단 — 기획안이 준비되면 액션 바, 그 외에는 입력 바 (둘을 동시에 보여주지 않는다) */}
-        {showActionBar ? (
-          <ReadyActionBar
-            onConfirm={() => void confirmPlan()}
-            confirming={confirming}
-            error={confirmError}
-            onEditByChat={() => {
-              setChatMode(true);
-              setFocusToken((k) => k + 1);
-            }}
-          />
-        ) : (
-          <ChatInputBar
-            disabled={sending || !planId}
-            value={chatText}
-            onChange={setChatText}
-            focusToken={focusToken}
-            placeholder={
-              ready ? "바꾸고 싶은 부분을 알려주세요 (예: 대상을 직장인으로)" : undefined
-            }
-            onSend={sendText}
-          />
-        )}
       </div>
 
       {undoOpen && (
@@ -605,8 +626,8 @@ function ReadyActionBar({
   onEditByChat: () => void;
 }) {
   return (
-    <div className="fixed inset-x-0 bottom-14 z-10 border-t border-line bg-bg p-3 md:sticky md:bottom-0 md:border-t-0 md:px-6 md:pb-6 md:pt-2">
-      <div className="mx-auto flex w-full max-w-[720px] flex-col gap-2">
+    <div className="fixed inset-x-0 bottom-14 z-10 border-t border-line bg-bg p-3 md:sticky md:bottom-0 md:border-t-0 md:px-6 md:pb-6 md:pt-2 lg:static lg:inset-auto lg:z-auto lg:bg-transparent lg:p-0">
+      <div className="mx-auto flex w-full max-w-[720px] flex-col gap-2 lg:mx-0 lg:max-w-none">
         {confirming ? (
           <div className="flex h-12 items-center justify-center">
             <WaitingIndicator
@@ -877,13 +898,13 @@ function ChatInputBar({
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-14 z-10 border-t border-line bg-bg p-3 md:sticky md:bottom-0 md:border-t-0 md:px-6 md:pb-6 md:pt-2">
+    <div className="fixed inset-x-0 bottom-14 z-10 border-t border-line bg-bg p-3 md:sticky md:bottom-0 md:border-t-0 md:px-6 md:pb-6 md:pt-2 lg:static lg:inset-auto lg:z-auto lg:bg-transparent lg:p-0">
       <form
         onSubmit={(e) => {
           e.preventDefault();
           submit();
         }}
-        className="mx-auto flex w-full max-w-[720px] items-end gap-2 rounded-lg border border-line bg-surface p-3 focus-within:border-berry"
+        className="mx-auto flex w-full max-w-[720px] items-end gap-2 rounded-lg border border-line bg-surface p-3 focus-within:border-berry lg:mx-0 lg:max-w-none"
       >
         <label htmlFor="chat-input" className="sr-only">
           메시지 입력

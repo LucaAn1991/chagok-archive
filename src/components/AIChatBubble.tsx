@@ -32,7 +32,7 @@ export default function AIChatBubble({
     return (
       <div className="flex justify-end">
         {/* 연한 브랜드 면 위 글자는 --berry-dark가 아니라... 본문이라 --ink (§15 대비 13:1↑) */}
-        <p className="max-w-[85%] whitespace-pre-wrap rounded-lg rounded-br-sm bg-berry-light px-4 py-3 text-body text-ink md:max-w-[70%]">
+        <p className="max-w-[85%] whitespace-pre-wrap rounded-lg rounded-br-sm bg-berry-light px-4 py-3 text-body text-ink md:max-w-[70%] lg:max-w-full">
           {text}
         </p>
       </div>
@@ -48,7 +48,7 @@ export default function AIChatBubble({
           <span className="text-label font-semibold text-sub">차곡</span>
         </span>
       )}
-      <p className="max-w-[85%] whitespace-pre-wrap rounded-lg rounded-tl-sm border border-line bg-surface px-4 py-3 text-body text-ink md:max-w-[70%]">
+      <p className="max-w-[85%] whitespace-pre-wrap rounded-lg rounded-tl-sm border border-line bg-surface px-4 py-3 text-body text-ink md:max-w-[70%] lg:max-w-full">
         {text}
       </p>
     </div>

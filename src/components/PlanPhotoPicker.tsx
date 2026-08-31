@@ -85,12 +85,14 @@ export default function PlanPhotoPicker({
           : "이렇게 골라뒀어요 — 바꾸거나 직접 올릴 수 있어요."}
       </p>
 
-      <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+      {/* 2열 레이아웃(lg+)에서는 한 줄 2개 × 3줄 래핑 — 가로 스크롤·잘림 금지 (08-31).
+          모바일은 기존 가로 스크롤 유지 */}
+      <div className="mt-2 flex gap-2 overflow-x-auto pb-1 lg:grid lg:grid-cols-2 lg:overflow-visible lg:pb-0">
         {/* 내 사진 올리기 — 폴백 사슬 1순위 (DESIGN §12) */}
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="flex h-20 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-sm border border-dashed border-line text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
+          className="flex h-20 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-sm border border-dashed lg:h-20 lg:w-full border-line text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
         >
           <ImagePlus size={20} aria-hidden />
           <span className="text-caption">내 사진</span>
@@ -109,12 +111,12 @@ export default function PlanPhotoPicker({
 
         {/* 올린 사진 — 순서 = 배열 순서 (F13) */}
         {userPhotos.map((url, i) => (
-          <div key={url} className="relative shrink-0">
+          <div key={url} className="relative shrink-0 lg:w-full">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={url}
               alt={`올린 사진 ${i + 1}`}
-              className="h-20 w-16 rounded-sm border-2 border-berry object-cover"
+              className="h-20 w-16 rounded-sm border-2 border-berry object-cover lg:h-20 lg:w-full"
             />
             <button
               type="button"
@@ -136,11 +138,11 @@ export default function PlanPhotoPicker({
               type="button"
               onClick={() => onSelectStock(s.id)}
               aria-pressed={selected}
-              className="shrink-0 text-center"
+              className="flex shrink-0 flex-col text-center lg:w-full"
             >
               <span
                 className={[
-                  "relative block h-20 w-16 overflow-hidden rounded-sm border-2",
+                  "relative block h-20 w-16 overflow-hidden rounded-sm border-2 lg:h-20 lg:w-full",
                   selected ? "border-berry" : "border-transparent",
                 ].join(" ")}
               >
@@ -154,7 +156,7 @@ export default function PlanPhotoPicker({
               </span>
               <span
                 className={[
-                  "mt-1 block text-caption",
+                  "mt-1 block whitespace-normal break-keep text-caption",
                   selected ? "font-semibold text-berry-dark" : "text-sub",
                 ].join(" ")}
               >
