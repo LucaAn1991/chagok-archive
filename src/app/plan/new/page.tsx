@@ -43,7 +43,20 @@ type TurnPayload =
   | { kind: "selection"; audiences: string[]; purposes: string[] }
   | { kind: "update"; patch: PlanSummaryPatch };
 
-async function postJson(path: string, body: unknown): Promise<Record<string, unknown>> {
+/**
+ * 답이 만들어지는 동안 «지금까지 온 전체 문장»을 넘겨받는 콜백.
+ *
+ * 늘어난 조각(delta)이 아니라 **매번 전체**를 준다. 재시도로 두 번째 호출이
+ * 시작되면 처음부터 다시 오므로, 화면은 받은 값으로 덮어쓰기만 하면
+ * 앞 시도의 글자가 남는 문제가 생기지 않는다.
+ */
+type OnStreamText = (fullTextSoFar: string) => void;
+
+async function postJson(
+  path: string,
+  body: unknown,
+  onText?: OnStreamText,
+): Promise<Record<string, unknown>> {
   const user = auth.currentUser;
   if (!user) throw new Error("로그인이 필요합니다.");
   const token = await user.getIdToken();
@@ -56,15 +69,65 @@ async function postJson(path: string, body: unknown): Promise<Record<string, unk
     const data = await res.json().catch(() => null);
     throw new Error(typeof data?.error === "string" ? data.error : "요청에 실패했어요.");
   }
-  return res.json();
+
+  // 스트리밍이 아닌 응답(복원·부분 수정 등)은 지금까지처럼 통째로 받는다
+  if (!res.headers.get("content-type")?.includes("x-ndjson")) {
+    return res.json();
+  }
+  return readNdjson(res, onText);
+}
+
+/**
+ * NDJSON 스트림을 읽어 마지막 `done` 줄을 돌려준다.
+ *
+ * 한 줄이 여러 조각으로 나뉘어 올 수 있으므로 개행이 나올 때까지 모았다 파싱한다.
+ * 스트림은 이미 200으로 시작했기 때문에 실패는 `type:"error"` 줄로 온다.
+ */
+async function readNdjson(
+  res: Response,
+  onText?: OnStreamText,
+): Promise<Record<string, unknown>> {
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("응답을 읽지 못했어요.");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let streamed = "";
+  let done: Record<string, unknown> | null = null;
+
+  for (;;) {
+    const { value, done: finished } = await reader.read();
+    if (finished) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let cut: number;
+    while ((cut = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, cut).trim();
+      buffer = buffer.slice(cut + 1);
+      if (!line) continue;
+
+      const event = JSON.parse(line) as Record<string, unknown>;
+      if (event.type === "delta" && typeof event.text === "string") {
+        streamed += event.text;
+        onText?.(streamed);
+      } else if (event.type === "error") {
+        throw new Error(typeof event.error === "string" ? event.error : "요청에 실패했어요.");
+      } else if (event.type === "done") {
+        done = event;
+      }
+    }
+  }
+
+  if (!done) throw new Error("응답이 끝까지 오지 않았어요.");
+  return done;
 }
 
 /** 자동 1회 재시도 (PRD §5-7 ①) — 그다음부터는 사용자가 누른다 */
-async function postWithRetry(path: string, body: unknown) {
+async function postWithRetry(path: string, body: unknown, onText?: OnStreamText) {
   try {
-    return await postJson(path, body);
+    return await postJson(path, body, onText);
   } catch {
-    return await postJson(path, body);
+    return await postJson(path, body, onText);
   }
 }
 
@@ -93,6 +156,8 @@ function NewPlanScreen() {
     intent: "",
   });
   const [sending, setSending] = useState(false);
+  // 만들어지는 중인 답 — 다 오면 null로 비우고 진짜 말풍선이 자리를 넘겨받는다
+  const [streamingText, setStreamingText] = useState<string | null>(null);
   const [failed, setFailed] = useState<TurnPayload | null>(null);
   const [ready, setReady] = useState(false); // ③으로 넘어갈 수 있는 상태
   const [isMock, setIsMock] = useState(false);
@@ -127,6 +192,7 @@ function NewPlanScreen() {
   async function runTurn(payload: TurnPayload) {
     setSending(true);
     setFailed(null);
+    setStreamingText(null);
     try {
       const data =
         payload.kind === "init"
@@ -142,7 +208,12 @@ function NewPlanScreen() {
                 : payload.kind === "selection"
                   ? { selection: { audiences: payload.audiences, purposes: payload.purposes } }
                   : { update: payload.patch },
+              setStreamingText,
             );
+
+      // 흘려보내던 글자를 지우고 완성된 말풍선에 자리를 넘긴다.
+      // 둘 다 같은 문장이라 화면에서는 이어져 보인다
+      setStreamingText(null);
 
       if (payload.kind === "init" && typeof data.planId === "string") setPlanId(data.planId);
       if (typeof data.reply === "string") {
@@ -172,6 +243,7 @@ function NewPlanScreen() {
       setIsMock(Boolean(data.isMock));
       setChatMode(false); // 응답이 오면 액션 바로 되돌린다
     } catch {
+      setStreamingText(null); // 실패했으면 만들다 만 글자를 남기지 않는다
       if (payload.kind === "resume") {
         // 초안이 더 이상 유효하지 않다(확정됨·삭제됨) — 조용히 비우고 새로 시작
         clearDraft();
@@ -365,6 +437,15 @@ function NewPlanScreen() {
                     showAvatar={m.role === "assistant" && messages[i - 1]?.role !== "assistant"}
                   />
                 ),
+              )}
+
+              {/* 만들어지는 중인 답 — 다 오면 위 목록의 진짜 말풍선이 자리를 넘겨받는다 */}
+              {streamingText !== null && (
+                <AIChatBubble
+                  role="assistant"
+                  text={streamingText}
+                  showAvatar={messages[messages.length - 1]?.role !== "assistant"}
+                />
               )}
 
               {/* ① 주제 후보 — 열린 질문 금지 (IA 2.1-①).

@@ -2,7 +2,13 @@ import "server-only";
 
 import Anthropic from "@anthropic-ai/sdk";
 import { AUDIENCES, AUDIENCE_DEFAULT, audiencePrompt } from "@/lib/audiences";
-import type { CardDraft, PlanningAI, PlanProposal, PlanTurnResult } from "./types";
+import type {
+  CardDraft,
+  OnText,
+  PlanningAI,
+  PlanProposal,
+  PlanTurnResult,
+} from "./types";
 
 /**
  * Anthropic Claude 실구현 (PLAN.md §9).
@@ -60,7 +66,58 @@ type CallOptions = {
   user: string;
   schema: Record<string, unknown>;
   effort: typeof EFFORT_TURN | typeof EFFORT_CARD;
+  /** 있으면 reply를 만들어지는 대로 흘려보낸다 */
+  onText?: OnText;
 };
+
+/**
+ * 아직 끝나지 않은 JSON에서 `reply` 문자열만 뽑아낸다.
+ *
+ * 스트리밍으로 오는 건 `{"reply":"안녕하` 같은 **깨진 JSON**이라 `JSON.parse`가 안 된다.
+ * 모든 스키마가 `reply`를 첫 속성으로 두어 가장 먼저 흘러나오게 해뒀다.
+ *
+ * 못 찾으면 null — 그때는 스트리밍만 포기하고 완성본을 기다린다.
+ * 이 함수가 틀려도 최종 결과는 `JSON.parse`가 따로 만든다.
+ */
+function extractPartialReply(buffer: string): string | null {
+  const at = buffer.indexOf('"reply"');
+  if (at < 0) return null;
+
+  // "reply" 다음의 콜론·공백을 건너뛰고 여는 따옴표를 찾는다
+  let i = at + '"reply"'.length;
+  while (i < buffer.length && buffer[i] !== '"') {
+    if (!":  \n\r\t".includes(buffer[i])) return null; // 예상 못 한 모양
+    i++;
+  }
+  if (i >= buffer.length) return null;
+  i++;
+
+  const ESCAPES: Record<string, string> = {
+    n: "\n", t: "\t", r: "\r", b: "\b", f: "\f", '"': '"', "\\": "\\", "/": "/",
+  };
+
+  let out = "";
+  while (i < buffer.length) {
+    const c = buffer[i];
+    if (c === '"') return out; // 문자열이 끝났다
+    if (c !== "\\") {
+      out += c;
+      i++;
+      continue;
+    }
+    const next = buffer[i + 1];
+    if (next === undefined) break; // 이스케이프가 잘렸다 — 다음 조각을 기다린다
+    if (next === "u") {
+      if (i + 5 >= buffer.length) break;
+      out += String.fromCharCode(parseInt(buffer.slice(i + 2, i + 6), 16));
+      i += 6;
+      continue;
+    }
+    out += ESCAPES[next] ?? next;
+    i += 2;
+  }
+  return out; // 아직 오는 중
+}
 
 /** 다시 시도해봐야 같은 결과인 실패 — 재시도 루프를 그냥 통과시킨다 */
 class NonRetryableError extends Error {}
@@ -73,12 +130,12 @@ class NonRetryableError extends Error {}
  *
  * 재시도해도 소용없는 셋은 즉시 던진다: 요청 형식 오류·인증 실패·안전 거부.
  */
-async function callJson<T>({ system, user, schema, effort }: CallOptions): Promise<T> {
+async function callJson<T>({ system, user, schema, effort, onText }: CallOptions): Promise<T> {
   let lastError: unknown;
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const response = await getClient().messages.create({
+      const stream = getClient().messages.stream({
         model: MODEL,
         max_tokens: MAX_TOKENS,
         system,
@@ -89,6 +146,22 @@ async function callJson<T>({ system, user, schema, effort }: CallOptions): Promi
           format: { type: "json_schema", schema },
         },
       });
+
+      if (onText) {
+        // 재시도로 두 번째 호출이 되면 앞서 흘려보낸 글자와 겹친다.
+        // 그래서 «지금까지 보낸 길이»를 시도마다 새로 센다
+        let buffer = "";
+        let sent = 0;
+        stream.on("text", (delta) => {
+          buffer += delta;
+          const reply = extractPartialReply(buffer);
+          if (reply === null || reply.length <= sent) return;
+          onText(reply.slice(sent));
+          sent = reply.length;
+        });
+      }
+
+      const response = await stream.finalMessage();
 
       if (response.stop_reason === "refusal") {
         throw new NonRetryableError("AI가 이 요청에는 답하지 않았어요. 다른 주제로 해볼까요?");
@@ -157,7 +230,7 @@ const DEFAULT_AUDIENCE_LABEL =
   AUDIENCES.find((a) => a.id === AUDIENCE_DEFAULT)?.label ?? AUDIENCES[0].label;
 
 export const claudePlanningAI: PlanningAI = {
-  async greeting(ctx): Promise<PlanTurnResult> {
+  async greeting(ctx, onText): Promise<PlanTurnResult> {
     const result = await callJson<{ reply: string; topicSuggestions: string[] }>({
       system: BASE_SYSTEM + contextBlock(ctx),
       user: [
@@ -174,6 +247,7 @@ export const claudePlanningAI: PlanningAI = {
       ].join("\n"),
       schema: GREETING_SCHEMA,
       effort: EFFORT_TURN,
+      onText,
     });
 
     /*
@@ -188,7 +262,7 @@ export const claudePlanningAI: PlanningAI = {
     return { reply: result.reply, topicSuggestions };
   },
 
-  async ideaTurn(idea, ctx): Promise<PlanTurnResult> {
+  async ideaTurn(idea, ctx, onText): Promise<PlanTurnResult> {
     const result = await callJson<{ reply: string; topic: string }>({
       system: BASE_SYSTEM + contextBlock(ctx),
       user: [
@@ -203,6 +277,7 @@ export const claudePlanningAI: PlanningAI = {
       ].join("\n"),
       schema: IDEA_SCHEMA,
       effort: EFFORT_TURN,
+      onText,
     });
 
     return {
@@ -212,7 +287,7 @@ export const claudePlanningAI: PlanningAI = {
     };
   },
 
-  async selectionTurn(topic, selected, ctx): Promise<PlanTurnResult> {
+  async selectionTurn(topic, selected, ctx, onText): Promise<PlanTurnResult> {
     // 안 고르면 AI가 정한다 (IA 2.1-②) — 빈 배열을 그대로 넘기지 않고 여기서 메운다
     const autoPicked = selected.audiences.length === 0;
     const audiences = autoPicked ? [DEFAULT_AUDIENCE_LABEL] : selected.audiences;
@@ -242,6 +317,7 @@ export const claudePlanningAI: PlanningAI = {
         .join("\n"),
       schema: SELECTION_SCHEMA,
       effort: EFFORT_TURN,
+      onText,
     });
 
     // 목적은 1~3개. 스키마로 못 정해서 여기서 자른다 — 비면 화면에 빈 자리가 남는다
