@@ -1,7 +1,7 @@
 import type { LayoutId } from "../../types/card";
 import { applyBrand, resolveTheme, type Theme } from "./themes";
 import type { Brand } from "../../types/user";
-import type { SlotStyle } from "../../types/card";
+import type { SlideElement, SlotStyle } from "../../types/card";
 import {
   DEFAULT_SLOT_STYLE,
   SIZE_SCALE,
@@ -31,6 +31,10 @@ export type SlideContent = {
   brand?: Brand | null;
   /** 슬롯별 글자 조절 (08-31). 없는 슬롯은 레이아웃·테마 그대로 */
   styleOverrides?: Record<string, SlotStyle>;
+  /**
+   * 자유 배치 요소 (08-31 · 편집기). **있으면 레이아웃 대신 이걸로 그린다.**
+   */
+  elements?: SlideElement[];
   /** 레이아웃별 텍스트 슬롯. @TODO: 슬롯 키는 시안 확정 시 재정의 (아래 통상값) */
   texts: Record<string, string>;
   /** @TODO: 골격 단계에서는 data URI만 지원. 원격 URL 페치는 render API에서 처리 */
@@ -334,12 +338,82 @@ function closing(ctx: Ctx, t: Record<string, string>): Node {
   ]);
 }
 
+/* ── 자유 배치 ────────────────────────────────────────────── */
+
+/**
+ * 좌표를 가진 요소들을 그린다 (08-31 · 편집기).
+ *
+ * 레이아웃(flexbox 자동 배치)과 달리 **요소마다 절대 좌표**를 쓴다.
+ * 좌표는 0~1 비율이라 캔버스 크기가 바뀌어도 같은 값을 쓴다 —
+ * 편집 화면(작게)과 산출물(1080)이 같은 데이터를 본다.
+ *
+ * 글자 크기는 상자 높이에서 뽑는다. 상자를 키우면 글자가 커지는 게
+ * 직관에 맞고, 크기를 따로 저장하지 않아도 된다.
+ */
+function freeform(ctx: Ctx, elements: SlideElement[]): Node {
+  const { th } = ctx;
+  const sorted = [...elements].sort((a, b) => a.z - b.z);
+
+  return el(
+    "div",
+    {
+      width: "100%",
+      height: "100%",
+      display: "flex",
+      position: "relative",
+      backgroundColor: th.color.bg,
+      color: th.color.ink,
+    },
+    sorted.map((e) => {
+      const box = {
+        position: "absolute",
+        left: `${e.x * 100}%`,
+        top: `${e.y * 100}%`,
+        width: `${e.w * 100}%`,
+        height: `${e.h * 100}%`,
+        display: "flex",
+      } as Record<string, unknown>;
+
+      if (e.kind === "image") {
+        return imageArea(th, e.imageUrl ?? null, { ...box, objectFit: "cover" });
+      }
+
+      const o = { ...DEFAULT_SLOT_STYLE, ...(e.style ?? {}) };
+      const color =
+        o.color === "accent" ? th.color.accent : o.color === "sub" ? th.color.sub : th.color.ink;
+      const JUSTIFY = { left: "flex-start", center: "center", right: "flex-end" } as const;
+
+      return el(
+        "div",
+        {
+          ...box,
+          alignItems: "flex-start",
+          justifyContent: JUSTIFY[o.align],
+          // 상자 높이에 비례한 글자 크기 — 상자를 키우면 글자가 커진다
+          fontSize: Math.round(SLIDE_SIZE * e.h * 0.42 * SIZE_SCALE[o.size]),
+          fontWeight: o.weight === "bold" ? 700 : 400,
+          letterSpacing: th.type.tracking + TRACKING_DELTA[o.tracking],
+          lineHeight: 1.3,
+          color,
+          textAlign: o.align,
+        },
+        e.text ?? "",
+      );
+    }),
+  );
+}
+
 /* ── 진입점 ──────────────────────────────────────────────── */
 
 export function buildLayout(content: SlideContent): Node {
   const { layoutId, texts, imageUrl } = content;
   const th = applyBrand(resolveTheme(content.themeId), content.brand);
   const ctx: Ctx = { th, ov: content.styleOverrides ?? {} };
+
+  // 자유 배치로 전환한 슬라이드는 레이아웃을 거치지 않는다 (08-31)
+  if (content.elements && content.elements.length > 0) {
+    return freeform(ctx, content.elements);
+  }
 
   switch (layoutId) {
     case "cover":

@@ -11,7 +11,8 @@ import {
   remapTexts,
 } from "@/lib/slide-layout";
 import { parseSlotStyle } from "@/lib/slot-style";
-import type { LayoutId, SlotStyle } from "@/types";
+import { clampElement } from "@/lib/free-layout";
+import type { LayoutId, SlideElement, SlotStyle } from "@/types";
 
 /**
  * PATCH /api/cards/[cardId]/content — 제작 결과 수정 (캡션 · 슬라이드 문구).
@@ -129,7 +130,59 @@ type SlideEdit = {
   texts?: Record<string, string>;
   layoutId?: LayoutId;
   styleOverrides?: Record<string, SlotStyle>;
+  /** null이면 «자유 배치 끄기» — 레이아웃으로 돌아간다 */
+  elements?: SlideElement[] | null;
 };
+
+/** 한 슬라이드가 가질 수 있는 요소 수 상한 — 문서 크기 방어 */
+const MAX_ELEMENTS = 30;
+
+/**
+ * 자유 배치 요소 검증 (08-31 · 편집기).
+ *
+ * 좌표는 **0~1을 벗어나면 바로잡는다**(`clampElement`) — 화면 밖으로 나간 요소는
+ * 사용자가 다시 잡을 수 없어서, 거절하기보다 끌어들이는 편이 낫다.
+ * 반면 형식이 틀린 요소는 거절한다 — 그리다가 깨지는 것보다 낫다.
+ */
+function parseElements(raw: unknown): SlideElement[] | null {
+  if (!Array.isArray(raw) || raw.length > MAX_ELEMENTS) return null;
+
+  const out: SlideElement[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null) return null;
+    const e = item as Record<string, unknown>;
+
+    if (typeof e.id !== "string" || !e.id || e.id.length > 40 || seen.has(e.id)) return null;
+    seen.add(e.id);
+    if (e.kind !== "text" && e.kind !== "image") return null;
+    const nums = [e.x, e.y, e.w, e.h, e.z];
+    if (!nums.every((n) => typeof n === "number" && Number.isFinite(n))) return null;
+
+    const base: SlideElement = clampElement({
+      id: e.id,
+      kind: e.kind,
+      x: e.x as number,
+      y: e.y as number,
+      w: e.w as number,
+      h: e.h as number,
+      z: Math.round(e.z as number),
+    });
+
+    if (e.kind === "text") {
+      if (!isShortText(e.text)) return null;
+      base.text = e.text;
+      if (typeof e.slot === "string" && e.slot.length <= 20) base.slot = e.slot;
+      const st = parseSlotStyle(e.style);
+      if (st) base.style = st;
+    } else {
+      base.imageUrl = typeof e.imageUrl === "string" ? e.imageUrl : null;
+    }
+
+    out.push(base);
+  }
+  return out;
+}
 
 /** 빈 객체는 저장하지 않는다 — Firestore에 «조절 없음»을 굳이 적을 이유가 없다 */
 function withOverrides(ov: Record<string, SlotStyle> | undefined) {
@@ -150,7 +203,10 @@ function mergeSlideTexts(current: Slide[], raw: unknown): Slide[] | null {
   const edits = new Map<number, SlideEdit>();
   for (const item of raw) {
     if (typeof item !== "object" || item === null) return null;
-    const { order, texts, layoutId, styleOverrides } = item as Record<string, unknown>;
+    const { order, texts, layoutId, styleOverrides, elements } = item as Record<
+      string,
+      unknown
+    >;
     if (typeof order !== "number" || !current.some((s) => s.order === order)) return null;
 
     const edit: SlideEdit = {};
@@ -179,10 +235,21 @@ function mergeSlideTexts(current: Slide[], raw: unknown): Slide[] | null {
       edit.styleOverrides = parsed;
     }
 
+    if (elements !== undefined) {
+      if (elements === null) {
+        edit.elements = null; // 자유 배치 끄기
+      } else {
+        const parsed = parseElements(elements);
+        if (!parsed) return null;
+        edit.elements = parsed;
+      }
+    }
+
     if (
       edit.texts === undefined &&
       edit.layoutId === undefined &&
-      edit.styleOverrides === undefined
+      edit.styleOverrides === undefined &&
+      edit.elements === undefined
     ) {
       return null;
     }
@@ -202,12 +269,24 @@ function mergeSlideTexts(current: Slide[], raw: unknown): Slide[] | null {
     const overrides = edit.styleOverrides ?? slide.styleOverrides;
 
     if (edit.layoutId === undefined || edit.layoutId === slide.layoutId) {
-      // 옛 조절값을 떨어내고 새 것만 붙인다 — 안 그러면 지운 슬롯이 남는다
+      // 옛 조절값·요소를 떨어내고 새 것만 붙인다 — 안 그러면 지운 것이 남는다
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { styleOverrides: _drop, ...rest } = slide;
-      merged.push({ ...rest, texts, ...withOverrides(overrides) });
+      const { styleOverrides: _drop, elements: _drop2, ...rest } = slide;
+      const nextEls = edit.elements === undefined ? slide.elements : edit.elements;
+      merged.push({
+        ...rest,
+        texts,
+        ...withOverrides(overrides),
+        ...(nextEls && nextEls.length > 0 ? { elements: nextEls } : {}),
+      });
       continue;
     }
+
+    /*
+      레이아웃을 바꾸면 자유 배치는 버린다 (08-31).
+      좌표는 «그 레이아웃 위에서» 정한 것이라 다른 레이아웃으로 옮길 근거가 없다.
+      바꾼다는 건 배치를 새로 잡겠다는 뜻이기도 하다.
+    */
 
     // 사진이 없는데 사진 레이아웃 — 회색 빈 면이 된다 (DESIGN §12 폴백 사슬)
     if (IMAGE_LAYOUTS.includes(edit.layoutId) && !slide.imageUrl) return null;
@@ -219,7 +298,7 @@ function mergeSlideTexts(current: Slide[], raw: unknown): Slide[] | null {
     // 레이아웃이 바뀌면 조절값도 새 슬롯으로 따라간다 — 안 그러면 조절이 사라진다
     const movedOv = remapOverrides(slide.layoutId, edit.layoutId, texts, overrides);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { styleOverrides: _drop, ...rest } = slide;
+    const { styleOverrides: _drop, elements: _drop2, ...rest } = slide;
     merged.push({
       ...rest,
       layoutId: edit.layoutId,

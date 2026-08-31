@@ -14,6 +14,7 @@ export type {
   Caption,
   Slide,
   SlotStyle,
+  SlideElement,
   LayoutId,
   ThemeId,
   TemplateId,

@@ -89,6 +89,40 @@ export type Slide = {
    * 값의 뜻과 검증은 `lib/slot-style.ts`.
    */
   styleOverrides?: Record<string, SlotStyle>;
+  /**
+   * 자유 배치 요소 (08-31 · 편집기).
+   *
+   * **있으면 레이아웃 대신 이걸로 그린다.** 슬라이드마다 켤 수 있고,
+   * 끄면(이 필드를 지우면) 다시 `layoutId`가 정한 대로 돌아간다 —
+   * 레이아웃·테마·템플릿을 걷어내지 않으려는 것이다.
+   *
+   * 좌표는 **0~1 비율**이다. 캔버스가 1080이든 편집 화면이 320이든 같은 값을 쓴다.
+   */
+  elements?: SlideElement[];
+};
+
+/**
+ * 자유 배치 요소 하나.
+ *
+ * `slot`은 «원래 어느 줄이었는지»다. 문구 편집칸과 이어 두려고 남긴다 —
+ * 자유 배치로 바꿔도 「제목」이 뭔지는 알아야 한다.
+ */
+export type SlideElement = {
+  id: string;
+  kind: "text" | "image";
+  /** 0~1 비율. 왼쪽 위 기준 */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** 겹칠 때 순서. 클수록 위 */
+  z: number;
+  /** kind가 'text'일 때 */
+  text?: string;
+  slot?: string;
+  style?: SlotStyle;
+  /** kind가 'image'일 때. null이면 회색 면 */
+  imageUrl?: string | null;
 };
 
 /** 슬롯 하나의 조절값. 안 고른 항목은 없다 (undefined) */
