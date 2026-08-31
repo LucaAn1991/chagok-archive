@@ -55,6 +55,21 @@ export default function SlideEditor({
   const [draft, setDraft] = useState<SlideElement[] | null>(null);
   const dragRef = useRef<Drag | null>(null);
 
+  /**
+   * 끄는 중인 값을 ref로도 들고 있는다.
+   *
+   * 화면을 다시 그리려면 state가 필요하지만, **손을 뗄 때 저장하려면 그 값을
+   * 업데이터 «밖»에서 읽어야 한다.** `setDraft(prev => { onCommit(prev) ... })`처럼
+   * 업데이터 안에서 부모 상태를 바꾸면 React가 «렌더링 중에 다른 컴포넌트를
+   * 갱신했다»고 막는다 (08-31 실제로 터졌다).
+   */
+  const draftRef = useRef<SlideElement[] | null>(null);
+
+  const applyDraft = useCallback((next: SlideElement[] | null) => {
+    draftRef.current = next;
+    setDraft(next);
+  }, []);
+
   // 끄는 동안에는 draft를 보여주고, 놓으면 부모가 준 값으로 돌아간다
   const shown = draft ?? elements;
 
@@ -68,8 +83,8 @@ export default function SlideEditor({
     const dx = (e.clientX - d.startX) / rect.width;
     const dy = (e.clientY - d.startY) / rect.height;
 
-    setDraft((prev) =>
-      (prev ?? []).map((el) => {
+    applyDraft(
+      (draftRef.current ?? []).map((el) => {
         if (el.id !== d.id) return el;
         return clampElement(
           d.mode === "move"
@@ -78,18 +93,19 @@ export default function SlideEditor({
         );
       }),
     );
-  }, []);
+  }, [applyDraft]);
 
   const onPointerUp = useCallback(() => {
     const d = dragRef.current;
     dragRef.current = null;
     if (!d) return;
-    setDraft((prev) => {
-      // 놓는 순간에만 저장한다 — 여기서 부모가 다시 그린다
-      if (prev) onCommit(prev);
-      return null;
-    });
-  }, [onCommit]);
+
+    // 값을 먼저 읽고 초안을 비운 뒤에 저장한다 — 순서가 바뀌면 렌더링 중 갱신이 된다
+    const next = draftRef.current;
+    applyDraft(null);
+    // 놓는 순간에만 저장한다 — 여기서 부모가 다시 그린다
+    if (next) onCommit(next);
+  }, [applyDraft, onCommit]);
 
   useEffect(() => {
     window.addEventListener("pointermove", onPointerMove);
@@ -108,7 +124,7 @@ export default function SlideEditor({
     e.stopPropagation();
     onSelect(el.id);
     dragRef.current = { id: el.id, mode, startX: e.clientX, startY: e.clientY, origin: el };
-    setDraft(elements);
+    applyDraft(elements);
   }
 
   /** 키보드로도 옮길 수 있어야 한다 — 손이 떨리거나 마우스가 없을 수 있다 */
