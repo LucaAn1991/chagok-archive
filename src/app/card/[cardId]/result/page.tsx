@@ -308,7 +308,16 @@ export default function CardResultPage() {
           </div>
         ) : (
           <>
-            <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2">
+            {/*
+              선택 강조가 `outline-offset`으로 **요소 바깥에** 그려지는데
+              이 줄은 `overflow-x-auto`라 그 바깥이 잘린다.
+
+              `-m-1 p-1` — 안쪽에 4px을 벌어두고 같은 값만큼 바깥으로 당겨
+                **자리는 그대로 두면서** 테두리가 들어갈 틈을 만든다.
+              `scroll-p-1` — 이게 없으면 `snap-start`가 패딩을 무시하고 요소를
+                스크롤 시작점에 딱 붙여, 방금 만든 왼쪽 틈이 화면 밖으로 밀려난다.
+            */}
+            <div className="-m-1 flex snap-x snap-mandatory scroll-p-1 gap-4 overflow-x-auto p-1 pb-3">
               {(phase === "ready" && card ? card.slides : []).map((slide, i) =>
                 slideUrls[i] ? (
                   <button

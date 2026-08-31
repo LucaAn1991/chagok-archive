@@ -284,9 +284,7 @@ function GradientFrame({ children }: { children: React.ReactNode }) {
 */
 /** 사진 상태 — 페이지가 들고 있고 카드가 표시한다 */
 export type PlanPhotos = {
-  selectedStockId: string | null;
   userPhotos: string[];
-  onSelectStock: (id: string) => void;
   onAddUserPhotos: (files: FileList) => void;
   onRemoveUserPhoto: (url: string) => void;
 };

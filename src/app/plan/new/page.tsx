@@ -17,7 +17,6 @@ import PlanningSummaryPanel, {
   type PlanSummary,
   type PlanSummaryPatch,
 } from "@/components/PlanningSummaryPanel";
-import { STOCK_SUGGESTIONS } from "@/components/PlanPhotoPicker";
 import PlanTabs from "@/components/PlanTabs";
 
 /**
@@ -174,14 +173,9 @@ function NewPlanScreen() {
 
   /*
     사진 — 올린 사진은 기획에 저장되고, 카드 생성 때 주소를 물려준다 (08-31).
-
-    «추천» 칩은 아직 자리표시용 SVG다. 스톡은 **제작 단계에서** 슬라이드 내용을
-    보고 고르는 쪽이 훨씬 잘 맞아 그렇게 뒀다 (`lib/ai/slides.ts` · 08-31 확정).
-    @TODO: 추천 칩을 지울지, 실물로 채울지 결정 필요 (PLAN §12)
+    스톡 추천 칩은 제거했다 — 스톡은 제작 단계에서 슬라이드 내용을 보고 고른다
+    (`lib/ai/slides.ts` · `components/PlanPhotoPicker.tsx` 주석 참조).
   */
-  const [selectedStockId, setSelectedStockId] = useState<string | null>(
-    STOCK_SUGGESTIONS[0].id,
-  );
   const [userPhotos, setUserPhotos] = useState<string[]>([]);
 
   // 입력창이 주인공 — 칩은 입력창을 채울 뿐, 전송은 사용자가 한다 (08-28)
@@ -468,9 +462,7 @@ function NewPlanScreen() {
     continueHref: planId ? `/plan/new?from=${planId}` : undefined,
     showPhotos: ready, // 기획이 정리된 뒤에 사진을 고른다 — 순서를 앞지르지 않는다
     photos: {
-      selectedStockId,
       userPhotos,
-      onSelectStock: setSelectedStockId,
       onAddUserPhotos: uploadPhotos,
       onRemoveUserPhoto: removePhoto,
     },
