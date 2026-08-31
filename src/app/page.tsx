@@ -21,8 +21,7 @@ import MobileBottomNav from "@/components/MobileBottomNav";
 import FeaturedContentCard from "@/components/FeaturedContentCard";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
-import { audienceLine, formatMonthDayWeekday } from "@/lib/format";
-import { contentTypeForAudience } from "@/lib/audiences";
+import { formatMonthDayWeekday } from "@/lib/format";
 import type { Card } from "@/types";
 
 /**
@@ -446,14 +445,15 @@ function groupByDate(cards: Card[]): { dateKey: string; cards: Card[] }[] {
   return groups;
 }
 
-/** 카드 한 행 — 제목 한 줄(말줄임) + 대상·유형 아랫줄 (한 줄에 병기하지 않는다) */
+/**
+ * 카드 한 행 — 제목 한 줄만 (08-31 확정). 부제 줄 없음, 넘치면 말줄임.
+ * 옛 데이터의 «— …» 꼬리는 표시에서 잘라낸다 (새 카드는 생성 단계에서 안 붙는다)
+ */
 function CardRow({ card }: { card: Card }) {
+  const title = card.title.split(" — ")[0];
   return (
     <Link href={`/card/${card.id}`} className="block min-w-0 py-0.5">
-      <span className="block truncate text-body text-ink">{card.title}</span>
-      <span className="block truncate text-caption text-sub">
-        {audienceLine(card.audience)} · {contentTypeForAudience(card.audience)}
-      </span>
+      <span className="block truncate text-body text-ink">{title}</span>
     </Link>
   );
 }
@@ -472,7 +472,7 @@ function DateGroupedList({ cards, todayKey }: { cards: Card[]; todayKey: string 
           >
             {shortDateLabel(group.dateKey)}
           </span>
-          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             {group.cards.map((card) => (
               <CardRow key={card.id} card={card} />
             ))}

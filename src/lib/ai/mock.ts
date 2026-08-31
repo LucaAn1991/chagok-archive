@@ -133,8 +133,8 @@ export const mockPlanningAI: PlanningAI = {
       seeker: "정보",
     };
     return {
-      // 표기 규칙 — label을 변형하지 않고 조사는 「에게」 하나만 (08-28)
-      title: `${topic} — ${audience}에게`,
+      // 제목은 주제 값만 (08-31 확정) — «— …에게» 꼬리를 붙이지 않는다. 대상은 card.audience로
+      title: topic,
       shortTitle: `${short}·${meta ? suffix[meta.id] : "이야기"}`,
       audience,
       // 기본 3종·커스텀 대상 모두 audiencePrompt 한 경로 — 커스텀도 지시 없이 만들지 않는다 (08-28)
