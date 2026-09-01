@@ -8,6 +8,7 @@ import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import BrandPanel from "@/components/BrandPanel";
+import GoogleAuthButton from "@/components/GoogleAuthButton";
 import PasswordInput from "@/components/PasswordInput";
 import InlineAlert from "@/components/InlineAlert";
 
@@ -213,6 +214,16 @@ export default function SignupPage() {
               {submitting ? "···" : "가입하기"}
             </button>
           </form>
+
+          {/* Google로 가입 (09-01) — 로그인과 같은 버튼, 약관 동의는 서비스 이용 시작으로 갈음 */}
+          <div className="mt-6 flex items-center gap-3">
+            <span aria-hidden className="h-px flex-1 bg-line" />
+            <span className="text-caption text-sub">또는</span>
+            <span aria-hidden className="h-px flex-1 bg-line" />
+          </div>
+          <div className="mt-4">
+            <GoogleAuthButton onError={setError} />
+          </div>
 
           {/* 로그인 경로 — secondary 버튼 (DESIGN.md §6: 흰 배경 · 2px berry · 높이 44) */}
           <div className="mt-8 border-t border-line pt-6">

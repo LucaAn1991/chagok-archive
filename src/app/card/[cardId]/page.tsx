@@ -69,30 +69,34 @@ export default function CardDetailPage() {
         setCard(data);
         setDateDraft(data.scheduledDate);
 
-        // 슬라이드 이미지 — 제작 결과 페이지와 같은 즉석 렌더 API, 순서대로 공개
-        if (data.slides?.length) {
-          const token = await user.getIdToken();
-          for (let order = 0; order < data.slides.length; order++) {
-            try {
-              const res = await fetch(`/api/cards/${cardId}/slides/${order}/image`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (!res.ok) throw new Error();
-              const url = URL.createObjectURL(await res.blob());
-              setSlideUrls((prev) => [...prev, url]);
-            } catch {
-              setSlideError(true);
-              break;
-            }
-          }
-        }
-
         // 원 기획 세션이 있어야만 출처 링크를 보여준다
         if (data.planId) {
           const planSnap = await getDoc(doc(db, "plans", data.planId)).catch(() => null);
           setPlanExists(Boolean(planSnap?.exists()));
         }
         setPhase("ready");
+
+        /*
+          슬라이드 이미지는 페이지를 막지 않는다 (08-31 버그 수정) — 8장 렌더를
+          기다리느라 상세가 스켈레톤에 갇혔었다. 화면 먼저, 이미지는 뒤에서 채운다.
+        */
+        if (data.slides?.length) {
+          void (async () => {
+            try {
+              const token = await user.getIdToken();
+              for (let order = 0; order < data.slides.length; order++) {
+                const res = await fetch(`/api/cards/${cardId}/slides/${order}/image`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!res.ok) throw new Error();
+                const url = URL.createObjectURL(await res.blob());
+                setSlideUrls((prev) => [...prev, url]);
+              }
+            } catch {
+              setSlideError(true);
+            }
+          })();
+        }
       } catch {
         setPhase("error");
       }
@@ -189,19 +193,20 @@ export default function CardDetailPage() {
       </header>
 
       {/* 기획 정보 — 라벨·값 한 줄씩, 압축형 (08-31). 기획의도는 상세에서만 노출 */}
+      {/* 세 줄 모두 같은 높이(min-h-9)·중앙 정렬 — 예정일 입력 때문에 줄이 틀어지지 않게 (09-01) */}
       <section
         aria-label="기획 정보"
-        className="flex flex-col gap-2.5 rounded-lg border border-line bg-surface p-4"
+        className="flex flex-col gap-1.5 rounded-lg border border-line bg-surface p-4"
       >
-        <div className="flex gap-3">
+        <div className="flex min-h-9 items-center gap-3">
           <span className="w-16 shrink-0 text-label font-semibold text-sub">대상</span>
           <p className="min-w-0 break-keep text-body text-ink">{card.audience}</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex min-h-9 items-center gap-3">
           <span className="w-16 shrink-0 text-label font-semibold text-sub">기획의도</span>
           <p className="min-w-0 break-keep text-body text-ink">{card.intent}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex min-h-9 items-center gap-3">
           <label htmlFor="scheduledDate" className="w-16 shrink-0 text-label font-semibold text-sub">
             예정일
           </label>
@@ -212,14 +217,14 @@ export default function CardDetailPage() {
               value={dateDraft}
               disabled={discarded}
               onChange={(e) => setDateDraft(e.target.value)}
-              className="h-9 rounded-md border border-line bg-surface px-3 text-body text-ink"
+              className="h-8 rounded-md border border-line bg-surface px-2.5 text-body text-ink"
             />
             {dateDraft !== card.scheduledDate && (
               <button
                 type="button"
                 onClick={saveScheduledDate}
                 disabled={savingDate}
-                className="h-9 rounded-md border-2 border-berry bg-surface px-3 text-body font-semibold text-berry disabled:border-line disabled:text-sub"
+                className="h-8 rounded-md border-2 border-berry bg-surface px-3 text-body font-semibold text-berry disabled:border-line disabled:text-sub"
               >
                 {savingDate ? "···" : "날짜 저장"}
               </button>
@@ -363,7 +368,7 @@ export default function CardDetailPage() {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="인스타그램 미리보기"
+          aria-labelledby="ig-preview-title"
           onClick={() => setPreviewIndex(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
         >
@@ -371,18 +376,25 @@ export default function CardDetailPage() {
             onClick={(e) => e.stopPropagation()}
             className="flex max-h-[92vh] w-full max-w-[400px] flex-col overflow-hidden rounded-xl bg-surface shadow-lg"
           >
-            {/* 상단 바 — 계정 자리 */}
-            <div className="flex items-center gap-2.5 px-3 py-2.5">
-              <span aria-hidden className="size-8 rounded-pill bg-berry-light" />
-              <span className="text-body font-semibold text-ink">내 계정</span>
+            {/* 제목 바 — 이게 뭘 하는 화면인지 먼저 (09-01) */}
+            <div className="flex items-center justify-between border-b border-line py-2 pl-4 pr-2">
+              <h2 id="ig-preview-title" className="text-body font-semibold text-ink">
+                업로드 미리보기
+              </h2>
               <button
                 type="button"
                 onClick={() => setPreviewIndex(null)}
                 aria-label="닫기"
-                className="ml-auto flex size-9 items-center justify-center rounded-md text-sub hover:bg-surface-muted"
+                className="flex size-9 items-center justify-center rounded-md text-sub hover:bg-surface-muted"
               >
                 <X size={18} aria-hidden />
               </button>
+            </div>
+
+            {/* 계정 줄 — 인스타 구성 재현 */}
+            <div className="flex items-center gap-2.5 px-3 py-2.5">
+              <span aria-hidden className="size-8 rounded-pill bg-berry-light" />
+              <span className="text-body font-semibold text-ink">내 계정</span>
             </div>
 
             {/* 사진 — 한 장씩, 좌우로 넘긴다 */}

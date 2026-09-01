@@ -8,6 +8,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import BrandPanel from "@/components/BrandPanel";
+import GoogleAuthButton from "@/components/GoogleAuthButton";
 import PasswordInput from "@/components/PasswordInput";
 import InlineAlert from "@/components/InlineAlert";
 
@@ -139,6 +140,16 @@ export default function LoginPage() {
               비밀번호를 잊으셨나요?
             </Link>
           </p>
+
+          {/* Google 로그인 (09-01) — 가입·로그인 겸용 */}
+          <div className="mt-6 flex items-center gap-3">
+            <span aria-hidden className="h-px flex-1 bg-line" />
+            <span className="text-caption text-sub">또는</span>
+            <span aria-hidden className="h-px flex-1 bg-line" />
+          </div>
+          <div className="mt-4">
+            <GoogleAuthButton onError={setError} />
+          </div>
 
           {/* 가입 경로 — secondary 버튼 (DESIGN.md §6: 흰 배경 · 2px berry · 높이 44) */}
           <div className="mt-8 border-t border-line pt-6">

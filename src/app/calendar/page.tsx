@@ -259,7 +259,8 @@ function CalendarView({ uid }: { uid: string }) {
 
   function goToday() {
     setSelectedDate(todayKey);
-    setExpandedWeekKey(null);
+    // 오늘로 점프하면서 그 주를 바로 펼친다 — 오늘 할 일이 목적이므로 (09-01)
+    setExpandedWeekKey(weekDates(todayKey)[0]);
     if (anchor !== todayKey) {
       setAnchor(todayKey);
       setState({ phase: "loading" });
