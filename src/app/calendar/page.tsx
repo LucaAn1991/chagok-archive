@@ -38,7 +38,7 @@ import type { Card, CardStatus } from "@/types";
  * 예정일 변경은 카드 상세와 같은 updateDoc — 규칙이 클라이언트 쓰기를 허용한다.
  */
 
-type CalView = "month" | "week";
+type CalView = "month" | "week" | "list";
 
 /** 로컬 기준 'YYYY-MM-DD' (홈과 동일) */
 function toDateKey(date: Date): string {
@@ -63,15 +63,25 @@ const STATUS_COLOR: Record<CardStatus, string> = {
   discarded: "var(--st-discarded)",
 };
 
-/** 해당 월의 캘린더 격자 — 앞뒤 빈칸(null) 포함, 일요일 시작 */
+/**
+ * 해당 월의 캘린더 격자 — 일요일 시작. 앞뒤 빈칸을 비우지 않고 **인접 달의
+ * 실제 날짜**로 채운다 (09-01) — 월초에 «어제(전달)»로 드래그할 수 없던 공백 해소.
+ * 다른 달 칸은 흐리게 그리되 선택·드롭은 똑같이 받는다.
+ */
 function monthGrid(year: number, month: number): (string | null)[] {
   const first = new Date(year, month, 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const cells: (string | null)[] = Array(first.getDay()).fill(null);
+  const cells: (string | null)[] = [];
+  for (let i = first.getDay(); i > 0; i--) {
+    cells.push(toDateKey(new Date(year, month, 1 - i)));
+  }
   for (let d = 1; d <= daysInMonth; d++) {
     cells.push(toDateKey(new Date(year, month, d)));
   }
-  while (cells.length % 7 !== 0) cells.push(null);
+  let next = 1;
+  while (cells.length % 7 !== 0) {
+    cells.push(toDateKey(new Date(year, month + 1, next++)));
+  }
   return cells;
 }
 
@@ -88,10 +98,9 @@ function weekDates(anchorKey: string): string[] {
 function rangeFor(view: CalView, anchorKey: string): { start: string; end: string } {
   if (view === "month") {
     const d = parseDateKey(anchorKey);
-    return {
-      start: toDateKey(new Date(d.getFullYear(), d.getMonth(), 1)),
-      end: toDateKey(new Date(d.getFullYear(), d.getMonth() + 1, 0)),
-    };
+    const grid = monthGrid(d.getFullYear(), d.getMonth());
+    // 격자에 보이는 전 기간 — 인접 달 칸의 카드도 실제로 보여야 드래그 판단이 된다
+    return { start: grid[0] as string, end: grid[grid.length - 1] as string };
   }
   const week = weekDates(anchorKey);
   return { start: week[0], end: week[6] };
@@ -202,18 +211,26 @@ function CalendarView({ uid }: { uid: string }) {
         }
         setUploadDays((userSnap.data().uploadDays as number[] | undefined) ?? null);
 
-        const { start, end } = rangeFor(view, anchor);
         const cardsRef = collection(db, "cards");
 
-        const rangeSnap = await getDocs(
-          query(
-            cardsRef,
-            where("userId", "==", uid),
-            where("scheduledDate", ">=", start),
-            where("scheduledDate", "<=", end),
-            orderBy("scheduledDate", "asc"),
-          ),
-        );
+        // 목록보기는 전체 기간, 월간·주간은 보이는 범위만 (09-01)
+        const rangeSnap =
+          view === "list"
+            ? await getDocs(
+                query(cardsRef, where("userId", "==", uid), orderBy("scheduledDate", "asc")),
+              )
+            : await (() => {
+                const { start, end } = rangeFor(view, anchor);
+                return getDocs(
+                  query(
+                    cardsRef,
+                    where("userId", "==", uid),
+                    where("scheduledDate", ">=", start),
+                    where("scheduledDate", "<=", end),
+                    orderBy("scheduledDate", "asc"),
+                  ),
+                );
+              })();
         const cards = rangeSnap.docs
           .map((d) => normalizeCard(d.data() as Omit<Card, "id">, d.id))
           .filter((c) => c.status !== "discarded");
@@ -298,6 +315,8 @@ function CalendarView({ uid }: { uid: string }) {
       await updateDoc(doc(db, "cards", cardId), { scheduledDate: dateKey });
       setNotice("일정이 변경됐어요."); // Toast 문구 — DESIGN §13
       setTimeout(() => setNotice(null), 3000);
+      // 놓친 카드 수가 바뀔 수 있다 — 조용히 재조회 (loading 없이, 09-01)
+      setReloadKey((k) => k + 1);
     } catch {
       setState({ phase: "ready", cards: prev, overdueCount: state.overdueCount });
       setNotice("일정을 옮기지 못했어요. 잠시 후 다시 시도해주세요.");
@@ -333,6 +352,7 @@ function CalendarView({ uid }: { uid: string }) {
       );
       setNotice("발행 완료로 기록했어요.");
       setTimeout(() => setNotice(null), 3000);
+      setReloadKey((k) => k + 1); // 배지 즉시 갱신
     } catch {
       setNotice("저장하지 못했어요. 잠시 후 다시 시도해주세요.");
       setTimeout(() => setNotice(null), 3000);
@@ -340,19 +360,38 @@ function CalendarView({ uid }: { uid: string }) {
   }
 
   const anchorDate = parseDateKey(anchor);
+  const anchorMonth = anchor.slice(0, 7);
+  // 요약 헤더 집계용 — 월간에서는 격자에 보이는 인접 달 카드를 빼고 이 달만 센다
+  const scopedCards =
+    state.phase === "ready"
+      ? view === "month"
+        ? state.cards.filter((c) => c.scheduledDate.slice(0, 7) === anchorMonth)
+        : state.cards
+      : [];
   const cells =
-    view === "month" ? monthGrid(anchorDate.getFullYear(), anchorDate.getMonth()) : weekDates(anchor);
-  const range = rangeFor(view, anchor);
+    view === "list"
+      ? []
+      : view === "month"
+        ? monthGrid(anchorDate.getFullYear(), anchorDate.getMonth())
+        : weekDates(anchor);
+  const range =
+    view === "list" ? { start: todayKey, end: todayKey } : rangeFor(view, anchor);
   // 목표 N개 — 보는 범위(월/주) 안의 업로드 요일 수. 예: 월수금 유저의 8월 = 그 달 월수금 일수
   const goalCount =
     uploadDays && uploadDays.length > 0
-      ? cells.filter((d): d is string => d !== null && isUploadDayOf(uploadDays, d) === true)
-          .length
+      ? cells.filter(
+          (d): d is string =>
+            d !== null &&
+            (view !== "month" || d.slice(0, 7) === anchor.slice(0, 7)) &&
+            isUploadDayOf(uploadDays, d) === true,
+        ).length
       : null;
   const title =
-    view === "month"
-      ? `${anchorDate.getFullYear()}년 ${anchorDate.getMonth() + 1}월`
-      : weekTitle(range.start, range.end);
+    view === "list"
+      ? "전체 콘텐츠"
+      : view === "month"
+        ? `${anchorDate.getFullYear()}년 ${anchorDate.getMonth() + 1}월`
+        : weekTitle(range.start, range.end);
 
   const byDate = new Map<string, Card[]>();
   if (state.phase === "ready") {
@@ -395,29 +434,33 @@ function CalendarView({ uid }: { uid: string }) {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => move(-1)}
-              aria-label={view === "month" ? "이전 달" : "이전 주"}
-              className="flex size-11 items-center justify-center rounded-md text-sub hover:bg-surface-muted"
-            >
-              <ChevronLeft size={20} aria-hidden />
-            </button>
+            {view !== "list" && (
+              <button
+                type="button"
+                onClick={() => move(-1)}
+                aria-label={view === "month" ? "이전 달" : "이전 주"}
+                className="flex size-11 items-center justify-center rounded-md text-sub hover:bg-surface-muted"
+              >
+                <ChevronLeft size={20} aria-hidden />
+              </button>
+            )}
             {/* 주간 제목이 길다 — 모바일에서는 한 단계 작게 */}
             <h1 className="text-center text-body font-bold text-ink md:min-w-[120px] md:text-title">
               {title}
             </h1>
-            <button
-              type="button"
-              onClick={() => move(1)}
-              aria-label={view === "month" ? "다음 달" : "다음 주"}
-              className="flex size-11 items-center justify-center rounded-md text-sub hover:bg-surface-muted"
-            >
-              <ChevronRight size={20} aria-hidden />
-            </button>
+            {view !== "list" && (
+              <button
+                type="button"
+                onClick={() => move(1)}
+                aria-label={view === "month" ? "다음 달" : "다음 주"}
+                className="flex size-11 items-center justify-center rounded-md text-sub hover:bg-surface-muted"
+              >
+                <ChevronRight size={20} aria-hidden />
+              </button>
+            )}
             {/* 월간/주간 — 밑줄 탭 (08-31 v6) */}
             <div className="ml-2 flex gap-5">
-              {(["month", "week"] as const).map((v) => (
+              {(["month", "week", "list"] as const).map((v) => (
                 <button
                   key={v}
                   type="button"
@@ -429,26 +472,28 @@ function CalendarView({ uid }: { uid: string }) {
                       : "text-sub hover:text-ink",
                   ].join(" ")}
                 >
-                  {v === "month" ? "월간" : "주간"}
+                  {v === "month" ? "월간" : v === "week" ? "주간" : "목록보기"}
                 </button>
               ))}
             </div>
 
             {/* 오늘 — 탭 오른쪽, 라운드는 한 단계 작게 (08-31 복원) */}
-            <button
-              type="button"
-              onClick={goToday}
-              className="ml-3 h-9 whitespace-nowrap rounded-sm border border-line bg-surface px-3 text-body text-ink hover:bg-surface-muted"
-            >
-              오늘
-            </button>
+            {view !== "list" && (
+              <button
+                type="button"
+                onClick={goToday}
+                className="ml-3 h-9 whitespace-nowrap rounded-sm border border-line bg-surface px-3 text-body text-ink hover:bg-surface-muted"
+              >
+                오늘
+              </button>
+            )}
           </div>
         </div>
 
         {state.phase === "ready" && state.overdueCount > 0 && (
           <Link
             href="/calendar/missed"
-            className="flex h-9 items-center gap-1.5 rounded-md border border-line bg-surface px-3 text-body text-ink hover:bg-surface-muted"
+            className="flex h-9 items-center gap-1.5 rounded-md border border-line bg-surface px-3 text-body text-ink hover:bg-surface-muted desktop:hidden"
           >
             놓친 카드
             <span className="rounded-pill bg-berry-light px-1.5 text-caption font-semibold text-berry-dark">
@@ -490,6 +535,9 @@ function CalendarView({ uid }: { uid: string }) {
 
       {state.phase === "ready" && (
         <>
+        {view === "list" ? (
+          <ListSection cards={state.cards} todayKey={todayKey} onPublish={openPublish} />
+        ) : (
         <div className="mt-4 flex gap-6">
           {/* 격자 영역 */}
           <div className="min-w-0 flex-1">
@@ -499,7 +547,7 @@ function CalendarView({ uid }: { uid: string }) {
               <div>
                 <h2 className="text-body-l font-semibold text-ink">
                   {view === "month"
-                    ? todayKey.slice(0, 7) === range.start.slice(0, 7)
+                    ? todayKey.slice(0, 7) === anchorMonth
                       ? "이번 달 콘텐츠"
                       : "이 달의 콘텐츠"
                     : todayKey >= range.start && todayKey <= range.end
@@ -509,7 +557,7 @@ function CalendarView({ uid }: { uid: string }) {
                 {/* 목표 대비 실제 발행 — 발행률이 우리 북극성 지표다 */}
                 <p className="mt-0.5 text-caption text-sub">
                   {goalCount != null ? `목표 ${goalCount}개 · ` : ""}
-                  {state.cards.filter((c) => c.status === "published").length}개 발행
+                  {scopedCards.filter((c) => c.status === "published").length}개 발행
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
@@ -537,7 +585,7 @@ function CalendarView({ uid }: { uid: string }) {
                     )}
                     {label}{" "}
                     <span className="font-medium">
-                      {state.cards.filter((c) => c.status === status).length}
+                      {scopedCards.filter((c) => c.status === status).length}
                     </span>
                   </span>
                 ))}
@@ -583,10 +631,12 @@ function CalendarView({ uid }: { uid: string }) {
                                   onDragStartCard={setDraggingId}
                                   onDropCard={(cardId) => handleDrop(cardId, dateKey)}
                                   showPlus={
+                                    dateKey.slice(0, 7) === anchorMonth &&
                                     (byDate.get(dateKey) ?? []).length === 0 &&
                                     dateKey >= todayKey &&
                                     isUploadDayOf(uploadDays, dateKey) === true
                                   }
+                                  muted={dateKey.slice(0, 7) !== anchorMonth}
                                 />
                               ),
                             )}
@@ -598,7 +648,7 @@ function CalendarView({ uid }: { uid: string }) {
                       <div key={`w-${wi}`}>
                         {/* 주 전체 tint는 선택 날짜를 묻히게 해서 제거 — 선택 컬럼만 칠한다 (08-31).
                             모바일(md 미만)은 펼치지 않는다 — 칸이 좁아 보드가 깨진다 */}
-                        <div className="hidden grid-cols-7 gap-2 rounded-lg p-1.5 md:grid">
+                        <div className="hidden grid-cols-7 gap-1 md:grid">
                           {week.map((dateKey, i) =>
                             dateKey === null ? (
                               <div key={`empty-${wi}-${i}`} />
@@ -656,7 +706,7 @@ function CalendarView({ uid }: { uid: string }) {
             ) : (
               <>
                 {/* Desktop/Tablet — 플래너 컬럼 */}
-                <div className="mt-3 hidden grid-cols-7 gap-2 md:grid">
+                <div className="mt-3 hidden grid-cols-7 gap-1 md:grid">
                   {(cells as string[]).map((dateKey) => (
                     <WeekColumn
                       key={dateKey}
@@ -772,6 +822,20 @@ function CalendarView({ uid }: { uid: string }) {
               view === "month" ? "mt-[92px]" : "mt-[88px]",
             ].join(" ")}
           >
+            {/* 놓친 카드 — 카드 상세 박스 바로 위, 오른쪽 라인 정렬 (09-01) */}
+            {state.overdueCount > 0 && (
+              <div className="mb-2 flex justify-end">
+                <Link
+                  href="/calendar/missed"
+                  className="flex h-9 items-center gap-1.5 rounded-md border border-line bg-surface px-3 text-body text-ink hover:bg-surface-muted"
+                >
+                  놓친 카드
+                  <span className="rounded-pill bg-berry-light px-1.5 text-caption font-semibold text-berry-dark">
+                    {state.overdueCount}
+                  </span>
+                </Link>
+              </div>
+            )}
             <DayPanel
               dateKey={selectedDate}
               cards={selectedCards}
@@ -781,6 +845,7 @@ function CalendarView({ uid }: { uid: string }) {
             />
           </aside>
         </div>
+        )}
         </>
       )}
 
@@ -886,7 +951,7 @@ function CalendarView({ uid }: { uid: string }) {
       {notice && (
         <div
           role="alert"
-          className="fixed bottom-20 left-1/2 -translate-x-1/2 rounded-md border border-line bg-surface px-4 py-2.5 text-body text-ink shadow-sm md:bottom-8"
+          className="fixed right-4 top-16 z-50 rounded-md bg-ink px-4 py-2.5 text-body text-white shadow-lg md:right-8 md:top-20"
         >
           {notice}
         </div>
@@ -909,6 +974,7 @@ function DayCell({
   onDragStartCard,
   onDropCard,
   showPlus,
+  muted,
 }: {
   dateKey: string;
   cards: Card[];
@@ -920,6 +986,8 @@ function DayCell({
   onDropCard: (cardId: string) => void;
   /** 업로드 요일인데 비어 있는 미래 날 — «채울 수 있어요» 표시 (08-31) */
   showPlus?: boolean;
+  /** 인접 달 날짜 — 흐리게 그리되 선택·드롭은 받는다 (09-01) */
+  muted?: boolean;
 }) {
   const dayNum = Number(dateKey.slice(8, 10));
   const [over, setOver] = useState(false);
@@ -942,6 +1010,7 @@ function DayCell({
       }}
       className={[
         "relative min-h-14 cursor-pointer rounded-sm border p-1 md:min-h-24 md:p-1.5",
+        muted ? "opacity-45" : "",
         isSelected ? "border-berry" : "border-line",
         over && dragging ? "bg-berry-tint" : "bg-surface",
       ].join(" ")}
@@ -1016,6 +1085,236 @@ function DayCell({
 }
 
 /**
+ * 목록보기 (09-01) — 전체 카드를 한 곳에서 관리한다.
+ * 상태 칩(개수)·기간 필터·제목 검색 + 상태별 인라인 액션(제작하기/올렸어요).
+ * 정렬은 예정일 최신순. 발행 완료는 실제 발행일을 함께 보여준다.
+ */
+function ListSection({
+  cards,
+  todayKey,
+  onPublish,
+}: {
+  cards: Card[];
+  todayKey: string;
+  onPublish: (card: Card) => void;
+}) {
+  const [filter, setFilter] = useState<"all" | "overdue" | "planned" | "pending" | "published">(
+    "all",
+  );
+  // 지난/예정 필터 — 같은 칩을 다시 누르면 해제(전체)
+  const [timeFilter, setTimeFilter] = useState<"all" | "past" | "future">("all");
+  const [search, setSearch] = useState("");
+  // 정렬 — 기본은 기획일(예정일) 미래 → 과거
+  const [sort, setSort] = useState<"planDate" | "title" | "status" | "publishDate">("planDate");
+
+  const isOverdue = (c: Card) =>
+    c.scheduledDate !== "" && c.scheduledDate < todayKey && c.status !== "published";
+
+  const counts = {
+    all: cards.length,
+    overdue: cards.filter(isOverdue).length,
+    planned: cards.filter((c) => c.status === "planned").length,
+    pending: cards.filter((c) => c.status === "pending").length,
+    published: cards.filter((c) => c.status === "published").length,
+  };
+
+  const inTime = (c: Card) =>
+    timeFilter === "all"
+      ? true
+      : timeFilter === "past"
+        ? c.scheduledDate < todayKey
+        : c.scheduledDate >= todayKey;
+
+  const keyword = search.trim();
+  // 주제 검색 — 제목과 캡션(본문·해시태그)을 함께 뒤진다 (09-01)
+  const searchText = (c: Card) =>
+    c.title +
+    (c.caption
+      ? ` ${c.caption.hook} ${c.caption.body} ${c.caption.cta} ${c.caption.hashtags.join(" ")}`
+      : "");
+  const STATUS_ORDER: Record<Card["status"], number> = {
+    planned: 0,
+    pending: 1,
+    published: 2,
+    discarded: 3,
+  };
+  const planDateDesc = (a: Card, b: Card) => b.scheduledDate.localeCompare(a.scheduledDate);
+  const filtered = cards
+    .filter((c) =>
+      filter === "all" ? true : filter === "overdue" ? isOverdue(c) : c.status === filter,
+    )
+    .filter(inTime)
+    .filter((c) => keyword === "" || searchText(c).includes(keyword))
+    .sort((a, b) => {
+      if (sort === "title") return a.title.localeCompare(b.title, "ko");
+      if (sort === "status") return STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || planDateDesc(a, b);
+      if (sort === "publishDate") {
+        // 발행된 카드 먼저(최근 발행 위), 미발행은 뒤에서 기획일순
+        const ap = a.publishedAt ? a.publishedAt.toMillis() : null;
+        const bp = b.publishedAt ? b.publishedAt.toMillis() : null;
+        if (ap !== null && bp !== null) return bp - ap;
+        if (ap !== null) return -1;
+        if (bp !== null) return 1;
+        return planDateDesc(a, b);
+      }
+      return planDateDesc(a, b); // 기획일(기본) — 미래 → 과거
+    });
+
+  const STATUS_CHIPS = [
+    ["all", "전체"],
+    ["overdue", "놓친 카드"],
+    ["planned", "제작 대기"],
+    ["pending", "업로드 대기"],
+    ["published", "발행"],
+  ] as const;
+  const TIME_CHIPS = [
+    ["past", "지난 카드만 보기"],
+    ["future", "예정된 카드만 보기"],
+  ] as const;
+
+  const chipClass = (active: boolean) =>
+    [
+      "h-9 whitespace-nowrap rounded-pill px-3 text-body",
+      active
+        ? "bg-berry-light font-semibold text-berry-dark"
+        : "bg-surface-muted text-sub hover:text-ink", // 비활성은 회색 면 (09-01)
+    ].join(" ");
+
+  return (
+    <section className="mt-4">
+      {/* 필터 줄 — 상태 · 기간 · 검색 */}
+      <div className="flex flex-wrap items-center gap-2">
+        {STATUS_CHIPS.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setFilter(key)}
+            className={chipClass(filter === key)}
+          >
+            {label} {counts[key]}
+          </button>
+        ))}
+        <span aria-hidden className="mx-1 h-4 w-px bg-line" />
+        {/* 글자형 필터 — 두 항목을 구분점으로 나누고, 켜진 쪽만 ✓·베리·밑줄 (09-01) */}
+        <div className="flex h-9 items-center gap-2">
+          {TIME_CHIPS.map(([key, label], i) => (
+            <span key={key} className="flex items-center gap-2">
+              {i > 0 && <span aria-hidden className="text-caption text-sub/40">·</span>}
+              <button
+                type="button"
+                onClick={() => setTimeFilter(timeFilter === key ? "all" : key)}
+                aria-pressed={timeFilter === key}
+                className={[
+                  "text-caption transition-colors",
+                  timeFilter === key
+                    ? "font-semibold text-berry-dark underline decoration-2 underline-offset-4"
+                    : "text-sub/70 hover:text-ink",
+                ].join(" ")}
+              >
+                {label}
+              </button>
+            </span>
+          ))}
+        </div>
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="주제 검색"
+          className="ml-auto h-9 w-full rounded-md border border-line bg-surface px-3 text-body text-ink placeholder:text-sub/60 sm:w-[200px]"
+        />
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as typeof sort)}
+          aria-label="정렬 기준"
+          className="h-9 rounded-md border border-line bg-surface px-2.5 text-body text-ink"
+        >
+          <option value="planDate">기획일</option>
+          <option value="title">제목</option>
+          <option value="status">상태</option>
+          <option value="publishDate">발행일</option>
+        </select>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="mt-12 flex flex-col items-center gap-2">
+          <p className="text-body text-sub">조건에 맞는 카드가 없어요.</p>
+          {/* 필터 교집합이 비었을 때 스스로 빠져나오는 길 (09-01) */}
+          {(filter !== "all" || timeFilter !== "all" || keyword !== "") && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilter("all");
+                setTimeFilter("all");
+                setSearch("");
+              }}
+              className="mt-1 h-10 rounded-md border border-line bg-surface px-4 text-body font-semibold text-ink hover:bg-surface-muted"
+            >
+              필터 초기화
+            </button>
+          )}
+          {filter === "all" && timeFilter === "all" && keyword === "" && (
+            <Link
+              href="/plan/new"
+              className="mt-1 flex h-11 items-center rounded-md bg-berry px-5 text-body font-semibold text-white hover:bg-berry-dark"
+            >
+              기획하기
+            </Link>
+          )}
+        </div>
+      ) : (
+        <ul className="mt-4 flex flex-col gap-2">
+          {filtered.map((card) => {
+            const pub = card.publishedAt != null ? card.publishedAt.toDate() : null;
+            const pubKey = pub
+              ? `${pub.getFullYear()}-${String(pub.getMonth() + 1).padStart(2, "0")}-${String(
+                  pub.getDate(),
+                ).padStart(2, "0")}`
+              : null;
+            return (
+              <li
+                key={card.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-line bg-surface p-3"
+              >
+                <Link href={`/card/${card.id}`} className="min-w-0 flex-1">
+                  <span className="block truncate text-body font-semibold text-ink hover:underline">
+                    {card.title}
+                  </span>
+                  <span className="mt-0.5 block truncate text-caption text-sub">
+                    {formatDayLabel(card.scheduledDate)}
+                    {isOverdue(card) && " · 예정일 지남"}
+                    {card.status === "published" && pubKey && ` · ${formatDayLabel(pubKey)} 발행`}
+                  </span>
+                </Link>
+                <StatusBadge status={card.status} />
+                {/* 두 액션 구분 — 제작하기는 솔리드, 올렸어요는 아웃라인 (09-01 확정) */}
+                {card.status === "planned" && (
+                  <Link
+                    href={`/card/${card.id}/result`}
+                    className="flex h-9 items-center rounded-md bg-berry px-3 text-body font-semibold text-white hover:bg-berry-dark"
+                  >
+                    제작하기
+                  </Link>
+                )}
+                {card.status === "pending" && (
+                  <button
+                    type="button"
+                    onClick={() => onPublish(card)}
+                    className="flex h-9 items-center rounded-md border-2 border-berry bg-surface px-3 text-body font-semibold text-berry hover:bg-berry-light hover:text-berry-dark"
+                  >
+                    올렸어요
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/**
  * 주간 보드 컬럼 — 빈 세로 박스를 그리지 않는다. 콘텐츠 카드가 주인공이고
  * 날짜는 위의 얇은 라벨, 빈 날은 «예정 없음»을 아주 약하게 (08-31 v2).
  * CTA는 여기 없다 — 카드를 클릭하면 선택되고, 행동은 오른쪽 패널이 맡는다.
@@ -1044,7 +1343,6 @@ function WeekColumn({
 }) {
   const [over, setOver] = useState(false);
   const dayNum = Number(dateKey.slice(8, 10));
-  const dow = DAY_HEADS[parseDateKey(dateKey).getDay()];
 
   return (
     <div
@@ -1063,7 +1361,7 @@ function WeekColumn({
       }}
       className={[
         // 박스 없이 — 드롭 대상으로 살아 있도록 최소 높이와 hover 배경만
-        "flex min-h-32 cursor-pointer flex-col gap-2 rounded-md p-1",
+        "flex min-h-32 cursor-pointer flex-col gap-2 rounded-md p-1.5",
         over && dragging ? "bg-berry-tint" : isSelected ? "bg-berry-tint" : "",
       ].join(" ")}
     >
@@ -1075,7 +1373,7 @@ function WeekColumn({
             isToday || isSelected ? "font-bold text-berry-dark" : "text-sub",
           ].join(" ")}
         >
-          {dayNum} {dow}
+          {dayNum}
         </span>
         {isToday && (
           <span className="rounded-pill bg-berry-light px-1.5 text-caption font-semibold text-berry-dark">

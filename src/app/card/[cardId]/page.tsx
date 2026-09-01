@@ -511,7 +511,7 @@ export default function CardDetailPage() {
         {toast && (
           <div
             role="status"
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-pill bg-ink px-5 py-2 text-body text-white shadow-lg"
+            className="fixed right-4 top-16 z-50 rounded-md bg-ink px-4 py-2.5 text-body text-white shadow-lg md:right-8 md:top-20"
           >
             {toast}
           </div>
