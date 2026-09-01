@@ -5,7 +5,7 @@ import { getPlanningAI } from "@/lib/ai";
 import { AUDIENCES, AUDIENCE_DEFAULT, MAX_CARDS_PER_RUN } from "@/lib/audiences";
 import { verifyRequest } from "@/lib/server/request-auth";
 import { themeFromAttributes } from "@/lib/render/themes";
-import type { StyleAttributes } from "@/types";
+import type { StockPick, StyleAttributes } from "@/types";
 
 /**
  * POST /api/plans/[planId]/confirm — 기획 확정 → 카드 N장 생성 (F3 · PLAN §6).
@@ -108,6 +108,8 @@ export async function POST(
       최종 판정은 렌더 route가 그 시점에 다시 한다.
     */
     const planPhotos: string[] = planSnap.get("photoUrls") ?? [];
+    // 기획 단계에서 고른 스톡 한 장 (09-01). 사진처럼 주소만 물려준다
+    const planStock: StockPick | null = planSnap.get("stockPhoto") ?? null;
     const visualType = planPhotos.length > 0 ? "user_photo_preferred" : "stock_recommended";
 
     /*
@@ -140,6 +142,7 @@ export async function POST(
         themeId, // 온보딩 취향에서 정한 기본값. 제작 결과 화면에서 변경 가능 (08-31)
         visualType, // 사진 유무로 판정. 렌더 시점에 다시 확인한다 (DESIGN §12)
         photoUrls: planPhotos, // 기획 단계 사진을 그대로 물려받는다 (08-31)
+        stockPhoto: planStock, // 기획 단계에서 고른 스톡 (09-01). 안 골랐으면 null
         extraNote: "",
         templateVars: {},
         caption: null,

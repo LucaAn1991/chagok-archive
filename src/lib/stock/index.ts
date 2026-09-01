@@ -85,6 +85,18 @@ async function search(query: string): Promise<StockPhoto[]> {
 }
 
 /**
+ * 검색어 하나로 후보 여러 장을 받아온다 — **기획 단계의 사진 고르기**용 (09-01).
+ *
+ * `pickStockPhotos`는 슬라이드마다 한 장씩 «배정»하는 함수라 후보를 보여주지 못한다.
+ * 기획 단계는 반대로 «여러 장 중에 사용자가 고르는» 자리라 목록이 필요하다.
+ *
+ * 던지지 않는다. 키가 없거나 실패하면 빈 배열 — 그때 화면은 「내 사진」만 보여준다.
+ */
+export async function searchStockPhotos(query: string): Promise<StockPhoto[]> {
+  return search(query);
+}
+
+/**
  * 검색어 목록에 사진을 하나씩 짝지어 준다. 못 채운 자리는 `null`.
  *
  * **같은 사진이 두 번 쓰이지 않게** 이미 고른 것은 건너뛴다 — 카드뉴스를 넘기다

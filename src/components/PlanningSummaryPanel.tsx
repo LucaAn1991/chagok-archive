@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Check, Pencil, X } from "lucide-react";
 import PlanPhotoPicker from "@/components/PlanPhotoPicker";
+import type { StockPick } from "@/types";
 
 /**
  * 기획안 패널 — DESIGN.md §7.
@@ -284,9 +285,13 @@ function GradientFrame({ children }: { children: React.ReactNode }) {
 */
 /** 사진 상태 — 페이지가 들고 있고 카드가 표시한다 */
 export type PlanPhotos = {
-  selectedStockId: string | null;
+  /** 주제로 찾아온 추천 사진 (09-01). 못 받았으면 빈 배열 */
+  stockOptions: StockPick[];
+  stockLoading: boolean;
+  /** 고른 추천 사진의 주소. 안 골랐으면 null */
+  selectedStockUrl: string | null;
   userPhotos: string[];
-  onSelectStock: (id: string) => void;
+  onSelectStock: (photo: StockPick) => void;
   onAddUserPhotos: (files: FileList) => void;
   onRemoveUserPhoto: (url: string) => void;
 };

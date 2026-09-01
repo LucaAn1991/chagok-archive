@@ -17,6 +17,7 @@ import type {
   LayoutId,
   Slide,
   StockCredit,
+  StockPick,
   TemplateId,
   VisualType,
 } from "../../types/card";
@@ -55,6 +56,13 @@ export type SlidesInput = {
   visualType: VisualType;
   /** 사용자가 올린 사진 (F13). 순서 = 배열 순서. 이미지 레이아웃에 이 순서대로 배정된다 */
   photoUrls: string[];
+  /**
+   * 기획 단계에서 **사용자가 고른** 스톡 한 장 (09-01).
+   *
+   * 올린 사진이 없을 때만 쓴다 — 아래 폴백 사슬 주석대로 ①과 ②를 섞지 않는다.
+   * 이미지 자리의 **첫 장**을 이걸로 채우고, 나머지는 슬라이드 내용으로 검색한다.
+   */
+  chosenStock?: StockPick | null;
 };
 
 /**
@@ -119,7 +127,9 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
   */
   const photos = input.photoUrls ?? [];
   const photoCount = input.visualType === "text_only" ? 0 : photos.length;
-  const stockAvailable = photoCount === 0 && isStockConfigured();
+  // 기획에서 고른 스톡은 이미 손에 있다 — 검색 키가 없어도 그 한 장은 쓸 수 있다
+  const chosenStock = input.visualType === "text_only" ? null : (input.chosenStock ?? null);
+  const stockAvailable = photoCount === 0 && (isStockConfigured() || chosenStock !== null);
   const usable = photoCount === 0 && !stockAvailable ? TEXT_ONLY_LAYOUTS : ALL_LAYOUTS;
 
   /*
@@ -232,17 +242,39 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
       }
     });
   } else if (stockAvailable && imageSlots.length > 0) {
-    const found = await pickStockPhotos(imageSlots.map((s) => s.query));
-    imageSlots.forEach((slot, n) => {
-      const photo = found[n];
-      if (photo) {
-        assigned.set(slot.i, {
-          url: photo.imageUrl,
-          // 약관이 요구하는 크레딧 — 지금 안 담아두면 나중에 알아낼 방법이 없다
-          credit: { photographer: photo.photographer, sourceUrl: photo.sourceUrl },
-        });
-      }
-    });
+    /*
+      기획에서 고른 스톡이 있으면 **첫 이미지 자리**를 그것으로 채운다 (09-01).
+      사용자가 직접 고른 한 장이라 AI가 찾은 것보다 앞선다 — 골라놓고 안 쓰이면
+      «고를 수 있는 것처럼 보이는데 반영되지 않는» 칩으로 되돌아간다.
+
+      나머지 자리는 지금까지처럼 슬라이드 내용으로 검색한다. 한 장으로
+      카드뉴스 전체를 덮으면 같은 사진이 여러 번 나온다.
+    */
+    let rest = imageSlots;
+    if (chosenStock) {
+      assigned.set(imageSlots[0].i, {
+        url: chosenStock.imageUrl,
+        credit: {
+          photographer: chosenStock.photographer,
+          sourceUrl: chosenStock.sourceUrl,
+        },
+      });
+      rest = imageSlots.slice(1);
+    }
+
+    if (rest.length > 0) {
+      const found = await pickStockPhotos(rest.map((s) => s.query));
+      rest.forEach((slot, n) => {
+        const photo = found[n];
+        if (photo) {
+          assigned.set(slot.i, {
+            url: photo.imageUrl,
+            // 약관이 요구하는 크레딧 — 지금 안 담아두면 나중에 알아낼 방법이 없다
+            credit: { photographer: photo.photographer, sourceUrl: photo.sourceUrl },
+          });
+        }
+      });
+    }
   }
 
   const slides: Slide[] = kept.map((s, order) => {
