@@ -8,7 +8,7 @@ import type { CardStatus } from "@/types";
  */
 const STATUS_LABEL: Record<CardStatus, string> = {
   planned: "제작 대기",
-  pending: "업로드 대기",
+  pending: "올리기만 남음", // 08-31 — «업로드 대기» 교체, 압박감 없는 표현
   published: "발행 완료",
   discarded: "버림",
 };
@@ -29,7 +29,7 @@ export default function StatusBadge({ status: rawStatus }: { status: CardStatus 
         <span aria-hidden className="font-semibold">
           ✓
         </span>
-      ) : (
+      ) : status === "pending" ? null : ( // 08-31 — 빨간 계열 점 제거, 라벨만
         <span
           aria-hidden
           className="h-2 w-2 rounded-pill"

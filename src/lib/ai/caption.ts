@@ -130,7 +130,7 @@ function mockCaption(input: CaptionInput): Caption {
     hook: mockHook(input),
     body: [
       `${input.audience}에게 전하는 이야기예요.`,
-      input.intent ? `기획의도: ${input.intent}` : null,
+      // intent(기획의도)는 internal 필드 — 화면·캡션 어디에도 노출하지 않는다 (08-31)
       input.extraNote ? `꼭 넣을 내용: ${input.extraNote}` : null,
       "실제 캡션은 Claude 연동 후 이 자리에 생성됩니다.",
     ]

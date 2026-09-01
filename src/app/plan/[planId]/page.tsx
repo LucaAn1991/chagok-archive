@@ -4,24 +4,26 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, orderBy, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
 import BackLink from "@/components/BackLink";
 import MobileBottomNav from "@/components/MobileBottomNav";
-import AIChatBubble, { SystemEventLine } from "@/components/AIChatBubble";
-import type { Plan } from "@/types";
+import { audienceLine, formatMonthDayWeekday } from "@/lib/format";
+import type { Card, Plan } from "@/types";
 
 /**
- * 지난 기획 상세 — 대화 히스토리 전문 · 확정 기획안 · [이어서 기획하기] (F10·F11 · IA 2.4).
- * 카드 상세의 「생성 출처」에서도 이 화면으로 들어온다.
+ * 지난 기획 상세 (F10·F11 · 08-31 §8 개편).
+ * 구성: 공통 헤더(뒤로가기) → 제목 → 입력 원문 → 만들어진 카드 목록(대상·예정일)
+ *       → 하단 [이어서 기획하기] 하나.
+ * 대화 전문은 DB(messages)에 그대로 보관되지만 이 화면에는 원문만 보여준다 (08-31 확정).
  */
 
 type DetailState =
   | { phase: "loading" }
   | { phase: "error" }
   | { phase: "notfound" }
-  | { phase: "ready"; plan: Plan };
+  | { phase: "ready"; plan: Plan; cards: Card[] };
 
 export default function PlanDetailPage() {
   const router = useRouter();
@@ -41,13 +43,26 @@ export default function PlanDetailPage() {
       void (async () => {
         try {
           const snap = await getDoc(doc(db, "plans", planId));
-          // 남의 문서는 보안 규칙이 거부한다 — 조회 실패와 없음 모두 404로 취급
           if (!snap.exists() || snap.data().userId !== user.uid) {
             if (!cancelled) setState({ phase: "notfound" });
             return;
           }
           const plan = { ...(snap.data() as Omit<Plan, "id">), id: snap.id };
-          if (!cancelled) setState({ phase: "ready", plan });
+
+          // 이 세션으로 만들어진 카드 — 인덱스 (userId, planId, scheduledDate) (PLAN §7)
+          const cardSnap = await getDocs(
+            query(
+              collection(db, "cards"),
+              where("userId", "==", user.uid),
+              where("planId", "==", planId),
+              orderBy("scheduledDate", "asc"),
+            ),
+          );
+          const cards = cardSnap.docs
+            .map((d) => ({ ...(d.data() as Omit<Card, "id">), id: d.id }))
+            .filter((c) => c.status !== "discarded");
+
+          if (!cancelled) setState({ phase: "ready", plan, cards });
         } catch {
           if (!cancelled) setState({ phase: "error" });
         }
@@ -71,6 +86,7 @@ export default function PlanDetailPage() {
           {state.phase === "loading" && (
             <div aria-hidden className="flex animate-pulse flex-col gap-4 pt-2">
               <div className="h-7 w-64 rounded-sm bg-surface-muted" />
+              <div className="h-24 rounded-lg bg-surface-muted" />
               <div className="h-40 rounded-lg bg-surface-muted" />
             </div>
           )}
@@ -103,65 +119,60 @@ export default function PlanDetailPage() {
             </section>
           )}
 
-          {state.phase === "ready" && (
-            <>
-              {/* 확정 기획안 */}
-              <h1 className="text-h3 font-bold text-ink">{state.plan.topic}</h1>
-              <dl className="mt-4 flex flex-col gap-3 rounded-lg border border-line bg-surface p-5">
-                <div>
-                  <dt className="text-label font-semibold text-sub">대상</dt>
-                  <dd className="mt-0.5 text-body text-ink">
-                    {state.plan.audiences.join(" · ") || "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-label font-semibold text-sub">기획의도</dt>
-                  <dd className="mt-0.5 text-body text-ink">{state.plan.intent || "—"}</dd>
-                </div>
-                <div>
-                  <dt className="text-label font-semibold text-sub">카드</dt>
-                  <dd className="mt-0.5 text-body text-ink">
-                    {state.plan.cardCount}장
-                    {state.plan.status === "draft" && " · 아직 확정 전이에요"}
-                  </dd>
-                </div>
-              </dl>
-
-              {/* 이어서 기획하기 (F11) */}
-              <Link
-                href={`/plan/new?from=${state.plan.id}`}
-                className="mt-4 flex h-12 w-full items-center justify-center rounded-md bg-berry text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
-              >
-                이어서 기획하기
-              </Link>
-
-              {/* 대화 히스토리 전문 */}
-              <h2 className="mt-8 text-title font-bold text-ink">대화 히스토리</h2>
-              <div className="mt-4 flex flex-col gap-4">
-                {state.plan.messages.length === 0 && (
-                  <p className="text-body text-sub">남아 있는 대화가 없어요.</p>
-                )}
-                {state.plan.messages.map((m, i) =>
-                  m.role === "system" ? (
-                    <SystemEventLine key={i} text={m.text} />
-                  ) : (
-                    <AIChatBubble
-                      key={i}
-                      role={m.role}
-                      text={m.text}
-                      showAvatar={
-                        m.role === "assistant" && state.plan.messages[i - 1]?.role !== "assistant"
-                      }
-                    />
-                  ),
-                )}
-              </div>
-            </>
-          )}
+          {state.phase === "ready" && <DetailBody plan={state.plan} cards={state.cards} />}
         </main>
       </div>
 
       <MobileBottomNav />
     </div>
+  );
+}
+
+function DetailBody({ plan, cards }: { plan: Plan; cards: Card[] }) {
+  // 입력 원문 — 첫 사용자 발화. 대화 전문은 DB에 그대로 있다
+  const original = plan.messages.find((m) => m.role === "user")?.text ?? plan.topic;
+
+  return (
+    <>
+      <h1 className="text-h3 font-bold text-ink">{plan.seriesTitle || plan.topic}</h1>
+
+      {/* 입력 원문 — 목록의 짧은 제목과 달리 사용자가 쓴 그대로 보관·표시 (08-31 §5) */}
+      <section className="mt-4">
+        <h2 className="text-label font-semibold text-sub">입력 원문</h2>
+        <p className="mt-1.5 whitespace-pre-wrap rounded-lg border border-line bg-surface p-4 text-body text-ink">
+          {original}
+        </p>
+      </section>
+
+      {/* 만들어진 카드 — 카드마다 대상 라벨 · 예정일 (08-31 §8) */}
+      <section className="mt-6">
+        {cards.length === 0 ? (
+          <p className="text-body text-sub">이 기획으로 만든 카드가 없어요.</p>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {cards.map((card) => (
+              <li key={card.id}>
+                <Link href={`/card/${card.id}`} className="block min-w-0">
+                  <span className="block truncate text-body font-semibold text-ink">
+                    {card.title}
+                  </span>
+                  <span className="mt-0.5 block text-caption text-sub">
+                    {audienceLine(card.audience)} · {formatMonthDayWeekday(card.scheduledDate)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* 이어서 기획하기 (F11) — 하단 버튼 하나 */}
+      <Link
+        href={`/plan/new?from=${plan.id}`}
+        className="mt-8 flex h-12 w-full items-center justify-center rounded-md bg-berry text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+      >
+        이어서 기획하기
+      </Link>
+    </>
   );
 }

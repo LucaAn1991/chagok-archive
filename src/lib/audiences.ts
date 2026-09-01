@@ -27,6 +27,22 @@ export const AUDIENCES = [
 
 export type AudienceId = (typeof AUDIENCES)[number]["id"];
 
+/**
+ * 콘텐츠 유형 5종 — 이 밖의 값은 존재하면 안 된다 (08-31 확정).
+ * 카드 표시줄 «{label}에게 · {유형}»의 유형 자리에 쓴다.
+ */
+export type ContentType = "신상품" | "정보/팁" | "후기/사례" | "일상/비하인드" | "이벤트/공지";
+
+/**
+ * 대상 → 기본 콘텐츠 유형. 반환 타입이 ContentType이라 5종 밖 값이 나올 수 없다.
+ * @TODO: 실AI가 카드 내용을 보고 정하게 되면 이 임시 매핑은 폴백으로만 남는다
+ */
+export function contentTypeForAudience(label: string): ContentType {
+  const meta = AUDIENCES.find((a) => a.label === label);
+  if (meta?.id === "seeker") return "정보/팁";
+  return "일상/비하인드";
+}
+
 export const AUDIENCE_DEFAULT = "stranger";
 export const MAX_CARDS_PER_RUN = 8;
 

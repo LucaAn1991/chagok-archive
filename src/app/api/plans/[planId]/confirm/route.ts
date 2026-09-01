@@ -16,6 +16,30 @@ import type { StyleAttributes } from "@/types";
  * 이미 확정된 plan이면 그대로 성공으로 응답한다(멱등) —
  * 확정 후 배치(schedule) 단계에서 실패했을 때 [다시 시도]가 안전하게 재진입한다.
  */
+/**
+ * 목록용 짧은 제목 (08-31 §5) — 사용자가 쓴 낱말을 **그대로 줄이기만** 한다.
+ * 새 표현·수식어를 지어 붙이지 않는다. 끝의 요청 어미만 걷어내고 20자 어절 단위로 자른다.
+ * @TODO: 실AI 연결 시 원문 낱말 유지 제약을 프롬프트로 옮긴다
+ */
+function shortenForList(topic: string): string {
+  let t = topic.trim().replace(/\s+/g, " ");
+  t = t
+    .replace(
+      /(을|를)?\s*(만들어\s*줘|해\s*줘|제작해\s*줘|알려\s*줘|부탁해|주세요|해주세요|만들어주세요|제안해\s*줘|제안)[.!~]*$/u,
+      "",
+    )
+    .trim();
+  if (t.length > 20) {
+    let out = "";
+    for (const w of t.split(" ")) {
+      if ((out ? out + " " + w : w).length > 20) break;
+      out = out ? out + " " + w : w;
+    }
+    t = out || t.slice(0, 20);
+  }
+  return t || topic;
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ planId: string }> },
@@ -130,6 +154,8 @@ export async function POST(
       status: "confirmed",
       cardCount: drafts.length,
       confirmedAt: now,
+      seriesTitle: shortenForList(topic), // 목록용 짧은 제목 — 원문은 messages에 그대로 남는다
+
       messages: [
         ...planSnap.get("messages"),
         {

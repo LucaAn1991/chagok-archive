@@ -284,7 +284,9 @@ function GradientFrame({ children }: { children: React.ReactNode }) {
 */
 /** 사진 상태 — 페이지가 들고 있고 카드가 표시한다 */
 export type PlanPhotos = {
+  selectedStockId: string | null;
   userPhotos: string[];
+  onSelectStock: (id: string) => void;
   onAddUserPhotos: (files: FileList) => void;
   onRemoveUserPhoto: (url: string) => void;
 };
@@ -298,29 +300,38 @@ type PanelProps = {
   continueHref?: string; // 잠금 상태에서 연필 대신 보여줄 [이어서 기획하기]
 };
 
-/** >=1280 우측 고정 패널 */
+/**
+ * 오른쪽 기획 박스 (08-31 2열 개편) — 헤더·탭 아래부터 화면 하단까지 높이를 채우고,
+ * 내용이 넘치면 박스 안에서만 스크롤한다. 사진 추천은 왼쪽 열로 이동했다.
+ */
 export default function PlanningSummaryPanel({
   summary,
   onSave,
-  photos,
-  showPhotos,
   topicLocked,
   continueHref,
-}: PanelProps) {
+  started,
+}: Omit<PanelProps, "photos" | "showPhotos"> & { started: boolean }) {
   return (
-    <aside className="hidden w-[320px] shrink-0 min-[1280px]:block">
-      <div className="sticky top-6">
-        <GradientFrame>
+    <aside className="hidden h-full min-h-0 lg:col-span-7 lg:block">
+      <div className="h-full rounded-lg p-px" style={{ background: "var(--grad)" }}>
+        <div className="h-full overflow-y-auto rounded-[15px] bg-surface p-6 leading-relaxed">
           <h2 className="text-title font-bold text-ink">기획안</h2>
           <div className="mt-4">
-            <SummaryBody summary={summary} onSave={onSave} topicLocked={topicLocked} continueHref={continueHref} />
+            {started ? (
+              <SummaryBody
+                summary={summary}
+                onSave={onSave}
+                topicLocked={topicLocked}
+                continueHref={continueHref}
+              />
+            ) : (
+              /* 빈 박스를 그대로 두지 않는다 (08-31 §4) */
+              <p className="text-body text-sub">
+                왼쪽에서 이야기를 고르면 여기에 기획이 만들어져요
+              </p>
+            )}
           </div>
-          {showPhotos && (
-            <div className="mt-4 border-t border-line pt-4">
-              <PlanPhotoPicker {...photos} />
-            </div>
-          )}
-        </GradientFrame>
+        </div>
       </div>
     </aside>
   );
@@ -336,7 +347,7 @@ export function PlanningSummaryInline({
   continueHref,
 }: PanelProps) {
   return (
-    <div className="min-[1280px]:hidden">
+    <div className="lg:hidden">
       <GradientFrame>
         <h2 className="text-body font-bold text-ink">기획안</h2>
         <div className="mt-3">
