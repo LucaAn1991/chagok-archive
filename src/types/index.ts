@@ -18,4 +18,6 @@ export type {
   LayoutId,
   ThemeId,
   TemplateId,
+  StockCredit,
+  StockPick,
 } from "./card";

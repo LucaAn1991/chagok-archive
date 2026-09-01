@@ -90,6 +90,9 @@ type Plan = {
   recordDays: number | null;      // 며칠치를 미리 깔지. TODO: PRD §9 미결 5 — 3개월이면 90장
   templateVarNames: string[];     // 템플릿 변수 이름 목록. 카드 상세에서 입력칸이 자동 렌더링된다
 
+  photoUrls: string[];            // 기획 단계에서 올린 사진. 카드에 주소만 물려준다 (F13 · 08-31)
+  stockPhoto: StockPick | null;   // 기획 단계에서 고른 추천 사진. 안 골랐으면 null (09-01)
+
   status: PlanStatus;             // 'draft' 대화 중 | 'confirmed' 확정되어 카드가 생성됨
   createdAt: Timestamp;           // TTV 측정 시작점 (PRD §5-3)
   confirmedAt: Timestamp | null;
@@ -128,6 +131,7 @@ type Card = {
   templateId: TemplateId | null;  // 구성 템플릿. null이면 AI가 구성까지 정한다 (08-31)
   visualType: VisualType;         // 이미지 폴백 사슬의 판정 결과 (DESIGN.md §12)
   photoUrls: string[];            // 사용자가 올린 사진. 순서 = 배열 순서 (F13)
+  stockPhoto: StockPick | null;   // 기획에서 물려받은 추천 사진. 첫 이미지 자리에 쓴다 (09-01)
   extraNote: string;              // «이번에 꼭 넣을 내용» 자유 입력 (F13)
   templateVars: Record<string, string>; // 기록형의 그날 값. plan.templateVarNames와 짝을 이룬다
 
@@ -712,6 +716,7 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 | 2026-08-31 | **스톡 provider를 Pexels로 확정** — 폴백 사슬 ②단계 구현. `PEXELS_API_KEY` 없으면 ③ text-only로 내려앉는다 | 무료 한도가 넉넉하고(시간당 200건 vs Unsplash 50건), 표기가 **앱 안 링크 하나**로 끝나 카드뉴스 레이아웃 6종을 건드리지 않는다. §12 미결 9 해소 | §12 |
 | 2026-08-31 | **기획 단계 사진 → 카드 물려주기** — `plan.photoUrls` 신설 · `POST /api/plans/[planId]/photos` 신설 · `plans/{planId}/photos/` 저장 경로와 규칙 추가. `confirm`이 카드에 주소를 물려주고 `visualType`을 사진 유무로 판정 | 카드가 생기기 전에 올린 사진이 버려지고 있었다(`photoUrls: []` TODO). **파일은 복사하지 않고 주소만 넘긴다** — 대상이 셋이면 카드도 셋인데 같은 사진을 세 벌 둘 이유가 없다. 기획 화면의 «추천» 칩(스톡)은 자리표시로 남겨둠 — 스톡은 제작 단계에서 슬라이드 내용을 보고 고르는 쪽이 정확하다(승인받음) | §2-2 · §6 · §7 |
 | 2026-08-31 | `Slide.imageCredit` 필드 신설 · 제작 결과 화면에 스톡 출처 표기 | **Pexels API 약관이 크레딧을 요구한다**(사진 라이선스와 별개). 생성 시점에 안 담아두면 나중에 사진가를 알아낼 방법이 없다 | §2-3 · §12 |
+| 2026-09-01 | **기획 단계 스톡 배선** — `plan.stockPhoto` · `card.stockPhoto` 신설(`StockPick`) · `GET /api/plans/[planId]/stock` 신설. 추천 칩을 자리표시 SVG 5장 → 주제로 검색한 Pexels 실사진으로 교체, 고른 한 장이 카드 첫 이미지 자리로 간다 | 「고를 수 있는 것처럼 보이는데 아무 데도 반영되지 않는」 칩이었다. 팀 병합(PR #6) 때 남은 미결 해소. 올린 사진이 있으면 스톡은 쓰지 않는다(기존 «①과 ②를 섞지 않는다» 규칙 유지) | §2-2 · §2-3 · §6 |
 
 > **코딩 중 이 문서를 수정하게 되면 반드시 이 표에 기록한다.** (`CLAUDE.md` 「우선순위 및 충돌 처리」 3번)
 

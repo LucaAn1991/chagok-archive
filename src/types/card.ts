@@ -34,6 +34,14 @@ export type Card = {
   templateId: TemplateId | null;
   visualType: VisualType; // 이미지 폴백 사슬의 판정 결과 (DESIGN.md §12)
   photoUrls: string[]; // 사용자가 올린 사진. 순서 = 배열 순서 (F13)
+  /**
+   * 기획 단계에서 고른 스톡 사진 (09-01). 고르지 않았으면 null.
+   *
+   * 폴백 사슬(DESIGN §12) 안에서의 자리: 올린 사진을 먼저 다 쓰고,
+   * 남은 이미지 자리의 **첫 장**을 이걸로 채운다. 그 뒤는 슬라이드 내용에 맞춰
+   * 검색한 스톡이 이어받는다 (`lib/ai/slides.ts`).
+   */
+  stockPhoto: StockPick | null;
   extraNote: string; // «이번에 꼭 넣을 내용» 자유 입력 (F13)
   templateVars: Record<string, string>; // 기록형의 그날 값. plan.templateVarNames와 짝을 이룬다
 
@@ -176,6 +184,14 @@ export type StockCredit = {
   photographer: string;
   sourceUrl: string;
 };
+
+/**
+ * 기획 단계에서 **사용자가 직접 고른** 스톡 사진 한 장 (09-01).
+ *
+ * 주소만 들고 있으면 안 된다 — Pexels 약관이 사진가 크레딧을 요구하는데,
+ * 나중에 이 주소로 사진가를 되찾을 방법이 없다 (`lib/stock/index.ts`).
+ */
+export type StockPick = StockCredit & { imageUrl: string };
 
 /**
  * 카드뉴스 «테마» 3종 (08-31 신설).
