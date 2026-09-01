@@ -23,6 +23,7 @@ import FeaturedContentCard from "@/components/FeaturedContentCard";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { formatMonthDayWeekday } from "@/lib/format";
+import { greetingFor, kstToday } from "@/lib/greetings";
 import type { Card } from "@/types";
 
 /**
@@ -251,14 +252,6 @@ function Home({ uid }: { uid: string }) {
   );
 }
 
-/** 시간대별 인사 (08-31 확정 문구 — 이모지·수정 금지) */
-function greetingForHour(hour: number): string {
-  if (hour >= 5 && hour < 11) return "좋은 아침이에요";
-  if (hour >= 11 && hour < 17) return "맛점하셨나요?";
-  if (hour >= 17 && hour < 22) return "오늘 하루 고생하셨어요";
-  return "늦게까지 고생 많으세요";
-}
-
 /** 상대일 표기 — 내일 / 모레 / «9월 5일에» (요일 없이) */
 function relativeDayLabel(dateKey: string, todayKey: string): string {
   const diff = Math.round(
@@ -308,10 +301,10 @@ function HomeReady({
   return (
     <div className="flex flex-col gap-4 md:gap-8">
       <PageHeader />
-      {/* 인사 한 줄 + 오늘 날짜 — 이모지 없음 (08-31) */}
+      {/* 인사 한 줄 + 오늘 날짜 — 이모지 없음, KST 고정 9구간 (09-01, lib/greetings.ts) */}
       <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h1 className="text-h2 font-bold text-ink">{greetingForHour(now.getHours())}</h1>
-        <span className="text-body text-sub">{formatMonthDayWeekday(now)}</span>
+        <h1 className="text-h2 font-bold text-ink">{greetingFor(now)}</h1>
+        <span className="text-body text-sub">{formatMonthDayWeekday(kstToday(now))}</span>
       </header>
 
       {situation === "A" && todayCard && (
