@@ -203,62 +203,73 @@ export async function POST(
       });
     }
 
+    /*
+      아래 두 경로는 **스트리밍으로 답한다.**
+      실측(08-31) 전체 응답 11초 · 첫 글자 1.2초 — 다 만들어질 때까지 기다렸다
+      한 번에 보여주면 그 차이가 통째로 사용자 대기 시간이 된다 (PLAN §9 위험 3).
+      Firestore 저장과 최종 payload는 지금까지와 똑같고, 앞에 글자만 흘려보낸다.
+    */
+
     // ── ② 대상·목적 선택 — 안 고르면(빈 배열) AI가 알아서 정한다 (IA 2.1-②) ──
     if (selection && topic) {
-      const turn = await ai.selectionTurn(topic, selection, ctx);
-      const userText =
-        selection.audiences.length > 0 || selection.purposes.length > 0
-          ? [...selection.audiences, ...selection.purposes].join(" · ")
-          : "차곡이 알아서 정해주세요.";
-      const merged = {
-        topic,
-        audiences: turn.audiences ?? [],
-        purposes: turn.purposes ?? [],
-        intent: turn.intent ?? "",
-      };
-      await planRef.update({
-        ...merged,
-        seriesTitle: turn.seriesTitle ?? topic,
-        messages: [
-          ...planSnap.get("messages"),
-          { role: "user", text: userText, createdAt: now },
-          { role: "assistant", text: turn.reply, createdAt: now },
-        ],
-      });
-      return NextResponse.json({
-        reply: turn.reply,
-        proposal: null,
-        topicSuggestions: null,
-        summary: merged,
-        readyToConfirm: turn.readyToConfirm ?? false,
-        isMock,
+      return ndjson(async (emit) => {
+        const turn = await ai.selectionTurn(topic, selection, ctx, emit);
+        const userText =
+          selection.audiences.length > 0 || selection.purposes.length > 0
+            ? [...selection.audiences, ...selection.purposes].join(" · ")
+            : "차곡이 알아서 정해주세요.";
+        const merged = {
+          topic,
+          audiences: turn.audiences ?? [],
+          purposes: turn.purposes ?? [],
+          intent: turn.intent ?? "",
+        };
+        await planRef.update({
+          ...merged,
+          seriesTitle: turn.seriesTitle ?? topic,
+          messages: [
+            ...planSnap.get("messages"),
+            { role: "user", text: userText, createdAt: now },
+            { role: "assistant", text: turn.reply, createdAt: now },
+          ],
+        });
+        return {
+          reply: turn.reply,
+          proposal: null,
+          topicSuggestions: null,
+          summary: merged,
+          readyToConfirm: turn.readyToConfirm ?? false,
+          isMock,
+        };
       });
     }
 
     // ── 자유 발화·주제 후보 선택 — 주제를 (다시) 잡고 ② 후보를 제시한다 ──
-    const turn = await ai.ideaTurn(text, ctx);
-    const merged = {
-      topic: turn.topic ?? topic,
-      audiences: [], // 주제가 새로 잡히면 선택은 처음부터 (IA 2.1 순서)
-      purposes: [],
-      intent: "",
-    };
-    await planRef.update({
-      ...merged,
-      seriesTitle: "",
-      messages: [
-        ...planSnap.get("messages"),
-        { role: "user", text, createdAt: now },
-        { role: "assistant", text: turn.reply, createdAt: now },
-      ],
-    });
-    return NextResponse.json({
-      reply: turn.reply,
-      proposal: turn.proposal ?? null,
-      topicSuggestions: null,
-      summary: merged,
-      readyToConfirm: false,
-      isMock,
+    return ndjson(async (emit) => {
+      const turn = await ai.ideaTurn(text, ctx, emit);
+      const merged = {
+        topic: turn.topic ?? topic,
+        audiences: [], // 주제가 새로 잡히면 선택은 처음부터 (IA 2.1 순서)
+        purposes: [],
+        intent: "",
+      };
+      await planRef.update({
+        ...merged,
+        seriesTitle: "",
+        messages: [
+          ...planSnap.get("messages"),
+          { role: "user", text, createdAt: now },
+          { role: "assistant", text: turn.reply, createdAt: now },
+        ],
+      });
+      return {
+        reply: turn.reply,
+        proposal: turn.proposal ?? null,
+        topicSuggestions: null,
+        summary: merged,
+        readyToConfirm: false,
+        isMock,
+      };
     });
   } catch {
     return NextResponse.json(
@@ -266,4 +277,47 @@ export async function POST(
       { status: 500 },
     );
   }
+}
+
+/**
+ * NDJSON(한 줄에 JSON 하나) 스트림 응답.
+ *
+ *   {"type":"delta","text":"안녕"}      ← 만들어지는 대로 여러 줄
+ *   {"type":"done", ...평소의 payload}   ← 마지막 한 줄
+ *   {"type":"error","error":"..."}      ← 실패했을 때
+ *
+ * SSE 대신 NDJSON을 쓴다 — 재연결·이벤트 이름이 필요 없는 단발 응답이고,
+ * 클라이언트가 `줄 단위로 JSON.parse` 하면 끝이라 다룰 것이 적다.
+ *
+ * **스트림이 시작된 뒤에는 HTTP 상태코드를 바꿀 수 없다.** 그래서 실패도 200 안에서
+ * `type:"error"` 줄로 알린다. 클라이언트는 이 줄을 에러로 다룬다.
+ */
+function ndjson(
+  run: (emit: (delta: string) => void) => Promise<Record<string, unknown>>,
+): Response {
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const line = (o: unknown) =>
+        controller.enqueue(encoder.encode(`${JSON.stringify(o)}\n`));
+      try {
+        const done = await run((text) => line({ type: "delta", text }));
+        line({ type: "done", ...done });
+      } catch {
+        line({ type: "error", error: "응답을 만들지 못했어요. 잠시 후 다시 시도해주세요." });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-store",
+      // 중간 프록시가 모아서 보내면 스트리밍이 의미를 잃는다
+      "X-Accel-Buffering": "no",
+    },
+  });
 }

@@ -44,18 +44,29 @@ export type CardDraft = {
   intent: string;
 };
 
+/**
+ * 답이 만들어지는 동안 말풍선에 글자를 흘려보내는 콜백.
+ *
+ * 실측(08-31): 전체 응답은 11초가 걸리는데 **첫 글자는 1.2초**에 온다.
+ * 다 만들어질 때까지 기다렸다 한 번에 보여주면 그 차이가 통째로 대기 시간이 된다.
+ *
+ * 넘기지 않아도 되고(그때는 완성본만 돌아온다), 모의 AI는 무시한다.
+ */
+export type OnText = (delta: string) => void;
+
 export type PlanningAI = {
   /** ① 주제 확인 — 주제가 전혀 없을 때만. 후보 4개를 제시한다 (열린 질문 금지) */
-  greeting(ctx: PlanningContext): Promise<PlanTurnResult>;
+  greeting(ctx: PlanningContext, onText?: OnText): Promise<PlanTurnResult>;
 
   /** 사용자의 아이디어로 주제를 확정하고 ② 단계 후보(대상 4~5 + 목적)를 제시한다 */
-  ideaTurn(idea: string, ctx: PlanningContext): Promise<PlanTurnResult>;
+  ideaTurn(idea: string, ctx: PlanningContext, onText?: OnText): Promise<PlanTurnResult>;
 
   /** ② 선택 반영 — 빈 배열이면 AI가 알아서 정하고 넘어간다 */
   selectionTurn(
     topic: string,
     selected: PlanProposal,
     ctx: PlanningContext,
+    onText?: OnText,
   ): Promise<PlanTurnResult>;
 
   /**

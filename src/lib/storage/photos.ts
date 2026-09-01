@@ -29,16 +29,25 @@ const EXTENSION: Record<PhotoContentType, string> = {
 };
 
 /**
- * 저장 경로 — `cards/{cardId}/photos/{uuid}.{ext}`
+ * 사진이 붙는 대상 — 기획(plan) 또는 카드(card).
+ *
+ * 기획 단계에서 올린 사진은 `plans/`에 한 번만 두고, 카드에는 **주소만 물려준다**
+ * (08-31). 대상이 여럿이면 카드도 여럿인데 같은 파일을 여러 벌 둘 이유가 없다.
+ */
+export type PhotoOwner = "plans" | "cards";
+
+/**
+ * 저장 경로 — `{plans|cards}/{id}/photos/{uuid}.{ext}`
  *
  * 파일명은 사용자가 준 이름을 쓰지 않고 새로 만든다. 원본 이름에는 경로 문자나
  * 개인정보가 섞일 수 있고, 같은 이름을 다시 올리면 앞의 것을 덮어쓴다.
  */
 export function buildPhotoPath(
-  cardId: string,
+  owner: PhotoOwner,
+  id: string,
   contentType: PhotoContentType,
 ): string {
-  return `cards/${cardId}/photos/${randomUUID()}.${EXTENSION[contentType]}`;
+  return `${owner}/${id}/photos/${randomUUID()}.${EXTENSION[contentType]}`;
 }
 
 /** 버킷 이름은 클라이언트 설정과 같은 값을 본다 — 둘이 갈라지면 찾기 어려운 버그가 된다 */
@@ -74,13 +83,14 @@ export type IssueResult =
  * 서명된 읽기 URL은 최대 7일이라 `photoUrls`에 저장할 수 없다.
  */
 export async function issueUploadTicket(
-  cardId: string,
+  owner: PhotoOwner,
+  id: string,
   contentType: PhotoContentType,
 ): Promise<IssueResult> {
   const name = bucketName();
   if (!name) return { ok: false, reason: "storage_not_configured" };
 
-  const path = buildPhotoPath(cardId, contentType);
+  const path = buildPhotoPath(owner, id, contentType);
   const downloadToken = randomUUID();
 
   try {

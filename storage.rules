@@ -13,6 +13,29 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    // plans/{planId}/photos/{fileName} — 기획 단계에서 올린 사진 (08-31)
+    //
+    // 카드가 생기기 전에 올리므로 기획에 붙여둔다. 카드 생성 시 **주소만** 물려주고
+    // 파일은 여기 한 벌만 둔다 — 대상이 여럿이면 카드도 여럿이지만 사진은 같다.
+    match /plans/{planId}/photos/{fileName} {
+      function planOwnedByRequester() {
+        return request.auth != null
+          && firestore.get(/databases/(default)/documents/plans/$(planId)).data.userId
+             == request.auth.uid;
+      }
+
+      // 읽기 — 기획 주인만. 이 사진이 곧 카드뉴스에 실린다
+      allow read: if planOwnedByRequester();
+
+      // 쓰기 — 본인 기획 · 이미지 형식 · 10MB 이하. 서버(photos.ts)와 같은 값이다
+      allow write: if planOwnedByRequester()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+
+      // 카드가 이 주소를 참조한다 — 지우면 카드뉴스가 깨진다
+      allow delete: if false;
+    }
+
     // cards/{cardId}/photos/{fileName} — 카드 1장에 붙는 재료 사진
     //
     // 소유자 확인에 Firestore를 본다. 경로에 uid를 넣지 않은 이유는

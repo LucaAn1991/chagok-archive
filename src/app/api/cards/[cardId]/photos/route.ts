@@ -56,7 +56,7 @@ export async function POST(
     );
   }
 
-  const result = await issueUploadTicket(cardId, body.contentType);
+  const result = await issueUploadTicket("cards", cardId, body.contentType);
   if (!result.ok) {
     return NextResponse.json(
       { error: "사진 업로드는 아직 준비 중이에요.", reason: result.reason },

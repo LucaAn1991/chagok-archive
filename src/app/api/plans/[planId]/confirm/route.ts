@@ -4,6 +4,8 @@ import { adminDb } from "@/lib/firebase/admin";
 import { getPlanningAI } from "@/lib/ai";
 import { AUDIENCES, AUDIENCE_DEFAULT, MAX_CARDS_PER_RUN } from "@/lib/audiences";
 import { verifyRequest } from "@/lib/server/request-auth";
+import { themeFromAttributes } from "@/lib/render/themes";
+import type { StyleAttributes } from "@/types";
 
 /**
  * POST /api/plans/[planId]/confirm — 기획 확정 → 카드 N장 생성 (F3 · PLAN §6).
@@ -14,6 +16,30 @@ import { verifyRequest } from "@/lib/server/request-auth";
  * 이미 확정된 plan이면 그대로 성공으로 응답한다(멱등) —
  * 확정 후 배치(schedule) 단계에서 실패했을 때 [다시 시도]가 안전하게 재진입한다.
  */
+/**
+ * 목록용 짧은 제목 (08-31 §5) — 사용자가 쓴 낱말을 **그대로 줄이기만** 한다.
+ * 새 표현·수식어를 지어 붙이지 않는다. 끝의 요청 어미만 걷어내고 20자 어절 단위로 자른다.
+ * @TODO: 실AI 연결 시 원문 낱말 유지 제약을 프롬프트로 옮긴다
+ */
+function shortenForList(topic: string): string {
+  let t = topic.trim().replace(/\s+/g, " ");
+  t = t
+    .replace(
+      /(을|를)?\s*(만들어\s*줘|해\s*줘|제작해\s*줘|알려\s*줘|부탁해|주세요|해주세요|만들어주세요|제안해\s*줘|제안)[.!~]*$/u,
+      "",
+    )
+    .trim();
+  if (t.length > 20) {
+    let out = "";
+    for (const w of t.split(" ")) {
+      if ((out ? out + " " + w : w).length > 20) break;
+      out = out ? out + " " + w : w;
+    }
+    t = out || t.slice(0, 20);
+  }
+  return t || topic;
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ planId: string }> },
@@ -72,6 +98,30 @@ export async function POST(
     const now = Timestamp.now();
     const batch = adminDb.batch();
 
+    /*
+      기획에서 올린 사진을 카드에 물려준다 (08-31).
+      **주소만 넘기고 파일은 복사하지 않는다** — 대상이 셋이면 카드도 셋인데
+      같은 사진을 세 벌 둘 이유가 없다. 파일은 plans/{planId}/photos/에 한 벌뿐이다.
+
+      visualType은 사진 유무로 정한다 (DESIGN §12 폴백 사슬). 사진이 없으면
+      제작 단계에서 스톡을 찾고 그것도 없으면 글자만으로 완성되므로,
+      최종 판정은 렌더 route가 그 시점에 다시 한다.
+    */
+    const planPhotos: string[] = planSnap.get("photoUrls") ?? [];
+    const visualType = planPhotos.length > 0 ? "user_photo_preferred" : "stock_recommended";
+
+    /*
+      산출물 테마는 **온보딩에서 고른 취향**에서 정한다 (08-31).
+      그동안 `visualPreferences`는 모으기만 하고 결과물에 닿지 않아서,
+      어떤 취향을 골랐든 카드가 똑같이 나왔다.
+
+      취향이 없으면(«잘 모르겠어요») 기본 테마로 떨어진다.
+      사용자는 제작 결과 화면에서 언제든 바꿀 수 있다.
+    */
+    const userSnap = await adminDb.collection("users").doc(session.uid).get();
+    const attributes: StyleAttributes[] = userSnap.get("visualPreferences.attributes") ?? [];
+    const themeId = themeFromAttributes(attributes);
+
     for (const [index, draft] of drafts.entries()) {
       const cardRef = adminDb.collection("cards").doc();
       // 생성 순서를 createdAt에 1ms씩 새겨 둔다 — 배치(F4)가 이 순서대로 날짜를 준다
@@ -87,8 +137,9 @@ export async function POST(
         scheduledDate: "", // 배치(F4·/schedule)가 부여한다
         status: "planned",
         publishIntent: null,
-        visualType: "stock_recommended", // @TODO: 이미지 폴백 판정은 실AI 구현 시 (DESIGN §12)
-        photoUrls: [], // @TODO: 기획안의 사진 선택 반영은 Storage 구성 후 (PLAN §8)
+        themeId, // 온보딩 취향에서 정한 기본값. 제작 결과 화면에서 변경 가능 (08-31)
+        visualType, // 사진 유무로 판정. 렌더 시점에 다시 확인한다 (DESIGN §12)
+        photoUrls: planPhotos, // 기획 단계 사진을 그대로 물려받는다 (08-31)
         extraNote: "",
         templateVars: {},
         caption: null,
@@ -103,6 +154,8 @@ export async function POST(
       status: "confirmed",
       cardCount: drafts.length,
       confirmedAt: now,
+      seriesTitle: shortenForList(topic), // 목록용 짧은 제목 — 원문은 messages에 그대로 남는다
+
       messages: [
         ...planSnap.get("messages"),
         {

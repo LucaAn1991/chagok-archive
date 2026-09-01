@@ -59,6 +59,10 @@ export const STOCK_SUGGESTIONS: StockSuggestion[] = [
 ];
 
 type Props = {
+  /** true면 화면 폭과 무관하게 2열 그리드로 래핑 (모바일 「다른 사진 고르기」 펼침용) */
+  wrap?: boolean;
+  /** true면 «사진» 제목·안내 문구를 숨긴다 — 펼침 영역엔 타일만 */
+  hideIntro?: boolean;
   selectedStockId: string | null;
   userPhotos: string[]; // Object URL 미리보기
   onSelectStock: (id: string) => void;
@@ -67,6 +71,8 @@ type Props = {
 };
 
 export default function PlanPhotoPicker({
+  wrap,
+  hideIntro,
   selectedStockId,
   userPhotos,
   onSelectStock,
@@ -75,22 +81,38 @@ export default function PlanPhotoPicker({
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const hasUserPhotos = userPhotos.length > 0;
+  // wrap 모드(모바일 펼침)에서는 타일이 셀 폭을 채운다 — 기본은 기존 반응형 그대로
+  // wrap: 타일 폭 = (박스 안쪽 폭 − 간격 2개) / 3 이 그리드에서 자동 계산 — 정사각 유지
+  const tileSize = wrap ? "aspect-square w-full" : "h-20 w-16 lg:h-20 lg:w-full";
+  const cellWidth = wrap ? "w-full" : "lg:w-full";
 
   return (
     <div>
-      <h3 className="text-label font-semibold text-sub">사진</h3>
-      <p className="mt-0.5 text-caption text-sub">
-        {hasUserPhotos
-          ? "올려주신 사진을 먼저 쓸게요."
-          : "이렇게 골라뒀어요 — 바꾸거나 직접 올릴 수 있어요."}
-      </p>
+      {!hideIntro && (
+        <>
+          <h3 className="text-label font-semibold text-sub">사진</h3>
+          <p className="mt-0.5 text-caption text-sub">
+            {hasUserPhotos
+              ? "올려주신 사진을 먼저 쓸게요."
+              : "이렇게 골라뒀어요 — 바꾸거나 직접 올릴 수 있어요."}
+          </p>
+        </>
+      )}
 
-      <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+      {/* 2열 레이아웃(lg+)에서는 한 줄 2개 × 3줄 래핑 — 가로 스크롤·잘림 금지 (08-31).
+          모바일은 기존 가로 스크롤 유지 */}
+      <div
+        className={
+          wrap
+            ? "mt-2 grid grid-cols-3 gap-2"
+            : "mt-2 flex gap-2 overflow-x-auto pb-1 lg:grid lg:grid-cols-2 lg:overflow-visible lg:pb-0"
+        }
+      >
         {/* 내 사진 올리기 — 폴백 사슬 1순위 (DESIGN §12) */}
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="flex h-20 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-sm border border-dashed border-line text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
+          className="flex h-20 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-sm border border-dashed lg:h-20 lg:w-full border-line text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
         >
           <ImagePlus size={20} aria-hidden />
           <span className="text-caption">내 사진</span>
@@ -109,12 +131,12 @@ export default function PlanPhotoPicker({
 
         {/* 올린 사진 — 순서 = 배열 순서 (F13) */}
         {userPhotos.map((url, i) => (
-          <div key={url} className="relative shrink-0">
+          <div key={url} className={`relative shrink-0 ${cellWidth}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={url}
               alt={`올린 사진 ${i + 1}`}
-              className="h-20 w-16 rounded-sm border-2 border-berry object-cover"
+              className={`${tileSize} rounded-sm border-2 border-berry object-cover`}
             />
             <button
               type="button"
@@ -136,11 +158,11 @@ export default function PlanPhotoPicker({
               type="button"
               onClick={() => onSelectStock(s.id)}
               aria-pressed={selected}
-              className="shrink-0 text-center"
+              className={`flex shrink-0 flex-col text-center ${cellWidth}`}
             >
               <span
                 className={[
-                  "relative block h-20 w-16 overflow-hidden rounded-sm border-2",
+                  `relative block ${tileSize} overflow-hidden rounded-sm border-2`,
                   selected ? "border-berry" : "border-transparent",
                 ].join(" ")}
               >
@@ -154,7 +176,7 @@ export default function PlanPhotoPicker({
               </span>
               <span
                 className={[
-                  "mt-1 block text-caption",
+                  "mt-1 block whitespace-normal break-keep text-caption",
                   selected ? "font-semibold text-berry-dark" : "text-sub",
                 ].join(" ")}
               >

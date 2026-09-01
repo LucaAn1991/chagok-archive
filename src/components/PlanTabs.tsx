@@ -12,12 +12,18 @@ const TABS = [
   { href: "/plan/history", label: "지난 기획" },
 ] as const;
 
-export default function PlanTabs() {
+export default function PlanTabs({ action }: { action?: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="AI 기획 탭" className="flex gap-1 border-b border-line">
-      {TABS.map(({ href, label }) => {
+    /* 왼쪽 탭 그룹 + 오른쪽 끝 액션(예: 다시 시작 칩) — 구분선은 행 전체 폭 (08-31).
+       활성 밑줄은 각 탭 요소에만 그려져 칩 아래로 이어지지 않는다 */
+    <nav
+      aria-label="AI 기획 탭"
+      className="flex items-center justify-between gap-2 border-b border-line"
+    >
+      <div className="flex min-w-0 gap-1">
+        {TABS.map(({ href, label }) => {
         const active = pathname === href;
         return (
           <Link
@@ -31,10 +37,12 @@ export default function PlanTabs() {
                 : "border-transparent text-sub hover:text-ink",
             ].join(" ")}
           >
-            {label}
-          </Link>
-        );
-      })}
+              {label}
+            </Link>
+          );
+        })}
+      </div>
+      {action && <div className="shrink-0 whitespace-nowrap pb-1">{action}</div>}
     </nav>
   );
 }
