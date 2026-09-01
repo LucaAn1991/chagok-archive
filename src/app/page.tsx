@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Landing from "@/components/Landing";
 import { useRouter } from "next/navigation";
 import { LogoSymbol } from "@/components/Logo";
 import { onAuthStateChanged, signOut, type User as AuthUser } from "firebase/auth";
@@ -53,32 +54,6 @@ export default function RootPage() {
   if (authUser === undefined) return <FullPageLoading />;
   if (authUser === null) return <Landing />;
   return <Home uid={authUser.uid} />;
-}
-
-/* ============================================================
-   랜딩 (비로그인) — 담당 밖. 진입만 막히지 않게 최소로 둔다
-   ============================================================ */
-
-function Landing() {
-  return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-6 p-4">
-      <div className="text-center">
-        <h1 className="text-h1 font-bold text-ink">차곡</h1>
-        <p className="mt-3 text-body-l text-sub">
-          말하면 정리되고, 정리되면 일정이 되고,
-          <br />
-          일정이 하나씩 콘텐츠로 완성됩니다.
-        </p>
-        {/* @TODO: 랜딩 본문 — 제품 소개 · 테스트 참가자 컨텍스트 (PRD §5-1, 담당 별도) */}
-      </div>
-      <Link
-        href="/login"
-        className="flex h-12 w-full max-w-[320px] items-center justify-center rounded-md bg-berry text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
-      >
-        시작하기
-      </Link>
-    </main>
-  );
 }
 
 /* ============================================================
