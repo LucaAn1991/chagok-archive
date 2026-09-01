@@ -8,7 +8,7 @@ import type { CardStatus } from "@/types";
  */
 const STATUS_LABEL: Record<CardStatus, string> = {
   planned: "제작 대기",
-  pending: "올리기만 남음", // 08-31 — «업로드 대기» 교체, 압박감 없는 표현
+  pending: "업로드 대기", // 09-01 팀 합의 — «올리기만 남음»은 좁은 타일에서 잘려 원복
   published: "발행 완료",
   discarded: "버림",
 };
@@ -24,12 +24,18 @@ export default function StatusBadge({ status: rawStatus }: { status: CardStatus 
   // 과도기 방어 — DB에 남은 옛 'crafted' 값은 pending으로 보여준다 (08-31 상태 개편)
   const status: CardStatus = STATUS_LABEL[rawStatus] ? rawStatus : "pending";
   return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill bg-surface-muted px-2.5 py-1 text-caption font-medium text-sub">
+    <span
+      className={[
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill bg-surface-muted px-2.5 py-1 text-caption font-medium",
+        // 진행 중 상태는 또렷하게, 끝난 상태(발행 완료)만 차분한 회색 (09-01)
+        status === "published" ? "text-sub" : "text-ink",
+      ].join(" ")}
+    >
       {status === "published" ? (
         <span aria-hidden className="font-semibold">
           ✓
         </span>
-      ) : status === "pending" ? null : ( // 08-31 — 빨간 계열 점 제거, 라벨만
+      ) : ( // 09-01 — 점 복원. 빨간 느낌은 점이 아니라 색(--st-pending)을 고쳐 해결
         <span
           aria-hidden
           className="h-2 w-2 rounded-pill"
