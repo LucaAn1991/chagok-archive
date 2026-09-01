@@ -64,7 +64,8 @@ export async function POST(
   const visualType: VisualType =
     card.photoUrls.length > 0
       ? "user_photo_preferred"
-      : isStockConfigured()
+      : // 기획에서 고른 스톡은 이미 손에 있다 — 검색 키가 없어도 그 한 장은 쓸 수 있다 (09-01)
+        isStockConfigured() || card.stockPhoto
         ? "stock_recommended"
         : "text_only";
 
@@ -80,6 +81,7 @@ export async function POST(
       visualPreferences: user.visualPreferences ?? null, // 취향의 문구 톤 반영 (08-31)
       visualType,
       photoUrls: card.photoUrls ?? [], // 이미지 레이아웃에 순서대로 배정된다 (08-31)
+      chosenStock: card.stockPhoto ?? null, // 기획에서 고른 스톡 — 첫 이미지 자리 (09-01)
       templateId, // 주면 장수·순서가 고정된다 (08-31)
     });
 

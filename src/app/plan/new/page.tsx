@@ -13,12 +13,14 @@ import MobileBottomNav from "@/components/MobileBottomNav";
 import AIChatBubble, { SystemEventLine } from "@/components/AIChatBubble";
 import {
   TopicLine,
+  type PlanPhotos,
   type PlanSummary,
   type PlanSummaryPatch,
 } from "@/components/PlanningSummaryPanel";
-import PlanPhotoPicker, { STOCK_SUGGESTIONS } from "@/components/PlanPhotoPicker";
+import PlanPhotoPicker from "@/components/PlanPhotoPicker";
 import PageHeader from "@/components/PageHeader";
 import PlanTabs from "@/components/PlanTabs";
+import type { StockPick } from "@/types";
 
 /**
  * 새 기획 — AI 기획 대화 3단계 (F2 · IA 2.1, 08-27 원안 복원).
@@ -177,7 +179,9 @@ function NewPlanScreen() {
     추천(스톡) 칩은 기획안 박스의 3×2 그리드로 유지한다 — 09-01 병합 시 확정.
     실제 스톡 배정은 제작 단계에서 슬라이드 내용을 보고 다시 고른다 (`lib/ai/slides.ts`).
   */
-  const [selectedStockId, setSelectedStockId] = useState<string | null>(STOCK_SUGGESTIONS[0].id);
+  const [stockOptions, setStockOptions] = useState<StockPick[]>([]);
+  const [stockLoading, setStockLoading] = useState(false);
+  const [selectedStock, setSelectedStock] = useState<StockPick | null>(null);
   const [userPhotos, setUserPhotos] = useState<string[]>([]);
 
   // 입력창이 주인공 — 칩은 입력창을 채울 뿐, 전송은 사용자가 한다 (08-28)
@@ -279,6 +283,69 @@ function NewPlanScreen() {
       // 저장 실패는 조용히 넘긴다 — 사진은 «있으면 쓰는» 재료라 여기서 화면을 막지 않는다
     }
   }
+
+  /**
+   * 추천 사진을 고른다 (09-01) — 화면에 먼저 반영하고 기획에도 남긴다.
+   *
+   * 여기 저장한 한 장이 카드 첫 이미지 자리로 간다 (`lib/ai/slides.ts`).
+   * 저장이 실패해도 화면은 막지 않는다 — 사진은 «있으면 쓰는» 재료다.
+   */
+  function pickStock(photo: StockPick) {
+    setSelectedStock(photo);
+    if (!planId) return;
+    void updateDoc(doc(db, "plans", planId), { stockPhoto: photo }).catch(() => {});
+  }
+
+  /*
+    추천 사진 불러오기 (09-01) — 주제가 정해진 뒤에 한 번만.
+
+    ①보다 먼저 부르면 검색어가 될 주제가 아직 없다. 그래서 `ready`를 기다린다.
+    첫 장을 미리 골라둔다 — 「사진을 골라주세요」가 아니라
+    「이렇게 골랐어요, 바꾸고 싶으면 바꾸세요」다 (DESIGN §1).
+
+    실패·빈손이면 조용히 빈 목록으로 둔다. 사진은 «있으면 쓰는» 재료라
+    여기서 에러를 띄우면 기획이 멈춘 것처럼 보인다 (DESIGN §12).
+  */
+  const stockFetchedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ready || !planId || stockFetchedFor.current === planId) return;
+    stockFetchedFor.current = planId;
+
+    let alive = true;
+    setStockLoading(true);
+    void (async () => {
+      try {
+        const user = auth.currentUser;
+        if (!user) return;
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/plans/${planId}/stock`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { photos?: StockPick[] };
+        if (!alive) return;
+
+        const photos = data.photos ?? [];
+        setStockOptions(photos);
+        // 첫 장을 미리 골라둔다. 사용자가 이미 고른 게 있으면 건드리지 않는다
+        if (photos[0]) {
+          setSelectedStock((prev) => {
+            if (prev) return prev;
+            void updateDoc(doc(db, "plans", planId), { stockPhoto: photos[0] }).catch(() => {});
+            return photos[0];
+          });
+        }
+      } catch {
+        // 후보를 못 받으면 「내 사진」만 보여준다 — 화면은 그대로 동작한다
+      } finally {
+        if (alive) setStockLoading(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [ready, planId]);
 
   async function runTurn(payload: TurnPayload) {
     setSending(true);
@@ -521,9 +588,11 @@ function NewPlanScreen() {
     continueHref: planId ? `/plan/new?from=${planId}` : undefined,
     showPhotos: ready, // 기획이 정리된 뒤에 사진을 고른다 — 순서를 앞지르지 않는다
     photos: {
-      selectedStockId,
+      stockOptions,
+      stockLoading,
+      selectedStockUrl: selectedStock?.imageUrl ?? null,
       userPhotos,
-      onSelectStock: setSelectedStockId,
+      onSelectStock: pickStock,
       onAddUserPhotos: uploadPhotos,
       onRemoveUserPhoto: removePhoto,
     },
@@ -727,13 +796,7 @@ function PlanBox({
   confirmError,
 }: {
   summary: PlanSummary;
-  photos: {
-    selectedStockId: string | null;
-    userPhotos: string[];
-    onSelectStock: (id: string) => void;
-    onAddUserPhotos: (files: FileList) => void;
-    onRemoveUserPhoto: (url: string) => void;
-  };
+  photos: PlanPhotos;
   onSave: (patch: PlanSummaryPatch) => void;
   onConfirm: () => void;
   confirming: boolean;
@@ -828,14 +891,7 @@ function PlanBox({
       <div className="my-4 border-t border-line" />
 
       {/* 사진 — 내 사진 + 추천 5, 한 줄 3개 × 2줄. 가로 스크롤 없음 (§2) */}
-      <PlanPhotoPicker
-        wrap
-        selectedStockId={photos.selectedStockId}
-        userPhotos={photos.userPhotos}
-        onSelectStock={photos.onSelectStock}
-        onAddUserPhotos={photos.onAddUserPhotos}
-        onRemoveUserPhoto={photos.onRemoveUserPhoto}
-      />
+      <PlanPhotoPicker wrap {...photos} />
 
       {/* 버튼 — 박스 맨 아래, 안쪽 폭 전체 (§2) */}
       <div className="mt-4">

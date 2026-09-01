@@ -2,70 +2,34 @@
 
 import { useRef } from "react";
 import { Check, ImagePlus, X } from "lucide-react";
+import type { StockPick } from "@/types";
 
 /**
- * 기획안의 사진 섹션 — 추천 이미지에서 고르거나 내 사진을 올린다.
+ * 기획안의 사진 섹션 — 추천 사진에서 고르거나 내 사진을 올린다.
  *
  * 이미지 폴백 사슬(DESIGN §12): 사용자 사진 > 스톡 > text-only.
  * 「사진을 골라주세요」가 아니라 「이렇게 골랐어요. 바꾸고 싶으면 바꾸세요.」 —
- * 추천 1번이 미리 선택된 채로 시작한다 (DESIGN §1).
+ * 첫 장이 미리 선택된 채로 시작한다 (DESIGN §1).
  *
- * @TODO: 무료 스톡 provider 미확정 (PLAN §12 미결 9) — 아래 추천 5장은 임시 이미지다.
- * @TODO: Firebase Storage 버킷 미생성 (PLAN §8) — 내 사진은 미리보기만 되고 저장은 안 된다.
+ * **추천은 실제 스톡 사진이다 (09-01).** 예전에는 자리표시용 SVG 5장이 박혀
+ * 있었는데, 고를 수는 있지만 어디에도 반영되지 않는 칩이었다. 지금은
+ * `GET /api/plans/[planId]/stock`이 주제로 찾아온 사진이 오고,
+ * 여기서 고른 한 장이 카드 첫 이미지 자리까지 그대로 간다.
  */
-
-/** 임시 추천 이미지 — SVG 데이터 URI. 스톡 provider 확정 시 실제 이미지로 교체 */
-function placeholderSvg(bg: string, accent: string, deco: string): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="250" viewBox="0 0 200 250">
-    <rect width="200" height="250" fill="${bg}"/>
-    ${deco.replaceAll("ACCENT", accent)}
-  </svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
-}
-
-export type StockSuggestion = { id: string; label: string; src: string };
-
-export const STOCK_SUGGESTIONS: StockSuggestion[] = [
-  {
-    id: "s1",
-    label: "추천 1",
-    src: placeholderSvg("#F2DCE5", "#A85578",
-      '<circle cx="100" cy="105" r="52" fill="ACCENT" opacity="0.85"/><rect x="40" y="185" width="120" height="10" rx="5" fill="ACCENT" opacity="0.35"/>'),
-  },
-  {
-    id: "s2",
-    label: "추천 2",
-    src: placeholderSvg("#EDE9F5", "#806FA6",
-      '<rect x="35" y="55" width="130" height="90" rx="12" fill="ACCENT" opacity="0.8"/><rect x="35" y="160" width="90" height="10" rx="5" fill="ACCENT" opacity="0.4"/><rect x="35" y="180" width="120" height="10" rx="5" fill="ACCENT" opacity="0.25"/>'),
-  },
-  {
-    id: "s3",
-    label: "추천 3",
-    src: placeholderSvg("#FCEFEA", "#F28A72",
-      '<path d="M0 190 Q60 130 100 170 T200 150 V250 H0 Z" fill="ACCENT" opacity="0.7"/><circle cx="150" cy="70" r="26" fill="ACCENT" opacity="0.9"/>'),
-  },
-  {
-    id: "s4",
-    label: "추천 4",
-    src: placeholderSvg("#F6F2F4", "#2D292B",
-      '<rect x="45" y="90" width="110" height="12" rx="6" fill="ACCENT" opacity="0.85"/><rect x="45" y="118" width="80" height="12" rx="6" fill="ACCENT" opacity="0.55"/><rect x="45" y="146" width="95" height="12" rx="6" fill="ACCENT" opacity="0.3"/>'),
-  },
-  {
-    id: "s5",
-    label: "추천 5",
-    src: placeholderSvg("#F0E6EA", "#914868",
-      '<circle cx="55" cy="70" r="16" fill="ACCENT" opacity="0.8"/><circle cx="105" cy="70" r="16" fill="ACCENT" opacity="0.55"/><circle cx="155" cy="70" r="16" fill="ACCENT" opacity="0.3"/><rect x="39" y="120" width="122" height="80" rx="10" fill="ACCENT" opacity="0.2"/>'),
-  },
-];
 
 type Props = {
   /** true면 화면 폭과 무관하게 2열 그리드로 래핑 (모바일 「다른 사진 고르기」 펼침용) */
   wrap?: boolean;
   /** true면 «사진» 제목·안내 문구를 숨긴다 — 펼침 영역엔 타일만 */
   hideIntro?: boolean;
-  selectedStockId: string | null;
+  /** 주제로 찾아온 추천 사진. 아직 못 받았으면 빈 배열 */
+  stockOptions: StockPick[];
+  /** 추천을 불러오는 중 — 빈 자리 대신 뼈대를 보여준다 */
+  stockLoading: boolean;
+  /** 고른 추천 사진의 주소. 안 골랐으면 null */
+  selectedStockUrl: string | null;
   userPhotos: string[]; // Object URL 미리보기
-  onSelectStock: (id: string) => void;
+  onSelectStock: (photo: StockPick) => void;
   onAddUserPhotos: (files: FileList) => void;
   onRemoveUserPhoto: (url: string) => void;
 };
@@ -73,7 +37,9 @@ type Props = {
 export default function PlanPhotoPicker({
   wrap,
   hideIntro,
-  selectedStockId,
+  stockOptions,
+  stockLoading,
+  selectedStockUrl,
   userPhotos,
   onSelectStock,
   onAddUserPhotos,
@@ -86,6 +52,10 @@ export default function PlanPhotoPicker({
   const tileSize = wrap ? "aspect-square w-full" : "h-20 w-16 lg:h-20 lg:w-full";
   const cellWidth = wrap ? "w-full" : "lg:w-full";
 
+  /* 추천을 한 장도 못 받은 경우 — 키가 없거나 검색이 빈손이었다.
+     화면을 비워두지 않고 「내 사진」만으로도 넘어갈 수 있다고 알린다 (DESIGN §12) */
+  const noStock = !stockLoading && stockOptions.length === 0;
+
   return (
     <div>
       {!hideIntro && (
@@ -94,7 +64,9 @@ export default function PlanPhotoPicker({
           <p className="mt-0.5 text-caption text-sub">
             {hasUserPhotos
               ? "올려주신 사진을 먼저 쓸게요."
-              : "이렇게 골라뒀어요 — 바꾸거나 직접 올릴 수 있어요."}
+              : noStock
+                ? "사진을 올리면 그걸 먼저 써요. 없어도 글자만으로 완성돼요."
+                : "이렇게 골라뒀어요 — 바꾸거나 직접 올릴 수 있어요."}
           </p>
         </>
       )}
@@ -149,46 +121,59 @@ export default function PlanPhotoPicker({
           </div>
         ))}
 
-        {/* 추천 이미지 5장 — 내 사진이 있으면 선택 표시를 걷는다 (폴백 사슬) */}
-        {STOCK_SUGGESTIONS.map((s) => {
-          const selected = !hasUserPhotos && s.id === selectedStockId;
-          return (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => onSelectStock(s.id)}
-              aria-pressed={selected}
-              className={`flex shrink-0 flex-col text-center ${cellWidth}`}
-            >
-              <span
-                className={[
-                  `relative block ${tileSize} overflow-hidden rounded-sm border-2`,
-                  selected ? "border-berry" : "border-transparent",
-                ].join(" ")}
+        {/* 불러오는 중 — 자리를 미리 잡아둔다. 칸이 갑자기 늘면 그리드가 튄다 */}
+        {stockLoading &&
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={`skeleton-${i}`} className={`shrink-0 ${cellWidth}`}>
+              <div className={`${tileSize} animate-pulse rounded-sm bg-surface-muted`} />
+            </div>
+          ))}
+
+        {/* 추천 사진 — 내 사진이 있으면 선택 표시를 걷는다 (폴백 사슬) */}
+        {!stockLoading &&
+          stockOptions.map((photo, i) => {
+            const selected = !hasUserPhotos && photo.imageUrl === selectedStockUrl;
+            return (
+              <button
+                key={photo.imageUrl}
+                type="button"
+                onClick={() => onSelectStock(photo)}
+                aria-pressed={selected}
+                aria-label={`추천 사진 ${i + 1} 고르기`}
+                className={`flex shrink-0 flex-col text-center ${cellWidth}`}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={s.src} alt="" className="h-full w-full object-cover" />
-                {selected && (
-                  <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-pill bg-berry text-white">
-                    <Check size={12} aria-hidden />
-                  </span>
-                )}
-              </span>
-              <span
-                className={[
-                  "mt-1 block whitespace-normal break-keep text-caption",
-                  selected ? "font-semibold text-berry-dark" : "text-sub",
-                ].join(" ")}
-              >
-                {s.label}
-              </span>
-            </button>
-          );
-        })}
+                <span
+                  className={[
+                    `relative block ${tileSize} overflow-hidden rounded-sm border-2`,
+                    selected ? "border-berry" : "border-transparent",
+                  ].join(" ")}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={photo.imageUrl} alt="" className="h-full w-full object-cover" />
+                  {selected && (
+                    <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-pill bg-berry text-white">
+                      <Check size={12} aria-hidden />
+                    </span>
+                  )}
+                </span>
+                <span
+                  className={[
+                    "mt-1 block truncate text-caption",
+                    selected ? "font-semibold text-berry-dark" : "text-sub",
+                  ].join(" ")}
+                >
+                  {photo.photographer}
+                </span>
+              </button>
+            );
+          })}
       </div>
 
-      {/* @TODO: 스톡 제공처 확정 후 실제 이미지로 교체 · 내 사진 저장은 Storage 연결 후 */}
-      <p className="mt-1 text-caption text-sub">지금은 예시 이미지예요 — 곧 실제 추천으로 바뀌어요.</p>
+      {noStock && !hideIntro && (
+        <p className="mt-1 text-caption text-sub">
+          지금은 추천할 사진을 찾지 못했어요. 내 사진을 올리거나 그냥 넘어가도 괜찮아요.
+        </p>
+      )}
     </div>
   );
 }
