@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { getUidFromRequest } from "@/lib/api/auth";
 import { renderSlidePng } from "@/lib/render/render-slide";
-import type { Card } from "@/types";
+import { toDataUri } from "@/lib/render/fetch-image";
+import type { Card, User } from "@/types";
 
 /**
  * GET /api/cards/[cardId]/slides/[order]/image — 슬라이드 1장을 PNG로 렌더링.
@@ -28,6 +29,14 @@ export async function GET(
     return NextResponse.json({ error: "카드를 찾을 수 없어요." }, { status: 404 });
   }
 
+  /*
+    「내 스타일」은 카드가 아니라 **계정**에 붙어 있다 (08-31 · DESIGN.md §12).
+    그래서 그릴 때마다 사용자 문서를 함께 읽는다 — 스타일을 바꾸면
+    이미 만든 카드도 다음에 열 때 새 색·폰트로 그려진다.
+  */
+  const userSnap = await adminDb.collection("users").doc(uid).get();
+  const brand = (userSnap.data() as User | undefined)?.brand ?? null;
+
   const slide = card.slides.find((s) => s.order === Number(order));
   if (!slide) {
     return NextResponse.json({ error: "슬라이드를 찾을 수 없어요." }, { status: 404 });
@@ -36,8 +45,16 @@ export async function GET(
   try {
     const png = await renderSlidePng({
       layoutId: slide.layoutId,
+      // 테마는 카드 전체가 하나를 공유한다 (08-31). 옛 카드엔 없어서 기본값으로 그려진다
+      themeId: card.themeId,
+      brand,
+      bgOverride: card.bgOverride,
+      styleOverrides: slide.styleOverrides,
+      elements: slide.elements,
       texts: slide.texts,
-      imageUrl: slide.imageUrl,
+      // satori는 원격 URL을 못 받아온다 — 여기서 data URI로 바꿔 넘긴다.
+      // 실패하면 null이 되어 사진 없이 그려진다 (카드 전체를 못 쓰게 하지 않는다)
+      imageUrl: await toDataUri(slide.imageUrl),
     });
 
     return new NextResponse(new Uint8Array(png), {

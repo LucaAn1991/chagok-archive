@@ -3,8 +3,9 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
+import { doc, updateDoc } from "firebase/firestore";
 import { ArrowUp, Check, ChevronRight, Pencil, Plus } from "lucide-react";
-import { auth } from "@/lib/firebase/client";
+import { auth, db } from "@/lib/firebase/client";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/draft";
 import { addCustomAudience, loadCustomAudiences } from "@/lib/custom-audiences";
 import AppSidebar from "@/components/AppSidebar";
@@ -43,7 +44,20 @@ type TurnPayload =
   | { kind: "selection"; audiences: string[]; purposes: string[] }
   | { kind: "update"; patch: PlanSummaryPatch };
 
-async function postJson(path: string, body: unknown): Promise<Record<string, unknown>> {
+/**
+ * 답이 만들어지는 동안 «지금까지 온 전체 문장»을 넘겨받는 콜백.
+ *
+ * 늘어난 조각(delta)이 아니라 **매번 전체**를 준다. 재시도로 두 번째 호출이
+ * 시작되면 처음부터 다시 오므로, 화면은 받은 값으로 덮어쓰기만 하면
+ * 앞 시도의 글자가 남는 문제가 생기지 않는다.
+ */
+type OnStreamText = (fullTextSoFar: string) => void;
+
+async function postJson(
+  path: string,
+  body: unknown,
+  onText?: OnStreamText,
+): Promise<Record<string, unknown>> {
   const user = auth.currentUser;
   if (!user) throw new Error("로그인이 필요합니다.");
   const token = await user.getIdToken();
@@ -56,15 +70,65 @@ async function postJson(path: string, body: unknown): Promise<Record<string, unk
     const data = await res.json().catch(() => null);
     throw new Error(typeof data?.error === "string" ? data.error : "요청에 실패했어요.");
   }
-  return res.json();
+
+  // 스트리밍이 아닌 응답(복원·부분 수정 등)은 지금까지처럼 통째로 받는다
+  if (!res.headers.get("content-type")?.includes("x-ndjson")) {
+    return res.json();
+  }
+  return readNdjson(res, onText);
+}
+
+/**
+ * NDJSON 스트림을 읽어 마지막 `done` 줄을 돌려준다.
+ *
+ * 한 줄이 여러 조각으로 나뉘어 올 수 있으므로 개행이 나올 때까지 모았다 파싱한다.
+ * 스트림은 이미 200으로 시작했기 때문에 실패는 `type:"error"` 줄로 온다.
+ */
+async function readNdjson(
+  res: Response,
+  onText?: OnStreamText,
+): Promise<Record<string, unknown>> {
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("응답을 읽지 못했어요.");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let streamed = "";
+  let done: Record<string, unknown> | null = null;
+
+  for (;;) {
+    const { value, done: finished } = await reader.read();
+    if (finished) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let cut: number;
+    while ((cut = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, cut).trim();
+      buffer = buffer.slice(cut + 1);
+      if (!line) continue;
+
+      const event = JSON.parse(line) as Record<string, unknown>;
+      if (event.type === "delta" && typeof event.text === "string") {
+        streamed += event.text;
+        onText?.(streamed);
+      } else if (event.type === "error") {
+        throw new Error(typeof event.error === "string" ? event.error : "요청에 실패했어요.");
+      } else if (event.type === "done") {
+        done = event;
+      }
+    }
+  }
+
+  if (!done) throw new Error("응답이 끝까지 오지 않았어요.");
+  return done;
 }
 
 /** 자동 1회 재시도 (PRD §5-7 ①) — 그다음부터는 사용자가 누른다 */
-async function postWithRetry(path: string, body: unknown) {
+async function postWithRetry(path: string, body: unknown, onText?: OnStreamText) {
   try {
-    return await postJson(path, body);
+    return await postJson(path, body, onText);
   } catch {
-    return await postJson(path, body);
+    return await postJson(path, body, onText);
   }
 }
 
@@ -93,6 +157,8 @@ function NewPlanScreen() {
     intent: "",
   });
   const [sending, setSending] = useState(false);
+  // 만들어지는 중인 답 — 다 오면 null로 비우고 진짜 말풍선이 자리를 넘겨받는다
+  const [streamingText, setStreamingText] = useState<string | null>(null);
   const [failed, setFailed] = useState<TurnPayload | null>(null);
   const [ready, setReady] = useState(false); // ③으로 넘어갈 수 있는 상태
   const [isMock, setIsMock] = useState(false);
@@ -106,11 +172,12 @@ function NewPlanScreen() {
   const [confirmedLock, setConfirmedLock] = useState(false); // 카드 생성 후 — 주제 읽기 전용
   const [confirmError, setConfirmError] = useState(false);
 
-  // 사진 — 추천 1번을 미리 골라둔다 (「이렇게 골랐어요」 — DESIGN §1·§12).
-  // @TODO: F3 연결 시 카드로 전달. 내 사진 업로드 저장은 Storage 구성 후 (PLAN §8)
-  const [selectedStockId, setSelectedStockId] = useState<string | null>(
-    STOCK_SUGGESTIONS[0].id,
-  );
+  /*
+    사진 — 올린 사진은 기획에 저장되고, 카드 생성 때 주소를 물려준다 (08-31).
+    추천(스톡) 칩은 기획안 박스의 3×2 그리드로 유지한다 — 09-01 병합 시 확정.
+    실제 스톡 배정은 제작 단계에서 슬라이드 내용을 보고 다시 고른다 (`lib/ai/slides.ts`).
+  */
+  const [selectedStockId, setSelectedStockId] = useState<string | null>(STOCK_SUGGESTIONS[0].id);
   const [userPhotos, setUserPhotos] = useState<string[]>([]);
 
   // 입력창이 주인공 — 칩은 입력창을 채울 뿐, 전송은 사용자가 한다 (08-28)
@@ -139,9 +206,84 @@ function NewPlanScreen() {
   const didInit = useRef(false); // StrictMode의 이중 실행으로 plan이 2개 생기는 것을 막는다
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  /**
+   * 기획 단계 사진 업로드 (08-31).
+   *
+   * 카드가 생기기 전이라 기획에 붙여둔다 — 카드 생성 때 주소만 물려받는다.
+   * 재료 추가 화면(`CardPhotoUploader`)과 같은 흐름이다:
+   * 서버가 서명 URL을 주고, 파일은 브라우저 → Storage로 바로 간다.
+   *
+   * **먼저 미리보기를 띄우고 나중에 진짜 주소로 바꾼다.** 업로드가 끝날 때까지
+   * 빈 자리를 보여주면 «올라간 건가?» 싶어진다. 실패하면 그 사진만 걷어낸다.
+   */
+  async function uploadPhotos(files: FileList) {
+    const user = auth.currentUser;
+    if (!user || !planId) return;
+
+    for (const file of Array.from(files)) {
+      const preview = URL.createObjectURL(file);
+      setUserPhotos((prev) => [...prev, preview]);
+
+      try {
+        const token = await user.getIdToken();
+        const ticketRes = await fetch(`/api/plans/${planId}/photos`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ contentType: file.type }),
+        });
+        if (!ticketRes.ok) throw new Error("업로드하지 못했어요.");
+
+        const ticket = (await ticketRes.json()) as {
+          uploadUrl: string;
+          headers: Record<string, string>;
+          readUrl: string;
+        };
+
+        const put = await fetch(ticket.uploadUrl, {
+          method: "PUT",
+          headers: ticket.headers,
+          body: file,
+        });
+        if (!put.ok) throw new Error("업로드하지 못했어요.");
+
+        // 미리보기를 진짜 주소로 갈아끼우고, 기획에도 남긴다
+        setUserPhotos((prev) => {
+          const next = prev.map((u) => (u === preview ? ticket.readUrl : u));
+          void savePhotoUrls(next.filter((u) => !u.startsWith("blob:")));
+          return next;
+        });
+        URL.revokeObjectURL(preview);
+      } catch {
+        // 실패한 사진만 걷어낸다 — 나머지는 그대로 (PLAN §3-1 F13)
+        setUserPhotos((prev) => prev.filter((u) => u !== preview));
+        URL.revokeObjectURL(preview);
+      }
+    }
+  }
+
+  function removePhoto(url: string) {
+    if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+    setUserPhotos((prev) => {
+      const next = prev.filter((u) => u !== url);
+      void savePhotoUrls(next.filter((u) => !u.startsWith("blob:")));
+      return next;
+    });
+  }
+
+  /** 올라간 사진 주소를 기획에 저장한다. 보안 규칙이 photoUrls 쓰기를 허용한다 */
+  async function savePhotoUrls(urls: string[]) {
+    if (!planId) return;
+    try {
+      await updateDoc(doc(db, "plans", planId), { photoUrls: urls });
+    } catch {
+      // 저장 실패는 조용히 넘긴다 — 사진은 «있으면 쓰는» 재료라 여기서 화면을 막지 않는다
+    }
+  }
+
   async function runTurn(payload: TurnPayload) {
     setSending(true);
     setFailed(null);
+    setStreamingText(null);
     try {
       const data =
         payload.kind === "init"
@@ -157,7 +299,12 @@ function NewPlanScreen() {
                 : payload.kind === "selection"
                   ? { selection: { audiences: payload.audiences, purposes: payload.purposes } }
                   : { update: payload.patch },
+              setStreamingText,
             );
+
+      // 흘려보내던 글자를 지우고 완성된 말풍선에 자리를 넘긴다.
+      // 둘 다 같은 문장이라 화면에서는 이어져 보인다
+      setStreamingText(null);
 
       if (payload.kind === "init" && typeof data.planId === "string") setPlanId(data.planId);
       if (typeof data.reply === "string") {
@@ -185,6 +332,7 @@ function NewPlanScreen() {
       setReady(Boolean(data.readyToConfirm));
       setIsMock(Boolean(data.isMock));
     } catch {
+      setStreamingText(null); // 실패했으면 만들다 만 글자를 남기지 않는다
       if (payload.kind === "resume") {
         // 초안이 더 이상 유효하지 않다(확정됨·삭제됨) — 조용히 비우고 새로 시작
         clearDraft();
@@ -376,19 +524,10 @@ function NewPlanScreen() {
       selectedStockId,
       userPhotos,
       onSelectStock: setSelectedStockId,
-      onAddUserPhotos: (files: FileList) => {
-        // 미리보기용 Object URL — Storage 연결 전이라 세션 안에서만 유지된다
-        const urls = Array.from(files).map((f) => URL.createObjectURL(f));
-        setUserPhotos((prev) => [...prev, ...urls]);
-      },
-      onRemoveUserPhoto: (url: string) => {
-        URL.revokeObjectURL(url);
-        setUserPhotos((prev) => prev.filter((u) => u !== url));
-      },
+      onAddUserPhotos: uploadPhotos,
+      onRemoveUserPhoto: removePhoto,
     },
   };
-  // 기획안이 준비됐고 조용한 상태 → 다음 행동은 [이대로 카드 만들기] 하나다
-  
 
   return (
     <div className="flex flex-1">
@@ -487,6 +626,15 @@ function NewPlanScreen() {
                       setPicked((prev) => (prev.includes(a) ? prev : [...prev, a]));
                     }}
                     onSubmit={() => sendSelection(picked)}
+                  />
+                )}
+
+                {/* 만들어지는 중인 답 — 다 오면 위 목록의 진짜 말풍선이 자리를 넘겨받는다 */}
+                {streamingText !== null && (
+                  <AIChatBubble
+                    role="assistant"
+                    text={streamingText}
+                    showAvatar={messages[messages.length - 1]?.role !== "assistant"}
                   />
                 )}
 

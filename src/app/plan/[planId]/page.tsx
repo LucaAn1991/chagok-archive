@@ -7,8 +7,8 @@ import { onAuthStateChanged } from "firebase/auth";
 import { collection, doc, getDoc, getDocs, orderBy, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
-import MobileBottomNav from "@/components/MobileBottomNav";
 import PageHeader from "@/components/PageHeader";
+import MobileBottomNav from "@/components/MobileBottomNav";
 import { audienceLine, formatMonthDayWeekday } from "@/lib/format";
 import type { Card, Plan } from "@/types";
 
@@ -81,7 +81,7 @@ export default function PlanDetailPage() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <main className="mx-auto w-full max-w-[720px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
-          <PageHeader />
+          <PageHeader fallbackHref="/plan/history" backLabel="지난 기획" />
 
           {state.phase === "loading" && (
             <div aria-hidden className="flex animate-pulse flex-col gap-4 pt-2">

@@ -4,11 +4,10 @@
   이 파일의 값은 전부 DESIGN.md에서 온다. 여기서 값을 새로 만들지 않는다.
   색을 바꿔야 하면 DESIGN.md를 먼저 고치고 그 결과를 여기 옮긴다.
 
-  Pretendard — SIL Open Font License 1.1 (상업적 사용 가능)
-  dynamic-subset은 화면에 실제로 쓰인 글자만 내려받는다. 한글 전체 폰트는 1MB가
-  넘어서, 통째로 받으면 첫 로딩이 눈에 띄게 느려진다.
+  나눔스퀘어 네오 — 네이버 나눔글꼴 라이선스 (상업적 사용 가능)
+  폰트 로딩은 layout.tsx의 next/font/local이 맡는다. 여기서는 그 결과로 생긴
+  CSS 변수(--font-nanum-square-neo)를 받아 쓰기만 한다.
 */
-@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css");
 @import "tailwindcss";
 
 /* ============================================================
@@ -33,9 +32,8 @@
   --ink:           #2D292B;
   --sub:           #746F72;
 
-  /* 카드 상태 — 명도 계단식 (진할수록 완료에 가깝다) */
-  --st-planned:    #D9CCE8;  /* 기획 완료 */
-  --st-crafted:    #E9A9C0;  /* 제작 완료 */
+  /* 카드 상태 — 명도 계단식 (진할수록 완료에 가깝다). 08-31 crafted 제거로 4색 */
+  --st-planned:    #D9CCE8;  /* 제작 대기 */
   --st-pending:    #DE7E80;  /* 업로드 대기 */
   --st-published:  #A85578;  /* 발행 완료 = berry */
   --st-discarded:  #C4BDB7;  /* 버림 */
@@ -43,7 +41,7 @@
   /* 에러 — DESIGN.md §2 하단 [제안, 확정 대기] */
   --warn:          #B04F38;
 
-  /* 그라데이션 — 4곳에서만 (로고 · AI 아바타 · 생성 완료 · 기획 카드 테두리) */
+  /* 그라데이션 — 3곳에서만 (✦ · 생성 완료 · 기획 카드 테두리) — DESIGN.md §2 */
   --grad: linear-gradient(135deg, #806FA6, #A85578, #F28A72);
 
   /* DESIGN.md §4 — Radius */
@@ -82,7 +80,6 @@
   --color-sub:           var(--sub);
 
   --color-st-planned:    var(--st-planned);
-  --color-st-crafted:    var(--st-crafted);
   --color-st-pending:    var(--st-pending);
   --color-st-published:  var(--st-published);
   --color-st-discarded:  var(--st-discarded);
@@ -115,7 +112,8 @@
   --text-label:                 0.75rem;  /* 12 */
   --text-label--line-height:    1.40;
 
-  --font-sans: 'Pretendard Variable', Pretendard, -apple-system,
+  /* 폴백 스택은 layout.tsx의 localFont가 이 변수 안에 함께 넣어준다 */
+  --font-sans: var(--font-nanum-square-neo), -apple-system,
                BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR',
                sans-serif;
 }
@@ -136,6 +134,11 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
+  /*
+    나눔스퀘어 네오는 가변축 기본값이 100(Light)이다. 굵기를 지정하지 않으면
+    본문이 지나치게 얇게 나오므로 여기서 400을 못박는다.
+  */
+  font-weight: 400;
   /* DESIGN.md §3 — 본문 기본값 Body 14 / 1.60 */
   font-size: var(--text-body);
   line-height: 1.6;
@@ -145,8 +148,34 @@ body {
   DESIGN.md §15 — focus는 항상 보여야 한다.
   브라우저 기본 outline을 지우고 브랜드 색으로 교체한다.
   «2px berry + 2px 여백»이 규칙이라 offset을 준다.
+
+  버튼·링크·카드처럼 **테두리가 없는** 것들에 맞는 방식이다.
 */
 :focus-visible {
   outline: 2px solid var(--berry);
   outline-offset: 2px;
+}
+
+/*
+  입력칸은 다르게 그린다 (08-31).
+
+  입력칸에는 이미 1px 테두리가 있다. 여기에 2px 띄운 outline까지 얹으면
+  «테두리 → 빈 틈 → 링»이 삼중으로 떠 보인다. 모서리가 둥근 칸에서는
+  링만 따로 노는 것처럼 보이고, 부모가 overflow를 자르면 한쪽이 잘리기도 한다.
+
+  DESIGN.md §6 Form의 focus 규칙은 «--berry border 또는 ring 2px»다 —
+  띄운 outline이 아니라 **테두리 자체가 berry가 되는 것**이 원래 규칙이다.
+
+  `inset` 그림자로 안쪽 1px을 덧그려 2px 테두리처럼 보이게 한다.
+  border-width를 2px로 올리면 칸 안 글자가 1px씩 밀려 흔들린다.
+
+  바깥에 옅은 링을 두르지 않는다 — berry 테두리(흰 배경 위 4.96:1,
+  DESIGN.md §15)만으로 focus를 알아볼 수 있고, 링을 더하면 다시 두 겹이 된다.
+*/
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  border-color: var(--berry);
+  box-shadow: inset 0 0 0 1px var(--berry);
 }

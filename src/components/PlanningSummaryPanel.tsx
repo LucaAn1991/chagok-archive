@@ -267,7 +267,7 @@ function SummaryBody({
 }
 
 /**
- * 그라데이션 테두리 — 허용 4곳 중 「AI가 만든 기획 카드 테두리」 (DESIGN.md §2).
+ * 그라데이션 테두리 — 허용 3곳 중 「AI가 만든 기획 카드 테두리」 (DESIGN.md §2).
  * 1px 패딩 배경으로 테두리만 그라데이션이 되게 한다.
  */
 function GradientFrame({ children }: { children: React.ReactNode }) {

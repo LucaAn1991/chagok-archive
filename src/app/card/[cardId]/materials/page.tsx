@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { ChevronLeft } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
+import AppShell from "@/components/AppShell";
+import PageHeader from "@/components/PageHeader";
 import CardPhotoUploader from "@/components/CardPhotoUploader";
 import { MAX_PHOTOS_PER_CARD } from "@/lib/storage/limits";
 import type { Card, Plan } from "@/types";
@@ -108,38 +109,36 @@ export default function CardMaterialsPage() {
 
   if (phase === "loading") {
     return (
-      <main className="mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-4 p-4 pt-8">
+      <AppShell>
+        <div aria-hidden className="flex flex-col gap-4">
         <div className="h-8 w-40 animate-pulse rounded-md bg-surface-muted" />
         <div className="h-32 animate-pulse rounded-lg bg-surface-muted" />
         <div className="h-32 animate-pulse rounded-lg bg-surface-muted" />
-      </main>
+      </div>
+      </AppShell>
     );
   }
 
   if (phase === "not-found" || phase === "error" || !card) {
     return (
-      <main className="mx-auto flex w-full max-w-[720px] flex-1 flex-col items-center justify-center gap-3 p-4">
+      <AppShell>
+        <div className="flex flex-col items-center justify-center gap-3 py-16">
         <h1 className="text-title font-bold">
           {phase === "error" ? "카드를 불러오지 못했어요" : "카드를 찾을 수 없어요"}
         </h1>
         <Link href="/" className="text-body text-berry-dark underline underline-offset-4">
           홈으로 돌아가기
         </Link>
-      </main>
+      </div>
+      </AppShell>
     );
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-6 p-4 pb-16 pt-8">
+    <AppShell>
+      <PageHeader fallbackHref={`/card/${cardId}`} backLabel="돌아가기" />
+      <div className="mt-3 flex flex-col gap-6">
       <header className="flex flex-col gap-1">
-        {/* 뒤로 — 제작 흐름 중간이라 카드 상세로 고정한다 */}
-        <Link
-          href={`/card/${cardId}`}
-          aria-label="카드로 돌아가기"
-          className="-ml-2 mb-1 flex size-11 items-center justify-center self-start rounded-md text-sub hover:bg-surface-muted"
-        >
-          <ChevronLeft size={20} aria-hidden />
-        </Link>
         <h1 className="text-h3 font-bold text-ink">재료 추가</h1>
         <p className="text-body text-sub">{card.title}</p>
         <p className="text-body text-sub">
@@ -210,6 +209,7 @@ export default function CardMaterialsPage() {
           카드로 돌아가기
         </Link>
       </section>
-    </main>
+    </div>
+      </AppShell>
   );
 }

@@ -15,10 +15,10 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { ChevronLeft, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
-import AppSidebar from "@/components/AppSidebar";
-import MobileBottomNav from "@/components/MobileBottomNav";
+import AppShell from "@/components/AppShell";
+import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import type { Card } from "@/types";
 
@@ -244,243 +244,228 @@ function MissedView({ uid }: { uid: string }) {
   }
 
   return (
-    <div className="flex flex-1">
-      <AppSidebar />
+    <AppShell width={960}>
+      <PageHeader fallbackHref="/calendar" backLabel="돌아가기" />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <main className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
-          <div className="flex items-center gap-2">
-            <Link
-              href="/calendar"
-              aria-label="캘린더로 돌아가기"
-              className="flex size-11 items-center justify-center rounded-md text-sub hover:bg-surface-muted"
-            >
-              <ChevronLeft size={20} aria-hidden />
-            </Link>
-            <h1 className="text-title font-bold text-ink">놓친 카드</h1>
-          </div>
+      <h1 className="mt-3 text-title font-bold text-ink">놓친 카드</h1>
 
-          {state.phase === "loading" && (
-            <div className="mt-6 flex flex-col gap-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="h-20 animate-pulse rounded-lg bg-surface-muted" />
-              ))}
-            </div>
-          )}
+      {state.phase === "loading" && (
+        <div className="mt-6 flex flex-col gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-20 animate-pulse rounded-lg bg-surface-muted" />
+          ))}
+        </div>
+      )}
 
-          {state.phase === "error" && (
-            <div className="mt-16 flex flex-col items-center gap-3">
-              <p className="text-body text-sub">목록을 불러오지 못했어요.</p>
+      {state.phase === "error" && (
+        <div className="mt-16 flex flex-col items-center gap-3">
+          <p className="text-body text-sub">목록을 불러오지 못했어요.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setState({ phase: "loading" });
+              setReloadKey((k) => k + 1);
+            }}
+            className="h-11 rounded-md border border-line bg-surface px-5 text-body font-semibold text-ink hover:bg-surface-muted"
+          >
+            다시 시도
+          </button>
+        </div>
+      )}
+
+      {/* 0건 — 죄책감 없는 문구, 빨간색·경고 금지 (PLAN §2 F14) */}
+      {state.phase === "ready" && state.groups.length === 0 && (
+        <div className="mt-16 flex flex-col items-center gap-2">
+          <p className="text-body-l font-semibold text-ink">밀린 카드가 없어요</p>
+          <p className="text-body text-sub">지금 페이스 그대로면 충분해요.</p>
+          <Link
+            href="/calendar"
+            className="mt-3 flex h-11 items-center rounded-md border border-line bg-surface px-5 text-body font-semibold text-ink hover:bg-surface-muted"
+          >
+            캘린더로 돌아가기
+          </Link>
+        </div>
+      )}
+
+      {state.phase === "ready" &&
+        state.groups.map((group) => (
+          <section key={group.seriesTitle} className="mt-6">
+            <h2 className="text-body font-semibold text-ink">{group.seriesTitle}</h2>
+            <ul className="mt-2 flex flex-col gap-2">
+              {group.cards.map((card) => {
+                const busy = busyId === card.id;
+                return (
+                  <li
+                    key={card.id}
+                    className="rounded-lg border border-line bg-surface p-4 md:p-5"
+                  >
+                    {/* 정보는 한 줄씩 내려 쓴다 — 카드가 화면을 채우게 (08-31 피드백) */}
+                    <div className="flex items-start justify-between gap-3">
+                      <Link href={`/card/${card.id}`} className="min-w-0">
+                        <span className="block text-body-l font-semibold text-ink hover:underline">
+                          {card.title}
+                        </span>
+                      </Link>
+                      <StatusBadge status={card.status} />
+                    </div>
+                    <p className="mt-2 text-body text-sub">
+                      {formatDayLabel(card.scheduledDate)} 예정이었어요
+                    </p>
+                    <p className="mt-1 text-body text-sub">{card.audience}</p>
+
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      {publishId === card.id ? (
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="text-body text-sub">언제 올리셨어요?</span>
+                          <input
+                            type="date"
+                            value={publishDate}
+                            min={card.scheduledDate}
+                            max={todayKey}
+                            onChange={(e) => setPublishDate(e.target.value)}
+                            className="h-9 rounded-md border border-line bg-surface px-2 text-body text-ink"
+                          />
+                          <button
+                            type="button"
+                            disabled={busy || !publishDate}
+                            onClick={() => void markPublished(card)}
+                            className="h-9 rounded-md bg-berry px-3 text-body font-semibold text-white hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+                          >
+                            확인
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPublishId(null)}
+                            className="text-body text-sub hover:text-ink"
+                          >
+                            취소
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            setPublishId(card.id);
+                            setPublishDate(todayKey);
+                            setRescheduleId(null);
+                          }}
+                          className="h-9 rounded-md bg-berry px-3 text-body font-semibold text-white hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+                        >
+                          올렸어요
+                        </button>
+                      )}
+
+                      {rescheduleId === card.id ? (
+                        <span className="flex items-center gap-2">
+                          <input
+                            type="date"
+                            value={rescheduleDate}
+                            min={todayKey}
+                            onChange={(e) => setRescheduleDate(e.target.value)}
+                            className="h-9 rounded-md border border-line bg-surface px-2 text-body text-ink"
+                          />
+                          <button
+                            type="button"
+                            disabled={busy || !rescheduleDate}
+                            onClick={() => void reschedule(card)}
+                            className="h-9 rounded-md border-2 border-berry bg-surface px-3 text-body font-semibold text-berry hover:bg-berry-light hover:text-berry-dark disabled:border-line disabled:text-sub"
+                          >
+                            확정
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRescheduleId(null)}
+                            className="text-body text-sub hover:text-ink"
+                          >
+                            취소
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            setRescheduleId(card.id);
+                            setRescheduleDate(todayKey);
+                            setPublishId(null);
+                          }}
+                          className="h-9 rounded-md border border-line bg-surface px-3 text-body font-semibold text-ink hover:bg-surface-muted disabled:text-sub"
+                        >
+                          날짜 다시 잡기
+                        </button>
+                      )}
+
+                      {/* destructive — 휴지통 아이콘 + 확인 모달 (되돌릴 수 없으므로, PLAN §2) */}
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setDiscardTarget(card)}
+                        aria-label="버리기"
+                        title="버리기"
+                        className="ml-auto flex size-9 items-center justify-center rounded-md border border-warn text-warn hover:bg-surface-muted disabled:border-line disabled:text-sub"
+                      >
+                        <Trash2 size={16} aria-hidden />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
+
+      {/* 버리기 확인 모달 — 카드 상세와 같은 문구·패턴 (DESIGN §13) */}
+      {discardTarget && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="discard-title"
+          onClick={() => setDiscardTarget(null)}
+          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex w-full max-w-[400px] flex-col gap-4 rounded-xl bg-surface p-6 shadow-lg"
+          >
+            <h2 id="discard-title" className="text-title font-bold text-ink">
+              이 카드를 버릴까요?
+            </h2>
+            <p className="text-body text-sub">
+              버린 카드는 되돌릴 수 없어요. 삭제되는 건 아니고, 계획했던 기록으로 남아요.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setDiscardTarget(null)}
+                className="h-11 flex-1 rounded-md border border-line bg-surface text-body font-semibold text-ink"
+              >
+                취소
+              </button>
               <button
                 type="button"
                 onClick={() => {
-                  setState({ phase: "loading" });
-                  setReloadKey((k) => k + 1);
+                  const target = discardTarget;
+                  setDiscardTarget(null);
+                  void discard(target);
                 }}
-                className="h-11 rounded-md border border-line bg-surface px-5 text-body font-semibold text-ink hover:bg-surface-muted"
+                className="h-11 flex-1 rounded-md border border-warn bg-transparent text-body font-semibold text-warn"
               >
-                다시 시도
+                버리기
               </button>
             </div>
-          )}
+          </div>
+        </div>
+      )}
 
-          {/* 0건 — 죄책감 없는 문구, 빨간색·경고 금지 (PLAN §2 F14) */}
-          {state.phase === "ready" && state.groups.length === 0 && (
-            <div className="mt-16 flex flex-col items-center gap-2">
-              <p className="text-body-l font-semibold text-ink">밀린 카드가 없어요</p>
-              <p className="text-body text-sub">지금 페이스 그대로면 충분해요.</p>
-              <Link
-                href="/calendar"
-                className="mt-3 flex h-11 items-center rounded-md border border-line bg-surface px-5 text-body font-semibold text-ink hover:bg-surface-muted"
-              >
-                캘린더로 돌아가기
-              </Link>
-            </div>
-          )}
-
-          {state.phase === "ready" &&
-            state.groups.map((group) => (
-              <section key={group.seriesTitle} className="mt-6">
-                <h2 className="text-body font-semibold text-ink">{group.seriesTitle}</h2>
-                <ul className="mt-2 flex flex-col gap-2">
-                  {group.cards.map((card) => {
-                    const busy = busyId === card.id;
-                    return (
-                      <li
-                        key={card.id}
-                        className="rounded-lg border border-line bg-surface p-4 md:p-5"
-                      >
-                        {/* 정보는 한 줄씩 내려 쓴다 — 카드가 화면을 채우게 (08-31 피드백) */}
-                        <div className="flex items-start justify-between gap-3">
-                          <Link href={`/card/${card.id}`} className="min-w-0">
-                            <span className="block text-body-l font-semibold text-ink hover:underline">
-                              {card.title}
-                            </span>
-                          </Link>
-                          <StatusBadge status={card.status} />
-                        </div>
-                        <p className="mt-2 text-body text-sub">
-                          {formatDayLabel(card.scheduledDate)} 예정이었어요
-                        </p>
-                        <p className="mt-1 text-body text-sub">{card.audience}</p>
-
-                        <div className="mt-4 flex flex-wrap items-center gap-2">
-                          {publishId === card.id ? (
-                            <span className="flex flex-wrap items-center gap-2">
-                              <span className="text-body text-sub">언제 올리셨어요?</span>
-                              <input
-                                type="date"
-                                value={publishDate}
-                                min={card.scheduledDate}
-                                max={todayKey}
-                                onChange={(e) => setPublishDate(e.target.value)}
-                                className="h-9 rounded-md border border-line bg-surface px-2 text-body text-ink"
-                              />
-                              <button
-                                type="button"
-                                disabled={busy || !publishDate}
-                                onClick={() => void markPublished(card)}
-                                className="h-9 rounded-md bg-berry px-3 text-body font-semibold text-white hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
-                              >
-                                확인
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setPublishId(null)}
-                                className="text-body text-sub hover:text-ink"
-                              >
-                                취소
-                              </button>
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => {
-                                setPublishId(card.id);
-                                setPublishDate(todayKey);
-                                setRescheduleId(null);
-                              }}
-                              className="h-9 rounded-md bg-berry px-3 text-body font-semibold text-white hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
-                            >
-                              올렸어요
-                            </button>
-                          )}
-
-                          {rescheduleId === card.id ? (
-                            <span className="flex items-center gap-2">
-                              <input
-                                type="date"
-                                value={rescheduleDate}
-                                min={todayKey}
-                                onChange={(e) => setRescheduleDate(e.target.value)}
-                                className="h-9 rounded-md border border-line bg-surface px-2 text-body text-ink"
-                              />
-                              <button
-                                type="button"
-                                disabled={busy || !rescheduleDate}
-                                onClick={() => void reschedule(card)}
-                                className="h-9 rounded-md border-2 border-berry bg-surface px-3 text-body font-semibold text-berry hover:bg-berry-light hover:text-berry-dark disabled:border-line disabled:text-sub"
-                              >
-                                확정
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setRescheduleId(null)}
-                                className="text-body text-sub hover:text-ink"
-                              >
-                                취소
-                              </button>
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => {
-                                setRescheduleId(card.id);
-                                setRescheduleDate(todayKey);
-                                setPublishId(null);
-                              }}
-                              className="h-9 rounded-md border border-line bg-surface px-3 text-body font-semibold text-ink hover:bg-surface-muted disabled:text-sub"
-                            >
-                              날짜 다시 잡기
-                            </button>
-                          )}
-
-                          {/* destructive — 휴지통 아이콘 + 확인 모달 (되돌릴 수 없으므로, PLAN §2) */}
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => setDiscardTarget(card)}
-                            aria-label="버리기"
-                            title="버리기"
-                            className="ml-auto flex size-9 items-center justify-center rounded-md border border-warn text-warn hover:bg-surface-muted disabled:border-line disabled:text-sub"
-                          >
-                            <Trash2 size={16} aria-hidden />
-                          </button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            ))}
-
-          {/* 버리기 확인 모달 — 카드 상세와 같은 문구·패턴 (DESIGN §13) */}
-          {discardTarget && (
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="discard-title"
-              onClick={() => setDiscardTarget(null)}
-              className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
-            >
-              <div
-                onClick={(e) => e.stopPropagation()}
-                className="flex w-full max-w-[400px] flex-col gap-4 rounded-xl bg-surface p-6 shadow-lg"
-              >
-                <h2 id="discard-title" className="text-title font-bold text-ink">
-                  이 카드를 버릴까요?
-                </h2>
-                <p className="text-body text-sub">
-                  버린 카드는 되돌릴 수 없어요. 삭제되는 건 아니고, 계획했던 기록으로 남아요.
-                </p>
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setDiscardTarget(null)}
-                    className="h-11 flex-1 rounded-md border border-line bg-surface text-body font-semibold text-ink"
-                  >
-                    취소
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const target = discardTarget;
-                      setDiscardTarget(null);
-                      void discard(target);
-                    }}
-                    className="h-11 flex-1 rounded-md border border-warn bg-transparent text-body font-semibold text-warn"
-                  >
-                    버리기
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {notice && (
-            <div
-              role="alert"
-              className="fixed bottom-20 left-1/2 -translate-x-1/2 rounded-md border border-line bg-surface px-4 py-2.5 text-body text-ink shadow-sm md:bottom-8"
-            >
-              {notice}
-            </div>
-          )}
-        </main>
-      </div>
-
-      <MobileBottomNav />
-    </div>
+      {notice && (
+        <div
+          role="alert"
+          className="fixed bottom-20 left-1/2 -translate-x-1/2 rounded-md border border-line bg-surface px-4 py-2.5 text-body text-ink shadow-sm md:bottom-8"
+        >
+          {notice}
+        </div>
+      )}
+    </AppShell>
   );
 }

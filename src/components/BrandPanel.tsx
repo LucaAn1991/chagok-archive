@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { LogoFull } from "@/components/Logo";
 import Image from "next/image";
 
 /**
@@ -15,7 +16,7 @@ import Image from "next/image";
  *
  * 헤드라인·서브는 PRD §5-1 확정 카피. 슬라이드 카피는 08-28 확정본.
  * 게시물 목업 안 색·문구는 콘텐츠 세계 영역(브랜드 토큰 예외 — 08-28 확정).
- * 로고 심볼 없음 — DESIGN.md §18 «로고 최종 아트워크» 미확정.
+ * 로고는 실제 아트워크를 쓴다 (08-31) — `components/Logo.tsx`.
  */
 
 const EVENING_PHOTO = "/onboarding-samples/evening.jpg";
@@ -47,7 +48,8 @@ export default function BrandPanel() {
                  border-line bg-berry-tint p-16 desktop:flex"
     >
       <div className="w-full max-w-[560px]">
-        <p className="text-h2 font-bold text-ink">차곡</p>
+        {/* 로고 — 실제 아트워크 (08-31). 글자까지 들어간 전체 마크를 쓴다 */}
+        <LogoFull width={104} />
 
         {/* PRD §5-1 헤드라인 */}
         <p className="mt-6 text-h1 font-bold text-ink">

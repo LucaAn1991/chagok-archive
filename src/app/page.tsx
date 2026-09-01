@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { LogoSymbol } from "@/components/Logo";
 import { onAuthStateChanged, signOut, type User as AuthUser } from "firebase/auth";
 import {
   collection,
@@ -217,7 +218,7 @@ function Home({ uid }: { uid: string }) {
         {/* 모바일 — 프로필은 상단 우측 (DESIGN.md §4) */}
         <header className="flex h-14 items-center justify-between px-4 md:hidden">
           <span className="flex items-center gap-2">
-            <span aria-hidden className="h-5 w-5 rounded-sm" style={{ background: "var(--grad)" }} />
+            <LogoSymbol size={20} />
             <span className="text-title font-bold text-ink">차곡</span>
           </span>
           {/* @TODO: 프로필 메뉴(설정 · 로그아웃) 팝업 — 지금은 설정으로 바로 이동 */}

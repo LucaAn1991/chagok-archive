@@ -1,3 +1,5 @@
+import type { FontId } from "./user";
+
 import type { Timestamp } from "firebase/firestore";
 
 /** 콘텐츠 카드 — 만들고 올리는 단위. 발행률의 분모가 된다 */
@@ -15,6 +17,21 @@ export type Card = {
   status: CardStatus;
   publishIntent: PublishIntent; // status와 별개 필드 (DESIGN.md §11)
 
+  /**
+   * 산출물 테마 (08-31). 카드 한 장 전체에 같은 테마가 적용된다 —
+   * 슬라이드마다 다른 테마를 주면 한 묶음으로 안 보인다.
+   * 생성 시 온보딩 취향에서 정해지고, 제작 결과 화면에서 바꿀 수 있다.
+   */
+  themeId: ThemeId;
+  /**
+   * 이 카드만의 배경색 (08-31). `#RRGGBB` · 없으면 계정의 「내 스타일」을 따른다.
+   *
+   * 계정 스타일이 기본이고 이건 예외다 — 「이번 건만 어둡게」 같은 경우를 위해 둔다.
+   * **글자색은 여기서도 저장하지 않는다.** 배경 명도로 계산한다 (DESIGN.md §12).
+   */
+  bgOverride?: string | null;
+  /** 구성 템플릿 (08-31). null이면 AI가 장수·순서를 알아서 정한다 */
+  templateId: TemplateId | null;
   visualType: VisualType; // 이미지 폴백 사슬의 판정 결과 (DESIGN.md §12)
   photoUrls: string[]; // 사용자가 올린 사진. 순서 = 배열 순서 (F13)
   extraNote: string; // «이번에 꼭 넣을 내용» 자유 입력 (F13)
@@ -63,7 +80,125 @@ export type Slide = {
   layoutId: LayoutId; // 레이아웃 6종 중 하나
   texts: Record<string, string>; // 레이아웃의 텍스트 슬롯별 내용. 글자 «내용»만 수정 가능
   imageUrl: string | null; // 'text-only'면 null
+  /**
+   * 스톡 사진을 쓴 슬라이드의 출처 (08-31).
+   *
+   * **Pexels API 약관이 사진가 크레딧을 요구한다.** 나중에 표시하려 할 때
+   * 다시 조회할 방법이 없으므로 생성 시점에 함께 저장한다.
+   * 사용자 사진이거나 사진이 없으면 null.
+   */
+  imageCredit?: StockCredit | null;
+  /**
+   * 슬롯별 글자 조절 (08-31 · DESIGN.md §12). 키는 슬롯 이름(`title`·`body`…).
+   *
+   * **없는 슬롯은 레이아웃·테마가 정한 그대로 그린다.** 전부 «몇 단계 중 하나»고
+   * 자유값이 아니다 — 색도 `#RRGGBB`가 아니라 역할 3종(기본·여리게·강조)이라
+   * 브랜드 색을 바꾸면 이미 만든 카드도 따라 바뀐다.
+   *
+   * 값의 뜻과 검증은 `lib/slot-style.ts`.
+   */
+  styleOverrides?: Record<string, SlotStyle>;
+  /**
+   * 자유 배치 요소 (08-31 · 편집기).
+   *
+   * **있으면 레이아웃 대신 이걸로 그린다.** 슬라이드마다 켤 수 있고,
+   * 끄면(이 필드를 지우면) 다시 `layoutId`가 정한 대로 돌아간다 —
+   * 레이아웃·테마·템플릿을 걷어내지 않으려는 것이다.
+   *
+   * 좌표는 **0~1 비율**이다. 캔버스가 1080이든 편집 화면이 320이든 같은 값을 쓴다.
+   */
+  elements?: SlideElement[];
 };
+
+/**
+ * 자유 배치 요소 하나.
+ *
+ * `slot`은 «원래 어느 줄이었는지»다. 문구 편집칸과 이어 두려고 남긴다 —
+ * 자유 배치로 바꿔도 「제목」이 뭔지는 알아야 한다.
+ */
+export type SlideElement = {
+  id: string;
+  kind: "text" | "image" | "shape";
+  /** 0~1 비율. 왼쪽 위 기준 */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** 겹칠 때 순서. 클수록 위 */
+  z: number;
+  /** kind가 'text'일 때 */
+  text?: string;
+  slot?: string;
+  style?: SlotStyle;
+  /** kind가 'image'일 때. null이면 회색 면 */
+  imageUrl?: string | null;
+  /**
+   * kind가 'shape'일 때의 모서리 둥글기 (08-31). 짧은 변 대비 0~0.5 비율.
+   *
+   * **도형 종류를 따로 두지 않는다.** 0이면 사각형, 0.5면 원, 그 사이면
+   * 둥근 사각형이고, 납작하게 줄이면 선이 된다. 종류를 나누면 «원을 타원으로»
+   * 같은 경우에 규칙이 하나 더 생긴다.
+   *
+   * 색·투명도는 `style`(colorHex·color·opacity)을 글자와 똑같이 쓴다.
+   */
+  radius?: number;
+};
+
+/** 슬롯 하나의 조절값. 안 고른 항목은 없다 (undefined) */
+export type SlotStyle = {
+  size?: "xs" | "s" | "m" | "l" | "xl";
+  /**
+   * 글자 크기를 px로 직접 (08-31). **있으면 `size` 단계를 이긴다.**
+   * 1080 캔버스 기준이라 «그려지는 그 크기»다 — 테마 배율도 곱하지 않는다.
+   */
+  sizePx?: number;
+  weight?: "regular" | "bold";
+  align?: "left" | "center" | "right";
+  /** 역할 색 — 브랜드 색이 바뀌면 따라 바뀐다 */
+  color?: "ink" | "sub" | "accent";
+  /**
+   * 직접 찍은 색 `#RRGGBB` (08-31). **있으면 `color`보다 이긴다.**
+   * 역할 색과 달리 브랜드를 바꿔도 따라오지 않는다 — 그게 «직접 찍었다»는 뜻이다.
+   */
+  colorHex?: string;
+  tracking?: "tight" | "normal" | "wide";
+  underline?: boolean;
+  strike?: boolean;
+  lineHeight?: "tight" | "normal" | "loose";
+  /** 흐리게 — 100·75·50·25 (%) */
+  opacity?: "100" | "75" | "50" | "25";
+  /** 이 줄만 다른 폰트 (08-31). 없으면 계정의 「내 스타일」 폰트 */
+  fontId?: FontId;
+};
+
+/** 스톡 사진 출처 — 사진가 이름과 사진 페이지 주소 */
+export type StockCredit = {
+  photographer: string;
+  sourceUrl: string;
+};
+
+/**
+ * 카드뉴스 «테마» 3종 (08-31 신설).
+ *
+ * 레이아웃이 «무엇을 어디에 놓는가»라면 테마는 «어떤 색·글자 비율로 그리는가»다.
+ * 레이아웃과 마찬가지로 **고르는 것만 가능하고 직접 만들 수는 없다** —
+ * 색을 직접 지정하게 하면 DESIGN.md §0의 «디자인 편집기 아님»을 어긴다.
+ *
+ * id는 온보딩 취향의 `Direction`(lib/style-examples.ts)과 같은 말을 쓴다.
+ * 실제 색·글자 값은 `lib/render/themes.ts`.
+ */
+export type ThemeId = "warm" | "editorial" | "graphic";
+
+/**
+ * 카드뉴스 «구성» 템플릿 (08-31).
+ *
+ * 몇 장을 어떤 순서로, 각 장이 무슨 일을 하는지. `null`이면 **AI가 알아서 구성한다**
+ * (지금까지의 방식) — 옛 카드가 전부 여기 해당한다.
+ *
+ * id는 `lib/style-examples.ts`의 `ContentFormat`과 같은 말을 쓴다.
+ * 실제 구성은 `lib/card-templates.ts`.
+ */
+export type TemplateId = "informational" | "diary" | "statement" | "editorial";
 
 /**
  * 카드뉴스 레이아웃 6종 (PLAN.md §2-3, 08-27 확정).

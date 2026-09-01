@@ -24,6 +24,15 @@ export type User = {
   tone: ToneKey | null; // 말투. 예시 문장 카드 4종 중 선택 → 캡션 생성(F7)에 반영
   avoidExpressions: string[]; // 피할 표현. 캡션 생성 시 프롬프트의 금지 목록으로 들어간다
 
+  /**
+   * 「내 스타일」 — 카드뉴스 산출물의 색·폰트 (08-31 · DESIGN.md §12).
+   *
+   * **계정 단위다.** 한 번 정하면 이후 만드는 모든 카드에 적용된다 —
+   * 인스타 계정에는 톤이 있고 카드뉴스가 그걸 따라야 피드가 흐트러지지 않는다.
+   * 정하기 전에는 null이고, 그때는 카드의 테마(themeId)가 그대로 쓰인다.
+   */
+  brand?: Brand | null;
+
   onboardedAt: Timestamp | null; // null이면 온보딩 미완료 → 라우트 가드가 /onboarding으로 보낸다
   createdAt: Timestamp;
 };
@@ -35,6 +44,31 @@ export type StyleAttributes = {
   density: string; // low · medium · high
   mood: string; // calm · sophisticated · warm · energetic · natural · informative
   decoration: string; // minimal · low · soft · medium · functional
+};
+
+/**
+ * 카드뉴스 폰트 (08-31). 전부 한글 특화 — 라틴 전용을 쓰면 한글이 네모로 나온다.
+ * `custom`은 사용자가 올린 폰트를 뜻하고, 실제 파일 주소는 `Brand.customFontUrl`에 있다.
+ * 파일·이름은 `lib/render/font-registry.ts`.
+ */
+export type FontId = "pretendard" | "nanum-square-neo" | "nanum-myeongjo" | "custom";
+
+/**
+ * 「내 스타일」의 값.
+ *
+ * **글자색은 없다.** 배경색의 명도로 자동 계산한다 — 둘 다 고르게 하면
+ * DESIGN.md §15의 대비 기준을 못 넘기는 조합이 나온다.
+ */
+export type Brand = {
+  /** 배경색. `#RRGGBB` */
+  bg: string;
+  /** 강조색. 점·선 같은 작은 면에만 쓴다. `#RRGGBB` */
+  accent: string;
+  fontId: FontId;
+  /** fontId가 'custom'일 때 올린 폰트 파일의 주소. 아니면 null */
+  customFontUrl?: string | null;
+  /** 올린 폰트의 원래 파일 이름 — 화면에 「무엇을 올렸는지」 보여주려고 */
+  customFontName?: string | null;
 };
 
 /** 설정-콘텐츠에서 예시 문장 2~3줄짜리 카드 4종으로 보여주고 고르게 한다 */

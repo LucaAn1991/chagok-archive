@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CalendarDays, CircleUserRound, House, Sparkles } from "lucide-react";
+import { LogoSymbol } from "@/components/Logo";
 
 /**
  * 사이드바 — DESIGN.md §4.
@@ -29,17 +30,13 @@ export default function AppSidebar() {
 
   return (
     <aside className="sticky top-0 hidden h-screen w-[72px] shrink-0 flex-col border-r border-line bg-surface md:flex min-[1200px]:w-[240px]">
-      {/* 로고 — 그라데이션 허용 4곳 중 「로고 심볼」 (DESIGN.md §2) */}
+      {/* 로고 — 실제 아트워크 (08-31). 태블릿 레일에서는 심볼만 보인다 */}
       <Link
         href="/"
+        aria-label="차곡 홈"
         className="flex h-16 items-center justify-center gap-2.5 min-[1200px]:justify-start min-[1200px]:px-6"
       >
-        {/* @TODO: 로고 최종 아트워크 미확정 (DESIGN.md §18) — 심볼 자리만 잡아둠 */}
-        <span
-          aria-hidden
-          className="h-6 w-6 shrink-0 rounded-sm"
-          style={{ background: "var(--grad)" }}
-        />
+        <LogoSymbol size={24} />
         <span className="hidden text-title font-bold text-ink min-[1200px]:inline">
           차곡
         </span>
