@@ -1495,10 +1495,11 @@ function DayPanel({
                         <br />
                         업로드했다면 기록해주세요.
                       </p>
+                      {/* 목록보기와 같은 구분 — 제작하기=솔리드, 올렸어요=아웃라인 (09-01) */}
                       <button
                         type="button"
                         onClick={() => onPublish(card)}
-                        className="flex h-9 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white hover:bg-berry-dark"
+                        className="flex h-9 w-full items-center justify-center rounded-md border-2 border-berry bg-surface text-body font-semibold text-berry hover:bg-berry-light hover:text-berry-dark"
                       >
                         올렸어요
                       </button>
