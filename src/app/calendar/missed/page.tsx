@@ -18,7 +18,7 @@ import {
 import { Trash2 } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import AppShell from "@/components/AppShell";
-import BackLink from "@/components/BackLink";
+import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import type { Card } from "@/types";
 
@@ -245,7 +245,7 @@ function MissedView({ uid }: { uid: string }) {
 
   return (
     <AppShell width={960}>
-      <BackLink fallbackHref="/calendar">돌아가기</BackLink>
+      <PageHeader fallbackHref="/calendar" backLabel="돌아가기" />
 
       <h1 className="mt-3 text-title font-bold text-ink">놓친 카드</h1>
 

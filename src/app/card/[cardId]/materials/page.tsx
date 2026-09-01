@@ -7,7 +7,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import AppShell from "@/components/AppShell";
-import BackLink from "@/components/BackLink";
+import PageHeader from "@/components/PageHeader";
 import CardPhotoUploader from "@/components/CardPhotoUploader";
 import { MAX_PHOTOS_PER_CARD } from "@/lib/storage/limits";
 import type { Card, Plan } from "@/types";
@@ -136,7 +136,7 @@ export default function CardMaterialsPage() {
 
   return (
     <AppShell>
-      <BackLink fallbackHref={`/card/${cardId}`}>돌아가기</BackLink>
+      <PageHeader fallbackHref={`/card/${cardId}`} backLabel="돌아가기" />
       <div className="mt-3 flex flex-col gap-6">
       <header className="flex flex-col gap-1">
         <h1 className="text-h3 font-bold text-ink">재료 추가</h1>

@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import AppShell from "@/components/AppShell";
-import BackLink from "@/components/BackLink";
+import PageHeader from "@/components/PageHeader";
 import SlotToolbar from "@/components/SlotToolbar";
 import SlideEditor from "@/components/SlideEditor";
 import CardPhotoUploader from "@/components/CardPhotoUploader";
@@ -477,9 +477,7 @@ export default function SlideEditPage() {
       <AppShell>
         <div className="flex flex-col items-center justify-center gap-3 py-16">
           <h1 className="text-title font-bold">슬라이드를 찾을 수 없어요</h1>
-          <BackLink exact fallbackHref={`/card/${cardId}/result`}>
-          제작 결과로
-        </BackLink>
+          <PageHeader exact fallbackHref={`/card/${cardId}/result`} backLabel="제작 결과로" />
         </div>
       </AppShell>
     );
@@ -490,9 +488,7 @@ export default function SlideEditPage() {
     <AppShell>
       <div className="flex flex-wrap items-center justify-between gap-2">
         {/* 돌아갈 곳이 하나로 정해져 있다 — 슬라이드를 오가느라 쌓인 기록을 따라가면 안 된다 */}
-        <BackLink exact fallbackHref={`/card/${cardId}/result`}>
-          제작 결과
-        </BackLink>
+        <PageHeader exact fallbackHref={`/card/${cardId}/result`} backLabel="제작 결과" />
         <span className="flex items-center gap-2">
           <span className="text-caption text-sub">
             {saving ? "저장 중···" : savedAt ? "저장됐어요" : ""}

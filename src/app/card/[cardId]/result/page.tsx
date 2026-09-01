@@ -7,7 +7,7 @@ import { onAuthStateChanged, type User as AuthUser } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import AppShell from "@/components/AppShell";
-import BackLink from "@/components/BackLink";
+import PageHeader from "@/components/PageHeader";
 import StockAttribution from "@/components/StockAttribution";
 import { THEMES, THEME_ORDER, isHexColor, resolveTheme } from "@/lib/render/themes";
 import { CARD_TEMPLATES, TEMPLATE_ORDER, worksWithoutPhotos } from "@/lib/card-templates";
@@ -435,7 +435,7 @@ export default function CardResultPage() {
 
   return (
     <AppShell>
-      <BackLink fallbackHref={`/card/${cardId}`}>돌아가기</BackLink>
+      <PageHeader fallbackHref={`/card/${cardId}`} backLabel="돌아가기" />
       <div className="mt-3 flex flex-col gap-6">
       <header className="flex flex-col gap-1 pt-4">
         <h1 className="text-h3 font-bold text-ink">제작 결과</h1>

@@ -10,7 +10,7 @@ import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import InlineAlert from "@/components/InlineAlert";
-import BackLink from "@/components/BackLink";
+import PageHeader from "@/components/PageHeader";
 import SettingsTabs from "@/components/SettingsTabs";
 // 말투 정의는 lib/tone.ts가 단일 출처 — AI 프롬프트도 같은 값을 쓴다
 import { TONES } from "@/lib/tone";
@@ -243,7 +243,7 @@ export default function ContentSettingsPage() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <main className="mx-auto w-full max-w-[720px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
-          <BackLink fallbackHref="/">돌아가기</BackLink>
+          <PageHeader fallbackHref="/" backLabel="돌아가기" />
 
           <div className="mt-2">
             <SettingsTabs />

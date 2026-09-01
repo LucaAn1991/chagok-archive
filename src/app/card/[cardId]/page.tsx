@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import AppShell from "@/components/AppShell";
-import BackLink from "@/components/BackLink";
+import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import type { Card } from "@/types";
 
@@ -172,7 +172,7 @@ export default function CardDetailPage() {
   return (
     <AppShell>
       {/* 뒤로 — 진입 경로가 여럿(캘린더·홈·놓친 카드)이라 왔던 곳으로 돌아간다 */}
-      <BackLink fallbackHref="/">돌아가기</BackLink>
+      <PageHeader fallbackHref="/" backLabel="돌아가기" />
       <div className="mt-3 flex flex-col gap-6">
 
         {/* 주제 + 상태 — 배지는 제목과 같은 라인 오른쪽 (08-31) */}

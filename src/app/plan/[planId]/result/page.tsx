@@ -7,7 +7,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
-import BackLink from "@/components/BackLink";
+import PageHeader from "@/components/PageHeader";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import StatusBadge from "@/components/StatusBadge";
 import { audienceLine } from "@/lib/format";
@@ -88,7 +88,7 @@ function PlanResultScreen() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <main className="mx-auto w-full max-w-[720px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
-          <BackLink fallbackHref="/plan/history">지난 기획</BackLink>
+          <PageHeader fallbackHref="/plan/history" backLabel="지난 기획" />
 
           {state.phase === "loading" && (
             <div aria-hidden className="flex animate-pulse flex-col gap-4 pt-2">
