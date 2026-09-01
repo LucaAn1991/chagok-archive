@@ -24,6 +24,7 @@ import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { formatMonthDayWeekday } from "@/lib/format";
 import { greetingFor, kstToday } from "@/lib/greetings";
+import { isConsentCurrent } from "@/lib/legal/consent-client";
 import type { Card } from "@/types";
 
 /**
@@ -191,6 +192,11 @@ function Home({ uid }: { uid: string }) {
         }
         if (userSnap.data().onboardedAt == null) {
           router.replace("/onboarding");
+          return;
+        }
+        // 약관 동의 가드 (09-01 §5) — 기록이 없거나 저장된 버전이 현행과 다르면 (재)동의로
+        if (!isConsentCurrent(userSnap.data().latestConsent)) {
+          router.replace("/consent");
           return;
         }
 

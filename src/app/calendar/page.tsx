@@ -365,7 +365,7 @@ function CalendarView({ uid }: { uid: string }) {
   const scopedCards =
     state.phase === "ready"
       ? view === "month"
-        ? state.cards.filter((c) => c.scheduledDate.slice(0, 7) === anchorMonth)
+        ? state.cards.filter((c) => (c.scheduledDate ?? "").slice(0, 7) === anchorMonth)
         : state.cards
       : [];
   const cells =
@@ -1115,7 +1115,8 @@ function ListSection({
   const [sort, setSort] = useState<"planDate" | "title" | "status" | "publishDate">("planDate");
 
   const isOverdue = (c: Card) =>
-    c.scheduledDate !== "" && c.scheduledDate < todayKey && c.status !== "published";
+    // 날짜 없는 카드(09-01 옵셔널화)는 «지남»이 아니다
+    Boolean(c.scheduledDate) && (c.scheduledDate as string) < todayKey && c.status !== "published";
 
   const counts = {
     all: cards.length,
@@ -1129,8 +1130,8 @@ function ListSection({
     timeFilter === "all"
       ? true
       : timeFilter === "past"
-        ? c.scheduledDate < todayKey
-        : c.scheduledDate >= todayKey;
+        ? (c.scheduledDate ?? "") < todayKey
+        : (c.scheduledDate ?? "") >= todayKey;
 
   const keyword = search.trim();
   // 주제 검색 — 제목과 캡션(본문·해시태그)을 함께 뒤진다 (09-01)
@@ -1145,7 +1146,8 @@ function ListSection({
     published: 2,
     discarded: 3,
   };
-  const planDateDesc = (a: Card, b: Card) => b.scheduledDate.localeCompare(a.scheduledDate);
+  const planDateDesc = (a: Card, b: Card) =>
+    (b.scheduledDate ?? "").localeCompare(a.scheduledDate ?? "");
   const filtered = cards
     .filter((c) =>
       filter === "all" ? true : filter === "overdue" ? isOverdue(c) : c.status === filter,
@@ -1288,7 +1290,7 @@ function ListSection({
                     {card.title}
                   </span>
                   <span className="mt-0.5 block truncate text-caption text-sub">
-                    {formatDayLabel(card.scheduledDate)}
+                    {card.scheduledDate ? formatDayLabel(card.scheduledDate) : "날짜 미정"}
                     {isOverdue(card) && " · 예정일 지남"}
                     {card.status === "published" && pubKey && ` · ${formatDayLabel(pubKey)} 발행`}
                   </span>
