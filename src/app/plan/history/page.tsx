@@ -124,7 +124,8 @@ export default function PlanHistoryPage() {
       <AppSidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <main className="mx-auto w-full max-w-[720px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
+        {/* 컨테이너 값은 새 기획(plan/new)과 동일 — 탭 전환 시 헤더가 좌우로 튀지 않게 (09-01) */}
+        <main className="mx-auto w-full max-w-[560px] flex-1 px-[var(--plan-gap)] pb-24 pt-3 [--plan-gap:1rem] md:[--plan-gap:1.5rem] md:pb-8 lg:max-w-[1080px] lg:pt-4">
           <PageHeader title="AI 기획" />
           <PlanTabs />
 

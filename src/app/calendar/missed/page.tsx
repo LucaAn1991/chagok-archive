@@ -309,7 +309,7 @@ function MissedView({ uid }: { uid: string }) {
                       <StatusBadge status={card.status} />
                     </div>
                     <p className="mt-2 text-body text-sub">
-                      {formatDayLabel(card.scheduledDate)} 예정이었어요
+                      {formatDayLabel(card.scheduledDate ?? "")} 예정이었어요
                     </p>
                     <p className="mt-1 text-body text-sub">{card.audience}</p>
 

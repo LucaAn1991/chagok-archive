@@ -357,6 +357,8 @@ function CalendarView({ uid }: { uid: string }) {
   const byDate = new Map<string, Card[]>();
   if (state.phase === "ready") {
     for (const card of state.cards) {
+      // 날짜 없는 카드(09-01 scheduledDate 옵셔널화)는 달력 칸에 올릴 수 없어 건너뛴다
+      if (!card.scheduledDate) continue;
       const list = byDate.get(card.scheduledDate) ?? [];
       list.push(card);
       byDate.set(card.scheduledDate, list);
@@ -749,7 +751,9 @@ function CalendarView({ uid }: { uid: string }) {
                           variant="row"
                           subline={
                             card.audience +
-                            (card.scheduledDate < todayKey && card.status !== "published"
+                            (card.scheduledDate !== undefined &&
+                            card.scheduledDate < todayKey &&
+                            card.status !== "published"
                               ? " · 예정일 지남"
                               : "")
                           }
@@ -855,7 +859,10 @@ function CalendarView({ uid }: { uid: string }) {
               type="date"
               value={publishDate}
               min={
-                publishTarget.scheduledDate < todayKey ? publishTarget.scheduledDate : undefined
+                publishTarget.scheduledDate !== undefined &&
+                publishTarget.scheduledDate < todayKey
+                  ? publishTarget.scheduledDate
+                  : undefined
               }
               max={todayKey}
               onChange={(e) => setPublishDate(e.target.value)}
@@ -1170,7 +1177,9 @@ function DayPanel({
                 <StatusBadge status={card.status} />
                 <p className="text-caption text-sub">
                   {card.audience}
-                  {card.scheduledDate < todayKey && card.status !== "published" && (
+                  {card.scheduledDate !== undefined &&
+                    card.scheduledDate < todayKey &&
+                    card.status !== "published" && (
                     <span className="ml-1.5">· 예정일 지남</span>
                   )}
                 </p>
