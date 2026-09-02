@@ -15,7 +15,7 @@ import {
  * 복사하지 않고, 조문을 요약·분할·병합하지 않는다 (법적 문서).
  *
  * 서버 컴포넌트 — 로그인 없이 열린다 (가입 전에 읽는 문서).
- * 렌더링은 lib/legal/markdown.tsx의 최소 변환기 (렌더러 미설치 — 승인 대기).
+ * 렌더링은 lib/legal/markdown.tsx의 자체 변환기 — 외부 렌더러는 설치하지 않기로 확정(09-02).
  */
 export default function LegalDocument({ docId, title }: { docId: LegalDocId; title: string }) {
   const meta = LEGAL_VERSIONS[docId];

@@ -20,14 +20,13 @@ import type { LatestConsentSummary, UserConsent } from "@/lib/legal/types";
  */
 
 async function latestConsentOf(uid: string): Promise<(UserConsent & { id: string }) | null> {
-  const snap = await adminDb
-    .collection("consents")
-    .where("userId", "==", uid)
-    .orderBy("agreedAt", "desc")
-    .limit(1)
-    .get();
-  const doc = snap.docs[0];
-  return doc ? ({ ...(doc.data() as UserConsent), id: doc.id }) : null;
+  // orderBy를 붙이면 (userId, agreedAt) 복합 인덱스가 필요해진다 — 한 사람의 동의
+  // 기록은 몇 건 안 되므로 전부 받아 서버에서 고른다 (09-02 인덱스 없이 동작하게 수정)
+  const snap = await adminDb.collection("consents").where("userId", "==", uid).get();
+  const docs = snap.docs
+    .map((d) => ({ ...(d.data() as UserConsent), id: d.id }))
+    .sort((a, b) => b.agreedAt.localeCompare(a.agreedAt));
+  return docs[0] ?? null;
 }
 
 /** consents에 한 건 추가 + users.latestConsent 요약 갱신 — 한 트랜잭션처럼 순서대로 */

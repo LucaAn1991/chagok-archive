@@ -47,6 +47,25 @@ export async function setUsageDataConsent(enabled: boolean): Promise<UserConsent
   return authedFetch("PATCH", { usageDataConsent: enabled });
 }
 
+/**
+ * 회원 탈퇴 — 서버가 방침 3항대로 파기한다 (cards·plans·업로드 파일·동의 기록·계정).
+ * 설정-계정 화면(창현 님)에서 본인 확인 후 호출한다. 성공하면 로그아웃까지 된 상태다
+ * (Auth 계정이 지워져 세션이 무효화된다).
+ */
+export async function deleteMyAccount(): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) throw new Error("로그인이 필요합니다.");
+  const token = await user.getIdToken();
+  const res = await fetch("/api/users/me/delete", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error ?? "탈퇴를 완료하지 못했어요.");
+  }
+}
+
 /** 저장된 동의가 현행 버전과 맞는가 — 다르면 재동의가 필요하다 (§5) */
 export function isConsentCurrent(
   consent: { termsVersion?: string; privacyVersion?: string } | null | undefined,

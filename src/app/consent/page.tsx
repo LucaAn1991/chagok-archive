@@ -20,7 +20,6 @@ export default function ConsentPage() {
   const read = (file: string) =>
     readFileSync(path.join(process.cwd(), "content", "legal", file), "utf8");
 
-  return (
-    <ConsentScreen termsMd={read(legalFileName("terms"))} privacyMd={read(legalFileName("privacy"))} />
-  );
+  // 개인정보 항목은 전문이 아니라 요약 표를 보여준다 (09-02 지시 §3) — 전문은 /privacy 링크로
+  return <ConsentScreen termsMd={read(legalFileName("terms"))} />;
 }

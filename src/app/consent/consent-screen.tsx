@@ -13,6 +13,10 @@ import {
   saveInitialConsent,
 } from "@/lib/legal/consent-client";
 import { LEGAL_PAGE_PATHS } from "@/lib/legal/versions";
+import {
+  PRIVACY_CONSENT_SUMMARY_MD,
+  USAGE_CONSENT_SUMMARY_MD,
+} from "@/lib/legal/consent-summaries";
 
 /**
  * 약관 동의 화면 (09-01 지시 §3).
@@ -33,13 +37,7 @@ type Mode = "checking" | "first" | "revision" | "under14";
 
 const REQUIRED: ItemKey[] = ["over14", "terms", "privacy"];
 
-export default function ConsentScreen({
-  termsMd,
-  privacyMd,
-}: {
-  termsMd: string;
-  privacyMd: string;
-}) {
+export default function ConsentScreen({ termsMd }: { termsMd: string }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("checking");
   const [checked, setChecked] = useState<Record<ItemKey, boolean>>({
@@ -242,7 +240,9 @@ export default function ConsentScreen({
           onToggle={() => toggle("privacy")}
           open={openItem === "privacy"}
           onOpenToggle={() => setOpenItem((o) => (o === "privacy" ? null : "privacy"))}
-          body={renderLegalMarkdown(privacyMd)}
+          /* 전문이 아니라 요약 표 (09-02 지시 §3) — 법 제15조의 네 가지가 묻히지 않게.
+             전문은 아래 링크로 */
+          body={renderLegalMarkdown(PRIVACY_CONSENT_SUMMARY_MD)}
           fullPageHref={LEGAL_PAGE_PATHS.privacy}
         />
 
@@ -258,13 +258,8 @@ export default function ConsentScreen({
           onToggle={() => toggle("usage")}
           open={openItem === "usage"}
           onOpenToggle={() => setOpenItem((o) => (o === "usage" ? null : "usage"))}
-          body={
-            /* @TODO: 확정 카피 대기 — 지시 §3-2 설명을 풀어쓴 임시 문구 */
-            <p className="text-body leading-7 text-ink">
-              서비스 개선과 성과 검증에 이용 기록을 쓰기 위한 동의예요. 동의하지 않아도 모든
-              기능을 쓸 수 있어요.
-            </p>
-          }
+          /* 요약 표 (09-02 지시 §3) — 확정 카피로 임시 문구 교체 */
+          body={renderLegalMarkdown(USAGE_CONSENT_SUMMARY_MD)}
         />
       </div>
 
