@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LogoFull } from "@/components/Logo";
+import { AI_DISCLOSURE } from "@/lib/ai-disclosure";
 
 /**
  * 랜딩 (비로그인 «/») — PRD §5-1 · 09-01 공개 런칭 기준 재기획.
@@ -83,6 +84,18 @@ export default function Landing() {
             <Link href="/login" className="text-berry-dark underline underline-offset-2">
               로그인
             </Link>
+          </p>
+
+          {/*
+            **사전 고지** — 「생성형 AI로 운용된다」는 사실은 쓰기 전에 알려야 한다
+            (AI 기본법 제31조 ①, `lib/ai-disclosure.ts`). 가입 뒤가 아니라
+            비로그인 첫 화면에 둔다.
+
+            09-02 병합 때 한 번 사라졌다 — 팀이 랜딩을 새로 쓰면서 옛 랜딩에 얹어둔
+            이 줄이 함께 없어졌다. 법정 의무라 랜딩을 고칠 때 같이 옮겨야 한다.
+          */}
+          <p className="max-w-[420px] text-center text-caption text-sub">
+            {AI_DISCLOSURE.service}
           </p>
         </div>
 
