@@ -14,35 +14,44 @@
    DESIGN.md §2 — 컬러 토큰
    ============================================================ */
 :root {
-  /* Brand */
-  --berry:         #A85578;  /* Primary CTA · 선택 상태 · 핵심 강조 */
-  --berry-dark:    #914868;  /* Primary hover · 연한 브랜드 면 위 글자 */
-  --berry-light:   #F2DCE5;  /* 칩 배경 · soft background */
-  --berry-tint:    #F0E6EA;  /* berry-light보다 더 연한 면 */
-  --purple:        #806FA6;  /* AI 포인트 · 보조 강조 */
-  --coral:         #F28A72;  /* Accent — 장식 전용, 텍스트 금지 */
+  /*
+    Brand — 09-02 팔레트 교체 (더스티 로즈 → 잉크 + 웜 뉴트럴).
+    바꾼 이유는 §2 「색 비율」이다. 브랜드색이 5%여야 하는데 로그인 화면에서
+    옛 `--berry-tint`가 **화면의 64%**를 덮고 있었다. 색조가 아니라 면적이 문제였고,
+    UI가 색을 쥐고 있으면 사용자 카드뉴스가 묻힌다(§1 Content-first).
+
+    ⚠️ **이름이 값과 어긋난다.** `--berry`는 더 이상 베리색이 아니다.
+    이름을 바꾸면 화면 12개를 함께 고쳐야 해서 값만 교체했다.
+    @TODO: 토큰 이름 정리 (--berry → --accent 등)
+  */
+  --berry:         #2A2724;  /* Primary CTA · 선택 상태 · 핵심 강조 */
+  --berry-dark:    #131211;  /* Primary hover · 연한 브랜드 면 위 글자 */
+  --berry-light:   #EEEDEA;  /* 칩 배경 · soft background */
+  --berry-tint:    #F2F1EF;  /* berry-light보다 더 연한 면 */
+  --purple:        #4A5568;  /* AI 포인트 · 보조 강조 */
+  --coral:         #B8734E;  /* Accent — 장식 전용, 텍스트 금지 */
 
   /* Surface */
-  --bg:            #FCF8F7;  /* 페이지 배경 Warm Blush */
+  --bg:            #FAFAF9;  /* 페이지 배경 Warm Off-white */
   --surface:       #FFFFFF;  /* 카드 · 입력 · 모달 */
-  --surface-muted: #F6F2F4;  /* 중립 표면 */
-  --line:          #E8E1E4;
+  --surface-muted: #F2F1EF;  /* 중립 표면 */
+  --line:          #E4E3E0;
 
   /* Text */
-  --ink:           #2D292B;
-  --sub:           #746F72;
+  --ink:           #191817;
+  --sub:           #6A6866;
 
   /* 카드 상태 — 명도 계단식 (진할수록 완료에 가깝다). 08-31 crafted 제거로 4색 */
-  --st-planned:    #D9CCE8;  /* 제작 대기 */
-  --st-pending:    #DE7E80;  /* 업로드 대기 */
-  --st-published:  #A85578;  /* 발행 완료 = berry */
-  --st-discarded:  #C4BDB7;  /* 버림 */
+  --st-planned:    #D8D5D0;  /* 제작 대기 */
+  --st-pending:    #B8734E;  /* 업로드 대기 — 유일하게 색이 있다(할 일이 남은 상태) */
+  --st-published:  #2A2724;  /* 발행 완료 = berry */
+  --st-discarded:  #C9C6C0;  /* 버림 */
 
   /* 에러 — DESIGN.md §2 하단 [제안, 확정 대기] */
-  --warn:          #B04F38;
+  --warn:          #A6472F;
 
   /* 그라데이션 — 3곳에서만 (✦ · 생성 완료 · 기획 카드 테두리) — DESIGN.md §2 */
-  --grad: linear-gradient(135deg, #806FA6, #A85578, #F28A72);
+  --grad: linear-gradient(135deg, #4A5568, #6B6157, #B8734E);
 
   /* DESIGN.md §4 — Radius */
   --r-sm:   8px;
@@ -151,7 +160,12 @@ body {
 
   버튼·링크·카드처럼 **테두리가 없는** 것들에 맞는 방식이다.
 */
-:focus-visible {
+/*
+  `data-focus-ring="none"`은 **여기서도 빠진다** (09-02). 이 규칙은 레이어 밖에 있어서
+  Tailwind의 `focus-visible:outline-none`보다 우선한다 — 화면 쪽에서 끌 수가 없다.
+  focus를 바깥 상자가 그리는 구조(대화 입력창)는 이 속성으로만 빠져나갈 수 있다.
+*/
+:focus-visible:not([data-focus-ring="none"]) {
   outline: 2px solid var(--berry);
   outline-offset: 2px;
 }
@@ -172,9 +186,17 @@ body {
   바깥에 옅은 링을 두르지 않는다 — berry 테두리(흰 배경 위 4.96:1,
   DESIGN.md §15)만으로 focus를 알아볼 수 있고, 링을 더하면 다시 두 겹이 된다.
 */
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible {
+/*
+  ⚠️ **테두리가 있는 입력칸에만 해당한다** (09-02).
+
+  대화 입력창처럼 **칸 자체에는 테두리가 없고 바깥 상자가 테두리를 그리는** 구조에서는,
+  이 inset 그림자가 투명한 칸 둘레에 1px 사각형을 그려서 «상자 안에 또 상자»가 됐다.
+  그런 칸은 `data-focus-ring="none"`으로 빼고, focus는 바깥 상자가
+  `focus-within:border-berry`로 그린다.
+*/
+input:focus-visible:not([data-focus-ring="none"]),
+textarea:focus-visible:not([data-focus-ring="none"]),
+select:focus-visible:not([data-focus-ring="none"]) {
   outline: none;
   border-color: var(--berry);
   box-shadow: inset 0 0 0 1px var(--berry);

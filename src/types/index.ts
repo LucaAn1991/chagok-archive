@@ -13,11 +13,13 @@ export type {
   VisualType,
   Caption,
   Slide,
+  SlideOrigin,
   SlotStyle,
   SlideElement,
   LayoutId,
   ThemeId,
   TemplateId,
+  StyleId,
   StockCredit,
   StockPick,
 } from "./card";

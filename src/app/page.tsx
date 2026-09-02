@@ -20,7 +20,6 @@ import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import FeaturedContentCard from "@/components/FeaturedContentCard";
-import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { formatMonthDayWeekday } from "@/lib/format";
 import { AI_DISCLOSURE } from "@/lib/ai-disclosure";
@@ -316,7 +315,12 @@ function HomeReady({
 
   return (
     <div className="flex flex-col gap-4 md:gap-8">
-      <PageHeader />
+      {/*
+        PageHeader를 두지 않는다 (09-02). 홈은 GNB의 첫 자리라 돌아갈 곳이 없는데,
+        기본 동작이 브라우저 기록을 보는 것이라 로그인을 거쳐 들어오면
+        좌상단에 화살표가 생겼다 — 눌러봐야 로그인 화면으로 나가버린다.
+        제목도 아래 인사말이 대신하므로 헤더 자체가 필요 없다.
+      */}
       {/* 인사 한 줄 + 오늘 날짜 — 이모지 없음 (08-31) */}
       <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h1 className="text-h2 font-bold text-ink">{greetingForHour(now.getHours())}</h1>

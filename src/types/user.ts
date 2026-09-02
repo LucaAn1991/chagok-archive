@@ -51,7 +51,13 @@ export type StyleAttributes = {
  * `custom`은 사용자가 올린 폰트를 뜻하고, 실제 파일 주소는 `Brand.customFontUrl`에 있다.
  * 파일·이름은 `lib/render/font-registry.ts`.
  */
-export type FontId = "pretendard" | "nanum-square-neo" | "nanum-myeongjo" | "custom";
+export type FontId =
+  | "pretendard"
+  | "nanum-square-neo"
+  | "nanum-myeongjo"
+  | "galmuri" // 픽셀(도트) — 09-02 추가. 「도트」 스타일이 쓴다 (lib/render/card-styles.ts)
+  | "black-han-sans" // 굵은 제목용 — 「대문자」 스타일이 쓴다. 파일은 09-01에 이미 들어와 있었다
+  | "custom";
 
 /**
  * 「내 스타일」의 값.
@@ -60,11 +66,20 @@ export type FontId = "pretendard" | "nanum-square-neo" | "nanum-myeongjo" | "cus
  * DESIGN.md §15의 대비 기준을 못 넘기는 조합이 나온다.
  */
 export type Brand = {
-  /** 배경색. `#RRGGBB` */
-  bg: string;
+  /**
+   * 배경색 `#RRGGBB`. **09-02부터 설정 화면에서 고르지 않는다** —
+   * 결과물은 시안 템플릿이 배경을 정하고, 여기서 값을 주면 폴백 렌더러가
+   * 템플릿 배경(도트의 크림색·세일의 검정)을 덮어버린다.
+   * 옛 계정에는 값이 남아 있을 수 있어 타입에서 지우지는 않았다.
+   */
+  bg?: string;
   /** 강조색. 점·선 같은 작은 면에만 쓴다. `#RRGGBB` */
   accent: string;
-  fontId: FontId;
+  /**
+   * 글꼴. **09-02부터 설정 화면에서 고르지 않는다** — 템플릿의 글꼴이 그대로 나온다.
+   * 폴백 렌더러에서만 쓰이고, 없으면 분위기가 정한 글꼴을 따른다.
+   */
+  fontId?: FontId;
   /** fontId가 'custom'일 때 올린 폰트 파일의 주소. 아니면 null */
   customFontUrl?: string | null;
   /** 올린 폰트의 원래 파일 이름 — 화면에 「무엇을 올렸는지」 보여주려고 */

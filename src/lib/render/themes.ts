@@ -209,12 +209,21 @@ function softFor(bg: string, ink: string): string {
  * **글자 비율(크기·자간·여백·정렬)은 테마 것을 그대로 둔다** — 브랜드가 정하는 건
  * 색과 폰트지 레이아웃 감각이 아니다. 브랜드가 없으면 테마가 그대로 쓰인다.
  */
-export function applyBrand(
-  theme: Theme,
+/**
+ * 테마에서 **id를 뺀 «생김새»만** (09-02).
+ *
+ * 비주얼 스타일(`card-styles.ts`)이 같은 모양을 쓰는데 id의 타입만 달라서,
+ * 렌더러가 둘을 구분 없이 받으려면 이 자리에서 id를 떼어야 한다.
+ * 실제로 그리는 코드는 `color`·`type`만 보고 `id`는 쓰지 않는다.
+ */
+export type ThemeLook = Omit<Theme, "id">;
+
+export function applyBrand<T extends ThemeLook>(
+  theme: T,
   brand?: Brand | null,
   /** 이 카드만의 배경색 — 계정 스타일보다 우선한다 (08-31) */
   bgOverride?: string | null,
-): Theme {
+): T {
   const override = isHexColor(bgOverride) ? bgOverride : null;
   if (!brand && !override) return theme;
   if (brand && !isHexColor(brand.bg) && !override) return theme;

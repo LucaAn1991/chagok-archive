@@ -21,6 +21,7 @@ export default function PageHeader({
   backLabel,
   fallbackHref,
   exact,
+  isRoot,
 }: {
   title?: string;
   action?: React.ReactNode; // 오른쪽 끝 텍스트 버튼 자리 (예: AI 기획의 [새 기획])
@@ -40,6 +41,14 @@ export default function PageHeader({
    * 같은 화면을 가리키게 된다 — 사용자는 나가려는데 제자리를 맴돈다.
    */
   exact?: boolean;
+  /**
+   * **최상위 화면 — 뒤로가기를 그리지 않는다** (09-02).
+   *
+   * 홈·AI 기획·캘린더는 GNB로 오가는 자리라 「돌아갈 곳」이 없다. 그런데 기본 동작이
+   * `history.length > 1`이라, 로그인을 거쳐 들어오면 홈 좌상단에 화살표가 생겼다 —
+   * 눌러봐야 로그인 화면으로 나가버린다.
+   */
+  isRoot?: boolean;
 }) {
   const router = useRouter();
   // SSR에서는 false → 첫 진입 하이드레이션과 일치. 클라이언트에서만 히스토리를 본다
@@ -49,7 +58,7 @@ export default function PageHeader({
     () => false,
   );
   // 돌아갈 곳을 받아뒀으면 기록이 없어도 보낼 데가 있다
-  const canGoBack = fallbackHref ? true : hasHistory;
+  const canGoBack = isRoot ? false : fallbackHref ? true : hasHistory;
 
   function goBack() {
     if (!fallbackHref) {

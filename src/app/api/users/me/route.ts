@@ -37,14 +37,15 @@ function parseBrand(raw: unknown): Brand | null | undefined {
   if (typeof raw !== "object") return undefined;
 
   const b = raw as Record<string, unknown>;
-  if (!isHexColor(b.bg) || !isHexColor(b.accent)) return undefined;
-  if (typeof b.fontId !== "string" || !FONT_IDS.includes(b.fontId as FontId)) return undefined;
+  // 강조색만 필수다 (09-02) — 배경색·글꼴은 설정 화면에서 빠졌다
+  if (!isHexColor(b.accent)) return undefined;
 
-  const brand: Brand = {
-    bg: b.bg.toUpperCase(),
-    accent: b.accent.toUpperCase(),
-    fontId: b.fontId as FontId,
-  };
+  const brand: Brand = { accent: b.accent.toUpperCase() };
+  // 옛 계정이 보내오면 그대로 받아둔다. 새로 만들지는 않는다
+  if (isHexColor(b.bg)) brand.bg = b.bg.toUpperCase();
+  if (typeof b.fontId === "string" && FONT_IDS.includes(b.fontId as FontId)) {
+    brand.fontId = b.fontId as FontId;
+  }
 
   // 올린 폰트를 고른 경우에만 주소를 함께 둔다 — 안 그러면 지워진 파일을 계속 가리킨다
   if (brand.fontId === "custom") {

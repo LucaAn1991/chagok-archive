@@ -5,6 +5,8 @@ import { loadCardFonts } from "./fonts";
 import { buildLayout, SLIDE_SIZE, type SlideContent } from "./layouts";
 import { AI_DISCLOSURE_XMP } from "../ai-disclosure";
 import { embedXmpInPng } from "./png-xmp";
+import { resolveStyle } from "./card-styles";
+import { assetDataUris } from "./asset-files";
 
 /**
  * 슬라이드 1장을 PNG 버퍼로 렌더링한다.
@@ -50,13 +52,31 @@ export async function renderSlidePng(content: SlideContent): Promise<Buffer> {
     다른 폰트를 고른 줄이 글자 없이 나온다.
   */
   const extra = [
+    /*
+      **분위기가 쓰는 글꼴도 등록한다** (09-02).
+      레이아웃은 이름으로 글꼴을 부르는데(`family`), 그 이름으로 등록된 파일이
+      없으면 satori가 조용히 첫 번째 글꼴로 그린다 — 색만 바뀌고 글꼴은 전부
+      같아 보이는 증상이 이것이었다.
+    */
+    content.styleId ? resolveStyle(content.styleId).fontId : null,
     ...Object.values(content.styleOverrides ?? {}).map((s) => s.fontId),
     ...(content.elements ?? []).map((e) => e.style?.fontId),
   ].filter((v): v is NonNullable<typeof v> => Boolean(v));
 
   const fonts = await loadCardFonts(content.brand, extra);
 
-  const svg = await satori(buildLayout(content) as unknown as ReactNode, {
+  /*
+    장식 그림을 미리 읽어 넘긴다 (09-02) — satori는 파일을 못 읽고 data URI만 받는다.
+    분위기가 쓰는 파일만 읽으므로 안 쓰는 그림은 메모리에 올라오지 않는다.
+  */
+  const decorFiles = content.styleId
+    ? (resolveStyle(content.styleId).ornaments ?? [])
+        .map((o) => o.file)
+        .filter((f): f is string => Boolean(f))
+    : [];
+  const decorImages = decorFiles.length > 0 ? await assetDataUris(decorFiles) : {};
+
+  const svg = await satori(buildLayout({ ...content, decorImages }) as unknown as ReactNode, {
     width: SLIDE_SIZE,
     height: SLIDE_SIZE,
     fonts,

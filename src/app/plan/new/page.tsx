@@ -19,8 +19,15 @@ import {
 } from "@/components/PlanningSummaryPanel";
 import PlanPhotoPicker from "@/components/PlanPhotoPicker";
 import PageHeader from "@/components/PageHeader";
+import {
+  CARD_STYLES,
+  DEFAULT_STYLE_ID,
+  STYLE_ORDER,
+  isReady,
+} from "@/lib/render/card-styles";
+import { PREVIEW_VERSION, TEMPLATE_SHEETS } from "@/lib/render/template-sheets";
 import PlanTabs from "@/components/PlanTabs";
-import type { StockPick } from "@/types";
+import type { StockPick, StyleId } from "@/types";
 
 /**
  * 새 기획 — AI 기획 대화 3단계 (F2 · IA 2.1, 08-27 원안 복원).
@@ -40,7 +47,7 @@ type Proposal = { audiences: string[]; purposes: string[] };
 
 /** 서버로 보낼 한 턴 — [다시 보내기]가 그대로 재사용한다 */
 type TurnPayload =
-  | { kind: "init"; idea: string; from: string | null }
+  | { kind: "init"; idea: string; from: string | null; freeTopic?: boolean }
   | { kind: "resume"; id: string } // 이탈 후 복원 — 진행 단계만 다시 받는다
   | { kind: "text"; text: string }
   | { kind: "selection"; audiences: string[]; purposes: string[] }
@@ -125,6 +132,28 @@ async function readNdjson(
   return done;
 }
 
+/**
+ * 고른 분위기를 기획에 저장한다 (09-02).
+ *
+ * 사진(`stockPhoto`)과 달리 **서버 라우트를 거친다.** 「준비 중」인 분위기는
+ * 거절해야 하는데, 그 판정을 화면에만 두면 주소로 직접 찔러 넣을 수 있다.
+ * 실패해도 화면은 막지 않는다 — 안 고른 것과 같아지고, 그때는 테마로 그려진다.
+ */
+async function saveStyle(planId: string, styleId: StyleId): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) return;
+  try {
+    const token = await user.getIdToken();
+    await fetch(`/api/plans/${planId}/style`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ styleId }),
+    });
+  } catch {
+    /* 다시 고르면 또 시도한다 */
+  }
+}
+
 /** 자동 1회 재시도 (PRD §5-7 ①) — 그다음부터는 사용자가 누른다 */
 async function postWithRetry(path: string, body: unknown, onText?: OnStreamText) {
   try {
@@ -163,6 +192,9 @@ function NewPlanScreen() {
   const [streamingText, setStreamingText] = useState<string | null>(null);
   const [failed, setFailed] = useState<TurnPayload | null>(null);
   const [ready, setReady] = useState(false); // ③으로 넘어갈 수 있는 상태
+  const [styleId, setStyleId] = useState<StyleId | null>(null); // ③ 분위기 (09-02)
+  // 설정 분야를 풀고 시작했는가 (09-02) — 칩을 한 번만 보여주려고 기억한다
+  const [freeTopic, setFreeTopic] = useState(false);
   const [isMock, setIsMock] = useState(false);
 
   // ② 대상 선택 — 초안 저장·복구를 위해 카드가 아니라 페이지가 들고 있는다 (08-28)
@@ -296,6 +328,46 @@ function NewPlanScreen() {
     void updateDoc(doc(db, "plans", planId), { stockPhoto: photo }).catch(() => {});
   }
 
+  /**
+   * 분위기를 고른다 (09-02) — 화면에 먼저 반영하고 기획에도 남긴다.
+   *
+   * 사진(`pickStock`)과 달리 **서버 라우트를 거친다.** 「준비 중」인 분위기는
+   * 거절해야 하는데, 그 판정을 화면에만 두면 주소로 직접 찔러 넣을 수 있다.
+   * 저장이 실패해도 화면은 막지 않는다 — 안 고른 것과 같아지고, 그때는
+   * 테마로 그려져 카드가 나오기는 한다.
+   */
+  function pickStyle(next: StyleId) {
+    setStyleId(next);
+    if (planId) void saveStyle(planId, next);
+  }
+
+  /*
+    **먼저 하나를 골라둔다** (DESIGN.md §1 «빈칸을 주지 않는다»).
+    사용자는 고르는 게 아니라 «확인하고 바꾸는» 것이 이 제품의 방식이라,
+    분위기 줄이 처음 뜰 때 추천 하나가 이미 선택돼 있어야 한다.
+
+    사진이 있으면 사진을 살리는 쪽을 권한다 — 사진을 올려놓고 글자만 큰
+    분위기가 잡히면 올린 보람이 없다.
+
+    추천값을 **state에 넣지 않고 계산해서 쓴다.** 이펙트 안에서 setState를 부르면
+    렌더가 한 번 더 도는데, 사진을 올리거나 지울 때마다 그게 반복된다.
+  */
+  const recommendedStyle: StyleId =
+    userPhotos.length > 0 || selectedStock !== null ? "photo-frame" : DEFAULT_STYLE_ID;
+  const effectiveStyle = styleId ?? recommendedStyle;
+
+  /*
+    추천값도 서버에 남긴다 — 사용자가 아무것도 안 눌러도 화면에 보이는 그 분위기로
+    카드가 나와야 한다. 화면 상태는 건드리지 않고 저장만 한다.
+  */
+  const defaultStyleSaved = useRef(false);
+  useEffect(() => {
+    if (!ready || !planId || styleId !== null || confirmedLock) return;
+    if (defaultStyleSaved.current) return;
+    defaultStyleSaved.current = true;
+    void saveStyle(planId, recommendedStyle);
+  }, [ready, planId, styleId, confirmedLock, recommendedStyle]);
+
   /*
     추천 사진 불러오기 (09-01) — 주제가 정해진 뒤에 한 번만.
 
@@ -356,7 +428,11 @@ function NewPlanScreen() {
         payload.kind === "init"
           ? payload.from
             ? await postWithRetry(`/api/plans/${payload.from}/continue`, {})
-            : await postWithRetry("/api/plans", { idea: payload.idea })
+            : await postWithRetry("/api/plans", {
+                idea: payload.idea,
+                // 설정 분야에 매이지 않고 시작 (09-02)
+                ...(payload.freeTopic ? { freeTopic: true } : {}),
+              })
           : payload.kind === "resume"
             ? await postWithRetry(`/api/plans/${payload.id}/messages`, { resume: true })
             : await postWithRetry(
@@ -608,7 +684,8 @@ function NewPlanScreen() {
           {/* 헤더·탭 — 그대로 (지시 §0) */}
           {/* 헤더 — [←] 와 제목만. 칩은 탭 줄로 옮겼다 (08-31 확정) */}
           <header>
-            <PageHeader title="AI 기획" />
+            {/* GNB로 오가는 최상위 화면이라 뒤로가기가 없다 (09-02) */}
+            <PageHeader title="AI 기획" isRoot />
             <PlanTabs
               action={
                 <button
@@ -641,7 +718,20 @@ function NewPlanScreen() {
           <div className="mt-3 flex flex-1 flex-col gap-[var(--plan-gap)] lg:min-h-0 lg:flex-row">
             {/* 좌 — 대화만 (말풍선 + 추천 칩). 사진·버튼은 오른쪽 박스로 옮겼다 (§3) */}
             <section className="flex min-w-0 flex-1 flex-col lg:min-h-0">
-              <div className="flex flex-col gap-4 [scrollbar-gutter:stable] lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+              {/*
+                대화가 시작되기 전에는 인사말·칩을 **세로 가운데**에 둔다 (09-02).
+
+                말풍선 하나가 맨 위에 붙고 입력창은 화면 맨 아래에 고정돼 있어서,
+                그 사이 600px가 통째로 비어 보였다. 대화가 시작되면(사용자 말풍선이
+                하나라도 생기면) 위에서부터 쌓이는 원래 흐름으로 돌아간다 —
+                말이 오가는 중에 가운데 정렬을 유지하면 글이 늘 때마다 위아래로 출렁인다.
+              */}
+              <div
+                className={[
+                  "flex flex-col gap-4 [scrollbar-gutter:stable] lg:min-h-0 lg:flex-1 lg:overflow-y-auto",
+                  messages.some((m) => m.role === "user") ? "" : "lg:justify-center",
+                ].join(" ")}
+              >
                 {restored && <RestoreBanner />}
 
                 {messages.map((m, i) => (
@@ -666,6 +756,15 @@ function NewPlanScreen() {
                           dismissBanner();
                           setTopicSuggestions(null);
                           sendText(t);
+                        }}
+                        freeTopicUsed={freeTopic}
+                        onFreeTopic={() => {
+                          dismissBanner();
+                          setFreeTopic(true);
+                          setTopicSuggestions(null);
+                          setMessages([]);
+                          setPlanId(null);
+                          void runTurn({ kind: "init", idea: "", from: null, freeTopic: true });
                         }}
                       />
                     )}
@@ -696,6 +795,14 @@ function NewPlanScreen() {
                     }}
                     onSubmit={() => sendSelection(picked)}
                   />
+                )}
+
+                {/*
+                  ③ 분위기 고르기 (09-02) — 대상이 정해진 뒤에 나온다.
+                  주제·대상이 정해지기 전에 껍데기부터 고르게 하면 순서가 뒤집힌다.
+                */}
+                {ready && !confirmedLock && (
+                  <StylePicker selected={effectiveStyle} onPick={pickStyle} />
                 )}
 
                 {/* 만들어지는 중인 답 — 다 오면 위 목록의 진짜 말풍선이 자리를 넘겨받는다 */}
@@ -749,6 +856,7 @@ function NewPlanScreen() {
                     onConfirm={() => void confirmPlan()}
                     confirming={confirming}
                     confirmError={confirmError}
+                    saving={sending}
                   />
                 </div>
               </aside>
@@ -794,6 +902,7 @@ function PlanBox({
   onConfirm,
   confirming,
   confirmError,
+  saving,
 }: {
   summary: PlanSummary;
   photos: PlanPhotos;
@@ -801,6 +910,8 @@ function PlanBox({
   onConfirm: () => void;
   confirming: boolean;
   confirmError: boolean;
+  /** 방금 고친 값이 서버로 가는 중 (09-02). 이때 카드를 만들면 옛 값으로 만들어진다 */
+  saving: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [topicDraft, setTopicDraft] = useState("");
@@ -877,13 +988,19 @@ function PlanBox({
           </div>
         )}
         {!editing && (
+          /*
+            아이콘만 두면 «눌러도 되는 것»인지 모른다 (09-02).
+            글자를 붙이고 높이를 44로 올렸다 — DESIGN.md §5가 아이콘 단독 클릭 영역을
+            최소 44px로 정해뒀는데 32px이었다.
+          */
           <button
             type="button"
             onClick={startEdit}
-            aria-label="기획안 수정"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
+            className="flex h-11 shrink-0 items-center gap-1 rounded-md px-3 text-body font-semibold
+                       text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
           >
-            <Pencil size={14} aria-hidden />
+            <Pencil size={16} aria-hidden />
+            수정
           </button>
         )}
       </div>
@@ -895,7 +1012,12 @@ function PlanBox({
 
       {/* 버튼 — 박스 맨 아래, 안쪽 폭 전체 (§2) */}
       <div className="mt-4">
-        <ReadyActionBar onConfirm={onConfirm} confirming={confirming} error={confirmError} />
+        <ReadyActionBar
+          onConfirm={onConfirm}
+          confirming={confirming}
+          error={confirmError}
+          saving={saving}
+        />
       </div>
     </div>
   );
@@ -934,10 +1056,12 @@ function WaitingIndicator({
 function ReadyActionBar({
   onConfirm,
   confirming,
+  saving,
   error,
 }: {
   onConfirm: () => void;
   confirming: boolean;
+  saving: boolean;
   error: boolean;
 }) {
   return (
@@ -952,13 +1076,24 @@ function ReadyActionBar({
           </div>
         ) : (
           <>
-            {/* Primary는 --berry 단색 — 그라데이션 금지 (DESIGN §0·§6) */}
+            {/*
+              **고친 값이 서버에 닿기 전에는 못 누른다** (09-02).
+
+              주제를 고치면 서버로 한 번 다녀오는데(약 1초), 그 사이에 이 버튼을
+              누르면 카드 생성이 **옛 주제**를 읽어간다 — 고쳤는데 반영이 안 된
+              것처럼 보인다. 실제로 겪은 문제라 버튼을 잠근다.
+
+              Primary는 --berry 단색 — 그라데이션 금지 (DESIGN §0·§6)
+            */}
             <button
               type="button"
               onClick={onConfirm}
-              className="flex h-12 w-full items-center justify-center rounded-md bg-berry text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+              disabled={saving}
+              className="flex h-12 w-full items-center justify-center rounded-md bg-berry text-[15px]
+                         font-semibold text-white transition-colors duration-200 hover:bg-berry-dark
+                         disabled:bg-surface-muted disabled:text-sub"
             >
-              이대로 카드 만들기
+              {saving ? "고친 내용을 저장하는 중···" : "이대로 카드 만들기"}
             </button>
             {/* 에러는 인라인 · 빨간색 금지 — 글자는 --ink (DESIGN §2 하단) */}
             {error && (
@@ -992,9 +1127,15 @@ function RestoreBanner() {
 function TopicSuggestionPicker({
   suggestions,
   onPick,
+  onFreeTopic,
+  freeTopicUsed,
 }: {
   suggestions: string[];
   onPick: (topic: string) => void;
+  /** 설정한 분야 말고 다른 이야기로 후보를 다시 받는다 (09-02) */
+  onFreeTopic?: () => void;
+  /** 이미 다른 이야기로 받아온 상태면 칩을 숨긴다 — 누를 데가 없다 */
+  freeTopicUsed?: boolean;
 }) {
   // 대상 질문과 **같은 Chip 컴포넌트·같은 흐름** (08-31 확정) —
   // 고르는 즉시 전송되고 목록은 사라진다. 값은 사용자 말풍선으로 남는다
@@ -1003,6 +1144,23 @@ function TopicSuggestionPicker({
       {suggestions.map((t) => (
         <Chip key={t} label={t} selected={false} onToggle={() => onPick(t)} />
       ))}
+
+      {/*
+        「다른 이야기」 (09-02) — 온보딩에서 정한 분야가 대화의 기본값인데,
+        다른 주제를 쓰려면 설정을 고치러 가야 했다. 여기서 그 기획에 한해 분야를
+        풀어준다. **가로막는 선택 화면을 두지 않는다** — 칩 줄에 하나 더 얹으면
+        같은 선택을 마찰 없이 준다 (DESIGN.md §1 「빈칸을 주지 않는다」).
+      */}
+      {onFreeTopic && !freeTopicUsed && (
+        <button
+          type="button"
+          onClick={onFreeTopic}
+          className="flex h-9 items-center rounded-pill border border-dashed border-line bg-surface px-4
+                     text-body text-sub transition-colors duration-200 hover:border-berry hover:text-ink"
+        >
+          다른 이야기
+        </button>
+      )}
     </div>
   );
 }
@@ -1130,12 +1288,22 @@ function ProposalPicker({
             </button>
           </span>
         ) : (
+          /*
+            옆 칩들과 **같은 알약 형태**로 맞춘다 (09-02). 맨 글자로 두니 나란히 놓인
+            대상 칩들 사이에서 혼자 눌리는 것처럼 안 보였다.
+
+            점선 테두리는 이 저장소가 이미 쓰는 규칙이다 — 직접 쓴 대상 칩(`custom`)과
+            「다른 이야기」가 점선이다. **점선 = 내가 채우는 자리**로 읽힌다.
+          */
           <button
             type="button"
             onClick={() => setCustomOpen(true)}
-            className="flex min-h-11 items-center px-2 text-caption font-semibold text-sub transition-colors duration-200 hover:text-ink"
+            className="flex min-h-11 items-center gap-1 rounded-pill border border-dashed border-line
+                       bg-surface px-4 text-body text-sub transition-colors duration-200
+                       hover:border-berry hover:text-ink"
           >
-            + 직접 쓰기
+            <Plus size={16} aria-hidden />
+            직접 쓰기
           </button>
         )}
       </div>
@@ -1228,6 +1396,12 @@ function ChatInputBar({
             }
           }}
           placeholder={placeholder ?? "떠오른 생각을 그대로 적어주세요"}
+          /*
+            focus는 바깥 form이 `focus-within:border-berry`로 그린다 (09-02).
+            이 속성이 없으면 globals.css의 입력칸 규칙이 투명한 칸 둘레에
+            1px 사각형을 덧그려 «상자 안에 또 상자»가 된다.
+          */
+          data-focus-ring="none"
           className="max-h-32 min-w-0 flex-1 resize-none bg-transparent text-body text-ink outline-none placeholder:text-sub/60 focus-visible:outline-none"
         />
         <button
@@ -1239,6 +1413,147 @@ function ChatInputBar({
           <ArrowUp size={18} aria-hidden />
         </button>
       </form>
+    </div>
+  );
+}
+
+/**
+ * ③ 분위기 고르기 (09-02) — 6종 중 하나.
+ *
+ * **미리보기는 실제 렌더러가 그린 그림이다** (`/api/styles/[id]/preview`).
+ * 시안 이미지를 쓰면 고를 때 본 것과 나오는 결과가 달라진다.
+ *
+ * 그림 에셋이 아직 없는 분위기는 **고를 수 없게 막고 이유를 적는다** —
+ * 목록에서 아예 빼면 「왜 6개라더니 3개지」가 되고, 그냥 고르게 두면
+ * 시안과 다른 결과를 받게 된다.
+ */
+function StylePicker({
+  selected,
+  onPick,
+}: {
+  selected: StyleId | null;
+  onPick: (id: StyleId) => void;
+}) {
+  /*
+    펼쳐서 나머지 장까지 보고 있는 분위기 (09-02).
+    표지만으로는 「이 템플릿이 내 이야기를 담을 수 있나」를 알 수 없다 —
+    목차·비교·체크리스트 같은 장이 있는지가 고르는 데 실제로 중요하다.
+    한 번에 하나만 펼친다. 여섯 개를 다 펼치면 화면이 사진 벽이 된다.
+  */
+  const [opened, setOpened] = useState<StyleId | null>(null);
+
+  return (
+    <section aria-label="분위기 고르기" className="flex flex-col gap-3">
+      <p className="text-body text-ink">어떤 분위기로 만들까요?</p>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {STYLE_ORDER.map((id) => {
+          const style = CARD_STYLES[id];
+          const ready = isReady(style);
+          const on = selected === id;
+
+          return (
+            <button
+              key={id}
+              type="button"
+              disabled={!ready}
+              onClick={() => onPick(id)}
+              aria-pressed={on}
+              className={[
+                "flex flex-col overflow-hidden rounded-lg border text-left transition-colors duration-200",
+                on ? "border-2 border-berry" : "border-line",
+                ready ? "bg-surface hover:border-berry" : "cursor-not-allowed bg-surface-muted",
+              ].join(" ")}
+            >
+              {/*
+                next/image를 쓰지 않는다 — 이 주소는 우리 서버가 그때그때 그리는
+                PNG라 최적화기를 거치면 한 번 더 굽기만 하고 얻는 게 없다.
+              */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/styles/${id}/preview?v=${PREVIEW_VERSION}`}
+                alt=""
+                width={320}
+                height={320}
+                className={[
+                  "aspect-square w-full bg-surface-muted object-cover",
+                  ready ? "" : "opacity-40",
+                ].join(" ")}
+              />
+              <span className="flex flex-col gap-0.5 p-3">
+                <span className="text-body font-semibold text-ink">{style.label}</span>
+                <span className="text-caption text-sub">
+                  {ready ? style.hint : "준비 중이에요"}
+                </span>
+                {/* 왜 못 고르는지 적는다 — 「준비 중」만 보이면 언제 되는지 알 수 없다 */}
+                {!ready && (
+                  <span className="text-caption text-sub">
+                    {style.missing.map((m) => m.what).join(" · ")}이 필요해요
+                  </span>
+                )}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/*
+        고른 분위기의 나머지 장 — 버튼 안에 넣지 않고 그리드 아래 한 줄로 편다.
+        버튼 안에 버튼을 넣으면 눌렀을 때 분위기까지 같이 골라진다.
+      */}
+      {selected && (
+        <SheetPeek
+          styleId={selected}
+          open={opened === selected}
+          onToggle={() => setOpened((v) => (v === selected ? null : selected))}
+        />
+      )}
+    </section>
+  );
+}
+
+/** 고른 분위기가 몇 장짜리인지, 각 장이 무슨 역할인지 보여준다 (09-02) */
+function SheetPeek({
+  styleId,
+  open,
+  onToggle,
+}: {
+  styleId: StyleId;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const sheets = TEMPLATE_SHEETS[styleId] ?? [];
+  if (sheets.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="self-start text-body text-sub underline underline-offset-4 hover:text-ink"
+      >
+        {open ? "접기" : `${CARD_STYLES[styleId].label} ${sheets.length}장 모두 보기`}
+      </button>
+
+      {open && (
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+          {sheets.map((sheet, i) => (
+            <figure key={sheet.file} className="flex flex-col gap-1">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/styles/${styleId}/preview?sheet=${i + 1}&v=${PREVIEW_VERSION}`}
+                alt=""
+                width={240}
+                height={240}
+                className="aspect-square w-full rounded-md border border-line bg-surface-muted object-cover"
+              />
+              <figcaption className="text-caption text-sub">
+                {i + 1}. {sheet.role}
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -128,6 +128,21 @@ export type CallOptions = {
   effort: Effort;
   /** 있으면 `reply`를 만들어지는 대로 흘려보낸다 (대화 턴 전용) */
   onText?: OnText;
+  /**
+   * 함께 보낼 그림들 (09-02). base64 PNG, 넘긴 순서대로 들어간다.
+   *
+   * 만들어진 카드가 제대로 나왔는지 **보고 판정**하게 하려고 열었다
+   * (`lib/imagegen/verify.ts`). 글자만으로는 「Brand Name이 그대로 남았는지」를
+   * 알 수 없다.
+   *
+   * **여러 장인 이유** — 사용자가 올린 사진이 결과에 그대로 들어갔는지 보려면
+   * 원본과 결과를 **나란히 놓고** 비교해야 한다. 한 장만 보고는 「이 커피가
+   * 그 커피인지」 알 수 없다.
+   *
+   * 그림은 사용자 질문 **앞**에 놓는다 — 무엇을 보고 답하라는 것인지가
+   * 먼저 와야 모델이 그림을 근거로 삼는다.
+   */
+  imagesBase64?: string[];
 };
 
 /**
@@ -147,16 +162,27 @@ export async function callJson<T>({
   schema,
   effort,
   onText,
+  imagesBase64,
 }: CallOptions): Promise<T> {
   let lastError: unknown;
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
+      const content: Anthropic.ContentBlockParam[] = [
+        ...(imagesBase64 ?? []).map(
+          (data): Anthropic.ContentBlockParam => ({
+            type: "image",
+            source: { type: "base64", media_type: "image/png", data },
+          }),
+        ),
+        { type: "text", text: user },
+      ];
+
       const stream = getClient().messages.stream({
         model: MODEL,
         max_tokens: MAX_TOKENS,
         system,
-        messages: [{ role: "user", content: user }],
+        messages: [{ role: "user", content }],
         thinking: { type: "adaptive" },
         output_config: { effort, format: { type: "json_schema", schema } },
       });

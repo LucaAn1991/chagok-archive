@@ -96,6 +96,11 @@ export async function loadCardFonts(
   const out: FontEntry[] = [];
 
   for (const id of wanted) {
+    /*
+      올린 폰트 (09-02 — **옛 계정 전용**). 업로드 화면과 API는 지웠다.
+      결과물의 글꼴은 이제 시안 템플릿이 정하고, 「내 스타일」에는 강조색만 남았다.
+      이미 올려둔 사람의 카드가 깨지지 않게 읽는 쪽만 남겨둔다.
+    */
     if (id === "custom") {
       if (!brand?.customFontUrl) continue;
       const data = await fetchCustomFont(brand.customFontUrl);

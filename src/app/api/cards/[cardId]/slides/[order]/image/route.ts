@@ -3,6 +3,8 @@ import { adminDb } from "@/lib/firebase/admin";
 import { getUidFromRequest } from "@/lib/api/auth";
 import { renderSlidePng } from "@/lib/render/render-slide";
 import { toDataUri } from "@/lib/render/fetch-image";
+import { embedXmpInPng } from "@/lib/render/png-xmp";
+import { AI_DISCLOSURE_XMP } from "@/lib/ai-disclosure";
 import type { Card, User } from "@/types";
 
 /**
@@ -42,11 +44,42 @@ export async function GET(
     return NextResponse.json({ error: "슬라이드를 찾을 수 없어요." }, { status: 404 });
   }
 
+  /*
+    **시안 템플릿으로 만든 장은 이미 완성돼 있다** (09-02).
+    Storage에서 받아 그대로 내보낸다 — 여기서 갈라주면 화면·다운로드·편집기가
+    전부 고칠 것 없이 동작한다.
+
+    ⚠️ **AI 생성물 표시를 여기서 다시 심는다.** 렌더러 경로는 `render-slide.ts`가
+    심어주지만 이 그림은 그 경로를 거치지 않는다. 빠뜨리면 생성한 장만 표시가
+    없는 채로 나가고, 그건 법정 의무 위반이다 (`lib/ai-disclosure.ts`).
+  */
+  if (slide.origin === "generated" && slide.generatedUrl) {
+    try {
+      const res = await fetch(slide.generatedUrl);
+      if (res.ok) {
+        const raw = Buffer.from(await res.arrayBuffer());
+        return new NextResponse(new Uint8Array(embedXmpInPng(raw, AI_DISCLOSURE_XMP)), {
+          headers: {
+            "Content-Type": "image/png",
+            // 본인만 보는 이미지 — 공유 캐시 금지 (렌더러 경로와 같은 규칙)
+            "Cache-Control": "private, max-age=300",
+          },
+        });
+      }
+      console.error(`[slides/image] 생성 그림 받기 실패 HTTP ${res.status} card=${cardId} order=${order}`);
+    } catch (err) {
+      console.error(`[slides/image] 생성 그림 받기 실패 card=${cardId} order=${order}:`, err);
+    }
+    // 못 받았으면 아래 렌더러로 물러선다 — 빈 자리를 보여주지 않는다
+  }
+
   try {
     const png = await renderSlidePng({
       layoutId: slide.layoutId,
       // 테마는 카드 전체가 하나를 공유한다 (08-31). 옛 카드엔 없어서 기본값으로 그려진다
       themeId: card.themeId,
+      // 기획에서 고른 분위기 (09-02). 있으면 테마 대신 이걸로 그린다
+      styleId: card.styleId,
       brand,
       bgOverride: card.bgOverride,
       styleOverrides: slide.styleOverrides,

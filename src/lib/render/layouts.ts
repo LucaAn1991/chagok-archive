@@ -1,7 +1,9 @@
 import type { LayoutId } from "../../types/card";
 // 편집기와 같은 표를 본다 — 여기 숫자를 박아두면 편집칸 크기가 어긋난다
 import { LAYOUT_FONT_SIZE as F } from "../slide-layout";
-import { applyBrand, resolveTheme, type Theme } from "./themes";
+import { applyBrand, resolveTheme, type ThemeLook } from "./themes";
+import { resolveStyle } from "./card-styles";
+import { ornamentsFor, type Ornament, type OrnamentColor } from "./ornaments";
 import type { Brand } from "../../types/user";
 import type { SlideElement, SlotStyle } from "../../types/card";
 import {
@@ -31,6 +33,13 @@ export type SlideContent = {
   /** 산출물 테마 (08-31). 없으면 기본 테마로 그린다 — 옛 카드엔 이 값이 없다 */
   themeId?: string;
   /**
+   * 비주얼 스타일 (09-02). **있으면 테마 대신 이걸로 그린다.**
+   *
+   * 기획 단계에서 고른 값이라 카드가 만들어지기 전에 이미 정해져 있다.
+   * 테마보다 넓은 개념(색·글자 비율 + 껍데기 + 문구 규칙)이므로 우선한다.
+   */
+  styleId?: string | null;
+  /**
    * 「내 스타일」 (08-31). 있으면 테마의 색·폰트를 덮어쓴다 —
    * 계정 톤이 테마 3종보다 우선한다 (DESIGN.md §12).
    */
@@ -52,6 +61,12 @@ export type SlideContent = {
    * satori가 알려주지 않기 때문이다 (`lib/render/hit-boxes.ts`).
    */
   hitColors?: Record<string, string>;
+  /**
+   * 장식 그림의 data URI (09-02) — 키는 파일 이름.
+   * satori가 파일을 못 읽어서 부르는 쪽(`render-slide.ts`)이 미리 읽어 넘긴다.
+   * 없는 파일은 여기 안 들어오고, 그 장식은 조용히 빠진다.
+   */
+  decorImages?: Record<string, string>;
   /** 레이아웃별 텍스트 슬롯. @TODO: 슬롯 키는 시안 확정 시 재정의 (아래 통상값) */
   texts: Record<string, string>;
   /** @TODO: 골격 단계에서는 data URI만 지원. 원격 URL 페치는 render API에서 처리 */
@@ -84,7 +99,7 @@ function el(
   return { type, props: { style, children, ...(src ? { src } : {}) } };
 }
 
-function root(th: Theme, children: unknown[]): Node {
+function root(th: ThemeLook, children: unknown[]): Node {
   return el(
     "div",
     {
@@ -105,7 +120,7 @@ function root(th: Theme, children: unknown[]): Node {
  * 레이아웃 함수마다 두 개를 따로 들고 다니면 인자가 계속 늘어난다.
  */
 type Ctx = {
-  th: Theme;
+  th: ThemeLook; // 테마든 스타일이든 «생김새»만 본다 (09-02)
   ov: Record<string, SlotStyle>;
   /** 요소가 폰트를 따로 안 고르면 쓸 이름 */
   family: string;
@@ -237,7 +252,7 @@ function text(
 }
 
 /** 사진이 없을 때의 자리 표시 면. 폴백 사슬의 마지막은 text-only라 여기 안 온다 */
-function imageArea(th: Theme, imageUrl: string | null, style: Record<string, unknown>): Node {
+function imageArea(th: ThemeLook, imageUrl: string | null, style: Record<string, unknown>): Node {
   if (imageUrl) {
     return el("img", { objectFit: "cover", ...style }, undefined, imageUrl);
   }
@@ -249,7 +264,7 @@ function imageArea(th: Theme, imageUrl: string | null, style: Record<string, unk
  * list·image-* 에는 쓰지 않는다. 목록이나 사진 아래 설명까지 가운데로 몰면
  * 읽는 눈이 매 줄 시작점을 다시 찾아야 한다.
  */
-function alignStyle(th: Theme): Record<string, unknown> {
+function alignStyle(th: ThemeLook): Record<string, unknown> {
   return th.type.align === "center"
     ? { alignItems: "center", textAlign: "center" }
     : { alignItems: "flex-start" };
@@ -513,13 +528,70 @@ function freeform(ctx: Ctx, elements: SlideElement[]): Node {
 
 /* ── 진입점 ──────────────────────────────────────────────── */
 
+/**
+ * 장식 하나를 satori 노드로 (09-02).
+ *
+ * 좌표가 비율이라 `%`로 넣는다 — 캔버스가 1080이든 미리보기용 작은 크기든 같은 자리에 온다.
+ * 회전은 `transform`으로 준다. satori가 지원하는 몇 안 되는 변형 중 하나다.
+ */
+function ornamentNode(
+  th: ThemeLook,
+  o: Ornament,
+  images: Record<string, string>,
+): Node | null {
+  const pct = (v: number) => `${(v * 100).toFixed(3)}%`;
+  const roleColor = (c: OrnamentColor) => th.color[c];
+
+  const base: Record<string, unknown> = {
+    position: "absolute",
+    left: pct(o.x),
+    top: pct(o.y),
+    width: pct(o.w),
+    ...(o.h !== undefined ? { height: pct(o.h) } : {}),
+    ...(o.rotate ? { transform: `rotate(${o.rotate}deg)` } : {}),
+  };
+
+  if (o.kind === "image") {
+    const src = o.file ? images[o.file] : undefined;
+    if (!src) return null; // 파일이 없으면 이 장식만 빠진다
+    return el("img", { ...base, objectFit: "contain" }, undefined, src);
+  }
+
+  /*
+    도형의 둥글기는 **짧은 변 기준**이다. `borderRadius`에 %를 주면 가로·세로가
+    각각 그 비율로 깎여 길쭉한 상자에서 타원이 된다 — 원을 원하면 0.5를 준다.
+  */
+  return el("div", {
+    ...base,
+    ...(o.fill ? { backgroundColor: roleColor(o.fill) } : {}),
+    ...(o.radius ? { borderRadius: pct(o.radius) } : {}),
+    ...(o.border
+      ? { border: `${o.border.width}px solid ${roleColor(o.border.color)}` }
+      : {}),
+  });
+}
+
 export function buildLayout(content: SlideContent): Node {
   const { layoutId, texts, imageUrl } = content;
-  const th = applyBrand(resolveTheme(content.themeId), content.brand, content.bgOverride);
+  /*
+    분위기(스타일)를 골랐으면 그걸 쓰고, 아니면 테마로 떨어진다 (09-02).
+    「내 스타일」(brand)은 그 위에 다시 덮인다 — 계정 톤이 가장 우선이라는
+    기존 순서(DESIGN.md §12)를 바꾸지 않는다.
+  */
+  const look = content.styleId ? resolveStyle(content.styleId) : resolveTheme(content.themeId);
+  const th = applyBrand(look, content.brand, content.bgOverride);
   const ctx: Ctx = {
     th,
     ov: content.styleOverrides ?? {},
-    family: baseFamily(content.brand),
+    /*
+      글꼴 우선순위 — 「내 스타일」 > 분위기 > 기본 (09-02).
+      스타일마다 어울리는 글꼴이 따로 있는데(도트엔 갈무리, 감성엔 명조)
+      여기서 넘기지 않으면 색만 바뀌고 글꼴은 전부 같아진다.
+    */
+    family:
+      content.brand?.fontId ??
+      ("fontId" in look ? look.fontId : undefined) ??
+      baseFamily(content.brand),
     hit: content.hitColors,
   };
 
@@ -528,20 +600,67 @@ export function buildLayout(content: SlideContent): Node {
     return freeform(ctx, content.elements);
   }
 
-  switch (layoutId) {
-    case "cover":
-      return cover(ctx, texts);
-    case "text-only":
-      return textOnly(ctx, texts);
-    case "image-top":
-      return imageTop(ctx, texts, imageUrl);
-    case "image-full":
-      return imageFull(ctx, texts, imageUrl);
-    case "list":
-      return list(ctx, texts);
-    case "closing":
-      return closing(ctx, texts);
-    default:
-      return textOnly(ctx, texts);
-  }
+  const layout = ((): Node => {
+    switch (layoutId) {
+      case "cover":
+        return cover(ctx, texts);
+      case "text-only":
+        return textOnly(ctx, texts);
+      case "image-top":
+        return imageTop(ctx, texts, imageUrl);
+      case "image-full":
+        return imageFull(ctx, texts, imageUrl);
+      case "list":
+        return list(ctx, texts);
+      case "closing":
+        return closing(ctx, texts);
+      default:
+        return textOnly(ctx, texts);
+    }
+  })();
+
+  /*
+    장식 얹기 (09-02) — 분위기가 정한 도형·그림을 레이아웃 위아래에 깐다.
+
+    좌표를 재는 중(`hitColors`)에는 얹지 않는다. 탐침은 «어느 줄이 어디 있나»를
+    보려고 그리는 것이라, 장식이 끼면 픽셀을 훑을 때 섞여 좌표가 어긋난다.
+  */
+  const decor = content.hitColors
+    ? []
+    : ornamentsFor(
+        "ornaments" in look ? look.ornaments : undefined,
+        layoutId,
+        Boolean(imageUrl),
+      );
+
+  if (decor.length === 0) return layout;
+
+  const images = content.decorImages ?? {};
+  const behind = decor.filter((o) => o.behind).map((o) => ornamentNode(th, o, images));
+  const front = decor.filter((o) => !o.behind).map((o) => ornamentNode(th, o, images));
+
+  /*
+    **바탕색은 감싸는 상자가 든다.** 레이아웃 자신도 배경색을 칠하는데,
+    그대로 두면 «뒤에 깔 장식»이 그 색에 가려진다. 그래서 여기서 한 번 칠하고
+    레이아웃은 투명하게 얹는다.
+  */
+  return el(
+    "div",
+    {
+      position: "relative",
+      width: "100%",
+      height: "100%",
+      display: "flex",
+      backgroundColor: th.color.bg,
+    },
+    [
+      ...behind.filter((n): n is Node => n !== null),
+      el(
+        "div",
+        { position: "absolute", left: 0, top: 0, width: "100%", height: "100%", display: "flex" },
+        [{ ...layout, props: { ...layout.props, style: { ...layout.props.style, backgroundColor: "transparent" } } }],
+      ),
+      ...front.filter((n): n is Node => n !== null),
+    ],
+  );
 }

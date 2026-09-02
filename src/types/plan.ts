@@ -1,5 +1,5 @@
 import type { Timestamp } from "firebase/firestore";
-import type { StockPick } from "./card";
+import type { StockPick, StyleId } from "./card";
 
 /** 기획 세션. 대화 1회 = plan 1건 → card N장 */
 export type Plan = {
@@ -38,6 +38,19 @@ export type Plan = {
    * 나머지 이미지 자리는 슬라이드 내용에 맞춰 따로 찾는다 (`lib/ai/slides.ts`).
    */
   stockPhoto: StockPick | null;
+
+  /**
+   * 고른 비주얼 스타일 (09-02). ③ 단계에서 정한다. 고르지 않았으면 null.
+   *
+   * **여기서 한 번만 고른다.** 이 기획에서 나온 카드 전부가 같은 값을 물려받아서
+   * (`card.styleId`) 한 묶음으로 보인다. 카드마다 다시 고르게 하면 시리즈가
+   * 제각각이 되고, 「좁혀주는 제품」(제품 원칙)과도 어긋난다.
+   *
+   * 색·글꼴만 정하는 게 아니라 **문구의 길이와 말투까지** 정한다 —
+   * 각 스타일의 `copyRules`가 카드 생성 프롬프트에 들어간다
+   * (`lib/render/card-styles.ts`).
+   */
+  styleId: StyleId | null;
 
   /** 기록형(type='record')일 때만 채워진다 */
   recordDays: number | null; // 며칠치를 미리 깔지. @TODO: PRD §9 미결 5 — 3개월이면 90장

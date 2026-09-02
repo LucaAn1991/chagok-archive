@@ -83,13 +83,15 @@ export function TopicLine({
       <div className="flex min-w-0 items-center gap-2">
         <span className="shrink-0 text-label font-semibold text-sub">주제</span>
         <span className="min-w-0 flex-1 truncate text-body text-ink">{topic}</span>
+        {/* 글자를 붙여 «눌러도 되는 것»임을 드러낸다 (09-02 · DESIGN.md §5 44px) */}
         <button
           type="button"
           onClick={start}
-          aria-label="주제 수정"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
+          className="flex h-11 shrink-0 items-center gap-1 rounded-md px-3 text-body font-semibold
+                     text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
         >
-          <Pencil size={14} aria-hidden />
+          <Pencil size={16} aria-hidden />
+          수정
         </button>
       </div>
     );
@@ -161,14 +163,20 @@ function EditableRow({
       <div>
         <dt className="flex items-center gap-1.5 text-label font-semibold text-sub">
           {label}
+          {/*
+            라벨 옆 줄이라 44px까지 키우면 줄 높이가 흔들린다. 대신 글자를 붙여
+            «누를 수 있다»를 드러내고 36px(§6 Small)로 맞췄다 — 12px 아이콘만
+            있던 것보다 훨씬 눈에 띈다.
+          */}
           {display && (
             <button
               type="button"
               onClick={start}
-              aria-label={`${label} 수정`}
-              className="flex h-6 w-6 items-center justify-center rounded-sm text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
+              className="flex h-9 items-center gap-1 rounded-md px-2 text-caption font-semibold
+                         text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
             >
-              <Pencil size={12} aria-hidden />
+              <Pencil size={13} aria-hidden />
+              수정
             </button>
           )}
         </dt>

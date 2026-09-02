@@ -19,9 +19,18 @@ export async function POST(request: Request) {
   }
 
   let idea = "";
+  /*
+    설정한 분야에 매이지 않고 시작하기 (09-02).
+
+    온보딩에서 정한 분야(`user.field`)가 대화의 기본값인데, 다른 이야기를 하고 싶을
+    때마다 설정을 고치러 가야 했다. 이 값이 true면 **그 기획에서만** 분야를 비우고
+    시작한다 — 설정 자체는 건드리지 않는다.
+  */
+  let freeTopic = false;
   try {
     const body = await request.json();
     if (typeof body?.idea === "string") idea = body.idea.trim();
+    freeTopic = body?.freeTopic === true;
   } catch {
     // body 없는 요청 허용 — idea 없이 시작하는 경로
   }
@@ -33,7 +42,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "계정 정보를 찾을 수 없습니다." }, { status: 404 });
     }
     const ctx: PlanningContext = {
-      field: String(userSnap.get("field") ?? ""),
+      // 분야를 비우면 프롬프트가 «아직 안 밝힘»으로 읽고 형식 위주로 후보를 낸다
+      field: freeTopic ? "" : String(userSnap.get("field") ?? ""),
       tone: String(userSnap.get("tone") ?? ""),
     };
 
@@ -42,7 +52,7 @@ export async function POST(request: Request) {
 
     // idea 없는 진입 — 인사만 남은 기존 빈 draft가 있으면 재사용한다 (08-28).
     // 진입할 때마다 빈 세션 문서가 쌓이지 않게 서버가 걸러준다
-    if (!idea) {
+    if (!idea && !freeTopic) {
       const draftsSnap = await adminDb
         .collection("plans")
         .where("userId", "==", session.uid)
@@ -86,6 +96,7 @@ export async function POST(request: Request) {
       seriesTitle: "",
       messages,
       cardCount: 0,
+      styleId: null, // ③ 단계에서 고른다 (09-02)
       recordDays: null,
       templateVarNames: [],
       status: "draft",

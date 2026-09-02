@@ -6,6 +6,7 @@ import { generateSlides } from "@/lib/ai/slides";
 import { isClaudeConfigured } from "@/lib/ai/caption";
 import { isStockConfigured } from "@/lib/stock";
 import { CARD_TEMPLATES } from "@/lib/card-templates";
+import { buildFromTemplate, canBuildFromTemplate } from "@/lib/imagegen/build-sheets";
 import type { Card, VisualType, User, TemplateId } from "@/types";
 
 /**
@@ -70,6 +71,92 @@ export async function POST(
         : "text_only";
 
   try {
+    /*
+      **시안 템플릿으로 만들 수 있으면 그 길로 간다** (09-02).
+
+      기획에서 분위기를 골랐고 그림 생성이 설정돼 있으면, 우리 레이아웃 대신
+      시안 템플릿의 글자를 바꿔 완성 카드를 만든다. 실패한 장만 아래 렌더러 경로로
+      물러서므로 **한 장도 빠지지 않는다.**
+
+      장당 2분이라 이 요청은 오래 걸린다 — 화면이 기다릴 준비가 돼 있어야 한다.
+    */
+    if (canBuildFromTemplate(card.styleId)) {
+      const styleId = card.styleId;
+      const photos = await loadUserPhotos(card.photoUrls ?? []);
+
+      /*
+        **NDJSON 스트림으로 돌려준다** (09-02). 이 일은 3분쯤 걸리는데, 다 끝난 뒤에
+        한 번에 응답하면 화면은 그동안 «멈춘 것»과 구분할 수 없다. 장이 하나씩
+        끝날 때마다 흘려보내면 사용자가 진행을 본다.
+
+        기획 대화가 쓰는 방식과 같다 (`lib/ai/client.ts`의 `onText`).
+        연결에 계속 데이터가 흐르므로 중간 프록시가 끊을 위험도 줄어든다.
+      */
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          const send = (o: unknown) =>
+            controller.enqueue(encoder.encode(`${JSON.stringify(o)}\n`));
+
+          try {
+            const built = await buildFromTemplate({
+              cardId,
+              styleId,
+              title: card.title,
+              audience: card.audience,
+              intent: card.intent,
+              extraNote: card.extraNote,
+              tone: user.tone,
+              avoidExpressions: user.avoidExpressions,
+              // 올린 사진은 «그대로» 들어간다 — 다시 그리지 말라고 프롬프트가 못박는다
+              photos,
+              accent: user.brand?.accent ?? null,
+              onProgress: send,
+            });
+
+            if (built.slides.length === 0) {
+              // 한 장도 못 만들었다 — 화면이 「다시 시도」를 띄운다
+              send({ type: "error", error: "카드뉴스를 만들지 못했어요. 다시 시도해주세요." });
+              controller.close();
+              return;
+            }
+
+            await cardSnap.ref.update({
+              slides: built.slides,
+              visualType,
+              templateId,
+              status: "pending",
+              updatedAt: FieldValue.serverTimestamp(),
+            });
+
+            send({
+              type: "done",
+              slides: built.slides,
+              visualType,
+              templateId,
+              // 몇 장이 시안대로 나왔는지 — 화면이 「N장 중 M장」을 알릴 수 있다
+              generated: built.generated,
+              fallback: built.fallback,
+              mock: false,
+            });
+          } catch (e) {
+            console.error("[render:stream]", e);
+            send({ type: "error", error: "카드뉴스를 만들지 못했어요. 다시 시도해주세요." });
+          } finally {
+            controller.close();
+          }
+        },
+      });
+
+      return new NextResponse(stream, {
+        headers: {
+          "Content-Type": "application/x-ndjson; charset=utf-8",
+          // 중간 캐시가 스트림을 모아뒀다 한 번에 주면 진행이 안 보인다
+          "Cache-Control": "no-store, no-transform",
+        },
+      });
+    }
+
     const slides = await generateSlides({
       cardId, // 생성 이미지를 cards/{cardId}/photos/ 아래 저장한다 (08-31 F15)
       title: card.title,
@@ -83,6 +170,7 @@ export async function POST(
       photoUrls: card.photoUrls ?? [], // 이미지 레이아웃에 순서대로 배정된다 (08-31)
       chosenStock: card.stockPhoto ?? null, // 기획에서 고른 스톡 — 첫 이미지 자리 (09-01)
       templateId, // 주면 장수·순서가 고정된다 (08-31)
+      styleId: card.styleId ?? null, // 분위기의 문구 규칙을 프롬프트에 얹는다 (09-02)
     });
 
     await cardSnap.ref.update({
@@ -102,4 +190,30 @@ export async function POST(
       { status: 502 },
     );
   }
+}
+
+/**
+ * 사용자가 올린 사진을 내려받는다 (09-02).
+ *
+ * 그림 생성에는 **주소**를 넘기고, 검사할 때는 **내용**이 있어야 원본과 비교할 수 있다.
+ * 못 받은 사진은 조용히 빠진다 — 사진 하나 때문에 카드 제작이 멈추면 안 된다.
+ *
+ * 참조 이미지는 문서상 최대 16장이고 템플릿이 한 자리를 쓰므로 15장까지다.
+ * 넘치면 앞에서부터 자른다 — `photoUrls` 순서가 곧 사용자가 정한 순서다.
+ */
+type LoadedPhoto = { url: string; png: Buffer };
+
+async function loadUserPhotos(urls: string[]): Promise<LoadedPhoto[]> {
+  const loaded: (LoadedPhoto | null)[] = await Promise.all(
+    urls.slice(0, 15).map(async (url) => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        return { url, png: Buffer.from(await res.arrayBuffer()) };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return loaded.filter((p): p is LoadedPhoto => p !== null);
 }

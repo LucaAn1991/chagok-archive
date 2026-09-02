@@ -9,10 +9,8 @@ import { auth, db } from "@/lib/firebase/client";
 import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/PageHeader";
 import StockAttribution from "@/components/StockAttribution";
-import { THEMES, THEME_ORDER, isHexColor, resolveTheme } from "@/lib/render/themes";
-import { CARD_TEMPLATES, TEMPLATE_ORDER, worksWithoutPhotos } from "@/lib/card-templates";
 import { AI_DISCLOSURE } from "@/lib/ai-disclosure";
-import type { Card, Caption, ThemeId, TemplateId } from "@/types";
+import type { Card, Caption, Slide } from "@/types";
 
 /**
  * 제작 결과 (F7·F8) — 슬라이드 · 캡션 · 부분 수정.
@@ -61,12 +59,40 @@ export default function CardResultPage() {
   /* 편집 상태 */
   const [captionDraft, setCaptionDraft] = useState<Caption | null>(null);
   const [hashtagInput, setHashtagInput] = useState("");
-  /** 이 카드만의 배경색 입력 (08-31). 빈 문자열이면 «계정 스타일 따르기» */
-  const [bgDraft, setBgDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
+  // 지금 다시 만들고 있는 «장» (09-02). 한 번에 하나만 — 2분씩 걸려 여러 개는 무리다.
+  // 카드 전체를 다시 만드는 `regenerating`(불리언)과 다른 값이라 이름을 나눴다
+  const [regenSlide, setRegenSlide] = useState<number | null>(null);
+  /**
+   * 시안으로 만드는 중의 진행 (09-02). `total`이 0이면 아직 문구를 쓰는 중이다.
+   * 3분이 걸리는 일이라 **끝날 때까지 아무 말이 없으면 멈춘 줄 안다.**
+   */
+  const [build, setBuild] = useState<{ total: number; done: number; fallback: number }>({
+    total: 0,
+    done: 0,
+    fallback: 0,
+  });
+  /**
+   * 만들기 시작한 뒤 흘러간 초 (09-02).
+   *
+   * **이것만이 정직한 진행 표시다.** 몇 %가 됐는지는 알 수 없지만
+   * «얼마나 기다렸는지»는 사실이고, 사용자가 계속 기다릴지 판단하는 근거가 된다.
+   */
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (phase !== "generating") return;
+    /*
+      시작 시각을 여기서 잡고 1초마다 센다. 이펙트 안에서 `setElapsed(0)`을 곧바로
+      부르지 않는다 — 렌더가 한 번 더 돌아 「연쇄 렌더」 경고가 난다.
+      대신 «만들기 시작할 때» 0으로 되돌린다 (`generate`).
+    */
+    const started = Date.now();
+    const timer = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, [phase]);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -133,6 +159,59 @@ export default function CardResultPage() {
     }
   }
 
+  /**
+   * 이 장만 다시 만든다 (09-02).
+   *
+   * 성공하면 그 장의 그림만 새로 받는다 — 나머지는 건드리지 않는다.
+   * 실패해도 지금 장은 그대로 남는다(서버가 카드를 안 고친다). 다시 만들기를
+   * 눌렀다가 있던 것마저 잃으면 안 된다.
+   */
+  async function regenerateSlide(order: number) {
+    const user = userRef.current;
+    if (!user || regenSlide !== null) return;
+    setRegenSlide(order);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/cards/${cardId}/slides/${order}/regenerate`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = (await res.json().catch(() => null)) as
+        | { ok?: boolean; slide?: Slide; error?: string }
+        | null;
+
+      if (!res.ok || !data?.ok) {
+        showToast(data?.error ?? "다시 만들지 못했어요.");
+        return;
+      }
+
+      // 카드의 그 장만 갈아끼운다
+      setCard((prev) =>
+        prev
+          ? { ...prev, slides: prev.slides.map((s) => (s.order === order ? data.slide! : s)) }
+          : prev,
+      );
+
+      /*
+        그림도 새로 받는다. **`fresh`를 켜야 한다** — 슬라이드 주소는 그대로인데
+        이미지 라우트가 5분 캐시를 주기 때문에 그냥 부르면 옛 PNG가 온다 (08-31).
+      */
+      const url = await fetchSlideImage(order, token, true);
+      setSlideUrls((prev) => {
+        const next = [...prev];
+        const stale = next[order];
+        next[order] = url;
+        if (stale) URL.revokeObjectURL(stale);
+        return next;
+      });
+      showToast("이 장을 다시 만들었어요.");
+    } catch {
+      showToast("다시 만들지 못했어요.");
+    } finally {
+      setRegenSlide(null);
+    }
+  }
+
   /** 캡션을 인스타에 그대로 붙일 수 있는 모양으로 클립보드에 담는다 */
   async function copyCaption() {
     if (!captionDraft) return;
@@ -157,7 +236,72 @@ export default function CardResultPage() {
     }
   }
 
-  /** 슬라이드 1장 PNG 로드. fresh=true면 브라우저 캐시를 우회한다(문구 수정 직후) */
+  /** 「1분 20초」처럼. 1분이 안 되면 초만 */
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds}초`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return s === 0 ? `${m}분` : `${m}분 ${s}초`;
+}
+
+/**
+ * 제작 응답을 읽는다 — **스트림일 수도, 한 번에 올 수도 있다** (09-02).
+ *
+ * 시안 템플릿으로 만들 때는 3분이 걸려서 서버가 NDJSON으로 진행을 흘려보낸다.
+ * 렌더러 경로는 빠르므로 지금까지처럼 JSON 한 덩이로 온다.
+ * **응답의 content-type으로 갈라야 한다** — 화면이 어느 쪽인지 미리 알 수 없다.
+ */
+async function readRender(
+  res: Response,
+  onProgress: (next: { total: number; done: number; fallback: number }) => void,
+): Promise<{ slides: unknown[]; mock?: boolean; generated?: number; fallback?: number }> {
+  if (!res.headers.get("content-type")?.includes("x-ndjson")) {
+    return res.json();
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("응답을 읽지 못했어요.");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let total = 0;
+  let done = 0;
+  let fallback = 0;
+  let result: { slides: unknown[]; mock?: boolean } | null = null;
+
+  for (;;) {
+    const { value, done: finished } = await reader.read();
+    if (finished) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    // 한 줄이 여러 조각으로 나뉘어 올 수 있어 개행이 나올 때까지 모은다
+    let cut: number;
+    while ((cut = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, cut).trim();
+      buffer = buffer.slice(cut + 1);
+      if (!line) continue;
+
+      const event = JSON.parse(line) as Record<string, unknown>;
+      if (event.type === "planned") {
+        total = Number(event.total) || 0;
+        onProgress({ total, done, fallback });
+      } else if (event.type === "sheet") {
+        done += 1;
+        if (event.ok === false) fallback += 1;
+        onProgress({ total, done, fallback });
+      } else if (event.type === "error") {
+        throw new Error(typeof event.error === "string" ? event.error : "생성에 실패했어요.");
+      } else if (event.type === "done") {
+        result = event as unknown as { slides: unknown[]; mock?: boolean };
+      }
+    }
+  }
+
+  if (!result) throw new Error("응답이 끝까지 오지 않았어요.");
+  return result;
+}
+
+/** 슬라이드 1장 PNG 로드. fresh=true면 브라우저 캐시를 우회한다(문구 수정 직후) */
   const fetchSlideImage = useCallback(
     async (order: number, token: string, fresh = false): Promise<string> => {
       const res = await fetch(`/api/cards/${cardId}/slides/${order}/image`, {
@@ -198,6 +342,8 @@ export default function CardResultPage() {
     if (!user) return;
     setPhase("generating");
     setErrorMessage(null);
+    setBuild({ total: 0, done: 0, fallback: 0 });
+    setElapsed(0);
 
     try {
       const token = await user.getIdToken();
@@ -214,7 +360,7 @@ export default function CardResultPage() {
       }
 
       const captionData = (await captionRes.json()) as { mock?: boolean };
-      const renderData = (await renderRes.json()) as { slides: unknown[]; mock?: boolean };
+      const renderData = await readRender(renderRes, setBuild);
       setIsMock(Boolean(captionData.mock || renderData.mock));
 
       const snap = await getDoc(doc(db, "cards", cardId));
@@ -250,7 +396,6 @@ export default function CardResultPage() {
         }
         setCard(data);
         setCaptionDraft(data.caption);
-        setBgDraft(data.bgOverride ?? "");
 
         if (data.slides.length > 0 && data.caption) {
           setPhase("ready");
@@ -307,108 +452,8 @@ export default function CardResultPage() {
     if (next) setCaptionDraft(next.caption);
   }
 
-  /**
-   * 다른 구성으로 다시 만들기 (08-31).
-   *
-   * **캡션은 건드리지 않는다.** 바뀌는 건 «몇 장을 어떤 순서로»이지 할 말이 아니다.
-   * 그래서 `generate()`와 달리 render만 다시 부른다.
-   *
-   * 되돌릴 수 없는 행동이라 먼저 확인을 받는다 (DESIGN.md §13) —
-   * 지금 슬라이드의 문구가 전부 새로 쓰인다.
-   */
-  async function rebuildWith(templateId: TemplateId) {
-    const user = userRef.current;
-    if (!user || regenerating) return;
 
-    const t = CARD_TEMPLATES[templateId];
-    const ok = window.confirm(
-      `「${t.label}」 구성으로 다시 만들까요?\n지금 슬라이드의 문구는 새로 쓰여요. (캡션은 그대로예요)`,
-    );
-    if (!ok) return;
 
-    setRegenerating(true);
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch(`/api/cards/${cardId}/render`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ templateId }),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error ?? "다시 만들지 못했어요.");
-      }
-      const data = (await res.json()) as { slides: unknown[] };
-
-      const snap = await getDoc(doc(db, "cards", cardId));
-      const fresh = snap.data() as Card | undefined;
-      if (fresh) setCard(fresh);
-
-      // 방금 서버에서 새로 만들었다 — 캐시를 반드시 지나쳐야 한다
-      await fetchAllSlideImages(data.slides.length, token, true);
-      showToast(`「${t.label}」 구성으로 다시 만들었어요.`);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "다시 만들지 못했어요.");
-    } finally {
-      setRegenerating(false);
-    }
-  }
-
-  /**
-   * 이 카드만의 배경색 (08-31).
-   *
-   * 계정 스타일(설정)이 기본이고 이건 예외다 — 「이번 건만 어둡게」 같은 경우.
-   * 테마와 마찬가지로 카드 전체에 걸리므로 모든 슬라이드를 다시 그린다.
-   */
-
-  async function saveCardBg(next: string | null) {
-    if (!card || saving) return;
-    const updated = await saveContent({ bgOverride: next });
-    if (!updated) return;
-
-    const user = userRef.current;
-    if (!user) return;
-    try {
-      const token = await user.getIdToken();
-      const urls = await Promise.all(
-        updated.slides.map((s) => fetchSlideImage(s.order, token, true)),
-      );
-      const stale = urlsRef.current;
-      setSlideUrls(urls);
-      stale.forEach((u) => URL.revokeObjectURL(u));
-    } catch {
-      showToast("색은 바뀌었어요. 미리보기는 잠시 후 반영돼요.");
-    }
-  }
-
-  /**
-   * 테마 변경 (08-31).
-   *
-   * 테마는 카드 전체에 걸리므로 **모든 슬라이드를 다시 그려야 한다.**
-   * 문구 수정(한 장만 갱신)과 달리 여기서는 전체를 새로 받는다.
-   * 저장이 실패하면 이미지는 건드리지 않는다 — 화면과 DB가 어긋나면 안 된다.
-   */
-  async function selectTheme(next: ThemeId) {
-    if (!card || card.themeId === next || saving) return;
-
-    const updated = await saveContent({ themeId: next });
-    if (!updated) return;
-
-    const user = userRef.current;
-    if (!user) return;
-    try {
-      const token = await user.getIdToken();
-      const urls = await Promise.all(
-        updated.slides.map((s) => fetchSlideImage(s.order, token, true)),
-      );
-      const stale = urlsRef.current;
-      setSlideUrls(urls);
-      stale.forEach((u) => URL.revokeObjectURL(u));
-    } catch {
-      /* 저장은 됐다 — 다음 진입 때 새 테마로 그려진다 */
-      showToast("테마는 바뀌었어요. 미리보기는 잠시 후 반영돼요.");
-    }
-  }
 
   function addHashtag() {
     const tag = hashtagInput.trim().replace(/^#/, "");
@@ -451,8 +496,26 @@ export default function CardResultPage() {
 
       {/* 슬라이드 */}
       <section aria-label="카드뉴스 슬라이드" className="flex flex-col gap-3">
+        {/*
+          만드는 동안의 안내 (09-02).
+
+          **가짜 진행률을 쓰지 않는다** (DESIGN.md §0) — 실제로 끝난 장 수와
+          흘러간 시간만 말한다. 시안 템플릿으로 만들면 3분쯤 걸려서, 아무 말이
+          없으면 사용자는 멈춘 줄 안다.
+        */}
         {phase === "generating" && (
-          <p className="text-body text-purple">✦ 차곡이 카드마다 메시지와 이미지를 맞추고 있어요</p>
+          <div className="flex flex-col gap-1">
+            <p className="text-body text-purple">
+              ✦{" "}
+              {build.total === 0
+                ? "차곡이 카드마다 들어갈 이야기를 정하고 있어요"
+                : `${build.total}장 중 ${build.done}장 완성`}
+            </p>
+            <p className="text-caption text-sub">
+              {build.total === 0 ? "곧 몇 장이 될지 정해져요." : "곧 완성돼요."}
+              {elapsed > 0 && ` · ${formatElapsed(elapsed)} 지났어요`}
+            </p>
+          </div>
         )}
 
         {phase === "error" ? (
@@ -469,156 +532,19 @@ export default function CardResultPage() {
         ) : (
           <>
             {/*
-              테마 고르기 (08-31) — 카드 «전체»에 걸린다. 그래서 슬라이드 줄 위에 둔다.
-              고르면 아래 미리보기가 통째로 바뀌는 관계가 자리로 드러난다.
+              **테마·배경색·구성 고르기를 뺐다** (09-02).
 
-              칩 안의 색 동그라미는 테마의 실제 배경·글자색이다. 브랜드 토큰이 아니라
-              «콘텐츠 세계» 색이라 인라인 스타일로 넣는다 (PLAN.md 08-28 확정 예외).
+              카드뉴스를 시안 템플릿에서 만들게 되면서 색·글꼴·구성을 **템플릿이 정한다.**
+              고를 수는 있는데 결과물엔 안 나타나는 항목은 없느니만 못하다 —
+              설정의 「내 스타일」을 강조색 하나로 줄인 것과 같은 이유다.
+
+              분위기는 **기획 단계에서** 고른다(`/plan/new` ③). 여기서 또 물으면
+              같은 걸 두 군데서 고르게 된다.
+
+              값 자체(`themeId`·`bgOverride`·`templateId`)는 지우지 않았다 —
+              시안 생성이 실패해 렌더러로 물러선 장이 그 값으로 그려진다.
+              @TODO: 폴백 장의 색을 어떻게 정할지 — 지금은 분위기가 정한 색을 따른다
             */}
-            {phase === "ready" && card && (
-              <div className="flex flex-col gap-2">
-                <span className="text-label font-semibold text-sub">카드 분위기</span>
-                <div role="radiogroup" aria-label="카드 분위기" className="flex flex-wrap gap-2">
-                  {THEME_ORDER.map((id) => {
-                    const theme = THEMES[id];
-                    const active = resolveTheme(card.themeId).id === id;
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        role="radio"
-                        aria-checked={active}
-                        onClick={() => selectTheme(id)}
-                        disabled={saving}
-                        className={`flex items-center gap-2 rounded-pill border px-3 py-2 text-caption font-semibold
-                                    disabled:opacity-60 ${
-                                      active
-                                        ? "border-berry bg-berry-light text-berry-dark"
-                                        : "border-line bg-surface text-sub hover:text-ink"
-                                    }`}
-                      >
-                        <span
-                          aria-hidden
-                          className="flex h-4 w-4 items-center justify-center rounded-pill border"
-                          style={{ background: theme.color.bg, borderColor: theme.color.sub }}
-                        >
-                          <span
-                            className="h-1.5 w-1.5 rounded-pill"
-                            style={{ background: theme.color.ink }}
-                          />
-                        </span>
-                        {theme.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-caption text-sub">{resolveTheme(card.themeId).hint}</p>
-
-                {/*
-                  이 카드만의 배경색 (08-31). 비우면 설정의 「내 스타일」을 따른다 —
-                  계정 톤이 기본이고 이건 «이번 건만» 예외다.
-                */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="flex items-center gap-2">
-                    <span className="text-caption text-sub">이 카드 배경색</span>
-                    <input
-                      value={bgDraft}
-                      onChange={(e) => setBgDraft(e.target.value.trim())}
-                      placeholder="#FBF7F2"
-                      aria-invalid={bgDraft !== "" && !isHexColor(bgDraft)}
-                      className="h-9 w-28 rounded-md border border-line bg-surface px-2 text-caption text-ink"
-                    />
-                  </label>
-                  <span
-                    aria-hidden
-                    className="h-6 w-6 rounded-pill border border-line"
-                    style={{ background: isHexColor(bgDraft) ? bgDraft : "transparent" }}
-                  />
-                  <button
-                    type="button"
-                    disabled={saving || !isHexColor(bgDraft) || bgDraft === (card.bgOverride ?? "")}
-                    onClick={() => saveCardBg(bgDraft)}
-                    className="h-9 rounded-md border-2 border-berry bg-surface px-3 text-caption font-semibold text-berry disabled:opacity-60"
-                  >
-                    적용
-                  </button>
-                  {card.bgOverride && (
-                    <button
-                      type="button"
-                      disabled={saving}
-                      onClick={() => {
-                        setBgDraft("");
-                        saveCardBg(null);
-                      }}
-                      className="text-caption text-sub underline underline-offset-4 hover:text-ink"
-                    >
-                      내 스타일로 되돌리기
-                    </button>
-                  )}
-                </div>
-                <p className="text-caption text-sub">
-                  비워두면 설정의 「내 카드 스타일」을 따라요. 글자색은 자동으로 맞춰져요.
-                </p>
-              </div>
-            )}
-
-            {/*
-              구성 바꾸기 (08-31) — «다른 구성으로».
-
-              **AI가 만든 결과를 본 뒤에** 고르게 한다. 기획 단계에 갤러리를 두면
-              빈 껍데기를 먼저 던지는 셈이라 «AI가 먼저 구조화»(DESIGN.md §7)와
-              «빈칸부터 채우게 만들지 않는다»(§0)를 둘 다 어긴다.
-
-              고르면 슬라이드 문구가 전부 새로 쓰인다 — 되돌릴 수 없어서 확인을 받는다.
-            */}
-            {phase === "ready" && card && (
-              <div className="flex flex-col gap-2">
-                <span className="text-label font-semibold text-sub">구성</span>
-                <div className="flex flex-wrap gap-2">
-                  {TEMPLATE_ORDER.map((id) => {
-                    const t = CARD_TEMPLATES[id];
-                    const active = card.templateId === id;
-                    // 사진도 스톡도 없으면 사진 중심 구성은 글자만 남아 밋밋해진다
-                    const noPhotos =
-                      card.visualType === "text_only" && !worksWithoutPhotos(t);
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        aria-pressed={active}
-                        disabled={regenerating || saving || noPhotos}
-                        title={noPhotos ? "사진이 없어 이 구성은 글자만 남아요" : undefined}
-                        onClick={() => rebuildWith(id)}
-                        className={`flex flex-col items-start rounded-md border px-3 py-2 text-left
-                                    disabled:opacity-60 ${
-                                      active
-                                        ? "border-berry bg-berry-light"
-                                        : "border-line bg-surface hover:border-berry"
-                                    }`}
-                      >
-                        <span
-                          className={`text-caption font-semibold ${
-                            active ? "text-berry-dark" : "text-ink"
-                          }`}
-                        >
-                          {t.label} · {t.slides.length}장
-                        </span>
-                        <span className="text-caption text-sub">
-                          {noPhotos ? "사진이 없어 고를 수 없어요" : t.hint}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-caption text-sub">
-                  {regenerating
-                    ? "다시 만드는 중이에요···"
-                    : card.templateId
-                      ? "다른 구성을 누르면 슬라이드를 다시 만들어요."
-                      : "지금은 차곡이 내용에 맞춰 구성했어요. 정해진 구성으로 바꿀 수 있어요."}
-                </p>
-              </div>
-            )}
 
             {/*
               선택 강조가 `outline-offset`으로 **요소 바깥에** 그려지는데
@@ -632,19 +558,38 @@ export default function CardResultPage() {
             <div className="-m-1 flex snap-x snap-mandatory scroll-p-1 gap-4 overflow-x-auto p-1 pb-3">
               {(phase === "ready" && card ? card.slides : []).map((slide, i) =>
                 slideUrls[i] ? (
-                  <button
-                    key={slide.order}
-                    type="button"
-                    onClick={() => router.push(`/card/${cardId}/edit/${slide.order}`)}
-                    className="shrink-0 snap-start rounded-lg"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element -- blob URL은 next/image 대상이 아니다 */}
-                    <img
-                      src={slideUrls[i]}
-                      alt={`슬라이드 ${i + 1} — 누르면 편집 화면으로 가요`}
-                      className="aspect-square w-72 rounded-lg border border-line bg-surface object-cover"
-                    />
-                  </button>
+                  <div key={slide.order} className="flex shrink-0 snap-start flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/card/${cardId}/edit/${slide.order}`)}
+                      className="rounded-lg"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element -- blob URL은 next/image 대상이 아니다 */}
+                      <img
+                        src={slideUrls[i]}
+                        alt={`슬라이드 ${i + 1} — 누르면 편집 화면으로 가요`}
+                        className="aspect-square w-72 rounded-lg border border-line bg-surface object-cover"
+                      />
+                    </button>
+
+                    {/*
+                      **시안으로 못 만든 장** (09-02). 분위기를 골랐는데 이 장만
+                      렌더러로 그려졌다는 뜻이다 — 자동으로 다시 만들지 않으므로
+                      («될 재시도는 첫 판에 된다» 실측) 여기서 사용자가 정한다.
+                    */}
+                    {card?.styleId && slide.origin !== "generated" && slide.sheetIndex != null && (
+                      <button
+                        type="button"
+                        onClick={() => void regenerateSlide(slide.order)}
+                        disabled={regenSlide !== null}
+                        className="flex h-9 items-center justify-center rounded-md border border-dashed
+                                   border-line px-3 text-caption text-sub transition-colors duration-200
+                                   hover:border-berry hover:text-ink disabled:opacity-50"
+                      >
+                        {regenSlide === slide.order ? "만드는 중···" : "이 장만 다시 만들기"}
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <div
                     key={slide.order}
@@ -653,11 +598,19 @@ export default function CardResultPage() {
                 ),
               )}
               {(phase === "loading" || phase === "generating") &&
-                [0, 1, 2].map((i) => (
+                Array.from({ length: build.total || 3 }, (_, i) => (
                   <div
                     key={i}
-                    className="aspect-square w-72 shrink-0 animate-pulse rounded-lg bg-surface-muted"
-                  />
+                    className={[
+                      "flex aspect-square w-72 shrink-0 items-center justify-center rounded-lg",
+                      // 이미 끝난 장은 멈춰 세운다 — 다 깜빡이면 뭐가 되고 있는지 모른다
+                      i < build.done ? "border border-line bg-surface" : "animate-pulse bg-surface-muted",
+                    ].join(" ")}
+                  >
+                    {i < build.done && (
+                      <span className="text-caption text-sub">{i + 1}장 완성</span>
+                    )}
+                  </div>
                 ))}
             </div>
             {phase === "ready" && (

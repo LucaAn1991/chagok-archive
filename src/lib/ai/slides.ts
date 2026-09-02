@@ -6,6 +6,7 @@ import { isStockConfigured, pickStockPhotos } from "../stock";
 import { BASE_SYSTEM, STR, callJson, isClaudeConfigured, obj } from "./client";
 import { buildPreferenceDirective } from "./preferences";
 import { CARD_TEMPLATES, materializeTemplate, type TemplateSlide } from "../card-templates";
+import { CARD_STYLES } from "../render/card-styles";
 import {
   ALL_LAYOUTS,
   DOWNGRADE,
@@ -18,6 +19,7 @@ import type {
   Slide,
   StockCredit,
   StockPick,
+  StyleId,
   TemplateId,
   VisualType,
 } from "../../types/card";
@@ -53,6 +55,12 @@ export type SlidesInput = {
    * null이면 지금까지처럼 AI가 구성까지 정한다.
    */
   templateId?: TemplateId | null;
+  /**
+   * 기획에서 고른 비주얼 스타일 (09-02). 주면 **그 분위기의 문구 규칙이
+   * 프롬프트에 얹힌다** — 색만 바뀌는 게 아니라 문구의 길이와 말투가 함께 바뀐다.
+   * null이면 문구 규칙 없이 지금까지처럼 쓴다.
+   */
+  styleId?: StyleId | null;
   visualType: VisualType;
   /** 사용자가 올린 사진 (F13). 순서 = 배열 순서. 이미지 레이아웃에 이 순서대로 배정된다 */
   photoUrls: string[];
@@ -116,6 +124,27 @@ const SLIDES_SCHEMA = obj(
   ["slides"],
 );
 
+/**
+ * 고른 분위기의 문구 규칙을 프롬프트 한 덩이로 만든다 (09-02).
+ *
+ * **스타일은 색만 바꾸는 게 아니다.** 「대문자」는 한 줄에 4~7자를 전제로 글자를
+ * 크게 그리는데 거기에 세 줄짜리 설명문이 들어오면 글자가 상자를 넘거나
+ * 우스울 만큼 작아진다. 레이아웃과 문구는 한 벌로 정해져야 한다.
+ *
+ * 규칙을 «지시»로 적는 이유 — 이 자리(`directives`)는 말투·금지 표현과 같은
+ * 계층이라 문장 형식을 맞춘다. 없으면 null을 돌려주고 프롬프트에서 빠진다.
+ */
+function styleDirective(styleId: StyleId | null | undefined): string | null {
+  if (!styleId) return null;
+  const style = CARD_STYLES[styleId];
+  if (!style) return null;
+
+  return [
+    `이 카드뉴스는 「${style.label}」 분위기로 그려진다. 문구를 그 분위기에 맞춰 써라:`,
+    ...style.copyRules.map((rule) => `- ${rule}`),
+  ].join("\n");
+}
+
 export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
   if (!isClaudeConfigured()) {
     return mockSlides(input);
@@ -147,6 +176,7 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
   const directives = [
     toneDirective(input.tone),
     buildPreferenceDirective(input.visualPreferences),
+    styleDirective(input.styleId),
     input.avoidExpressions.length
       ? `다음 표현은 절대 쓰지 마라: ${input.avoidExpressions.join(", ")}.`
       : null,
@@ -185,7 +215,14 @@ export async function generateSlides(input: SlidesInput): Promise<Slide[]> {
         ? "- 위 순서와 레이아웃을 그대로 따른다. 장을 더하거나 빼지 않는다."
         : "- 첫 장은 반드시 `cover`, 마지막 장은 반드시 `closing`.",
       "- 슬라이드 한 장에 담는 생각은 하나. 글자가 많으면 넘기지 않는다.",
-      "- 제목은 짧게(20자 안팎), 본문도 3~4줄을 넘기지 않는다. 화면이 정사각형이라 길면 잘린다.",
+      /*
+        분위기를 골랐으면 **길이 규칙을 여기서 다시 말하지 않는다** (09-02).
+        이 줄의 「제목 20자 안팎」과 「대문자」의 「한 줄에 4~7자」는 서로 반대라,
+        둘 다 넣으면 모델이 가운데 어딘가로 타협해 어느 쪽도 아닌 문구가 나온다.
+      */
+      input.styleId
+        ? "- 문구의 길이와 말투는 위 「분위기」 규칙을 따른다. 화면이 정사각형이라 길면 잘린다."
+        : "- 제목은 짧게(20자 안팎), 본문도 3~4줄을 넘기지 않는다. 화면이 정사각형이라 길면 잘린다.",
       "- 같은 레이아웃을 세 번 넘게 잇달아 쓰지 않는다.",
       photoCount > 0
         ? `- **사용자 사진이 ${photoCount}장 있다.** \`image-top\`·\`image-full\`을 합쳐 **${photoCount}장까지만** 써라. 더 쓰면 사진 없는 빈 면이 된다.`

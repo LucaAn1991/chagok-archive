@@ -994,9 +994,16 @@ function DayCell({
                 style={{ background: STATUS_COLOR[card.status] }}
               />
             )}
-            {/* break-keep — 한국어를 단어 중간에서 끊지 않는다 (08-31) */}
+            {/*
+              **`shortTitle`을 쓴다** (09-02 수정). 원 제목을 그대로 넣고 있었는데
+              칸이 좁아 「헬스장 처음 간 ...」처럼 대부분 잘려서, 달력만 보고는
+              무슨 카드인지 알 수 없었다. 12자 내외 축약본이 바로 이 자리를 위해
+              카드 생성 때 함께 만들어진다 (PLAN.md §3 · DESIGN.md §8).
+              옛 카드에는 없을 수 있어 원 제목으로 물러선다.
+              break-keep — 한국어를 단어 중간에서 끊지 않는다 (08-31)
+            */}
             <span className="line-clamp-2 break-keep text-caption leading-tight text-ink">
-              {card.title}
+              {card.shortTitle || card.title}
             </span>
           </button>
         ))}

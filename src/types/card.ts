@@ -32,6 +32,14 @@ export type Card = {
   bgOverride?: string | null;
   /** 구성 템플릿 (08-31). null이면 AI가 장수·순서를 알아서 정한다 */
   templateId: TemplateId | null;
+  /**
+   * 비주얼 스타일 (09-02). **기획 단계에서 고른 값이 그대로 넘어온다** —
+   * 카드마다 다시 고르지 않는다. 한 기획에서 나온 카드는 같은 분위기여야
+   * 한 묶음으로 보인다.
+   *
+   * null이면 고르지 않은 것 — 옛 카드가 전부 여기 해당하고, 그때는 `themeId`로 그린다.
+   */
+  styleId: StyleId | null;
   visualType: VisualType; // 이미지 폴백 사슬의 판정 결과 (DESIGN.md §12)
   photoUrls: string[]; // 사용자가 올린 사진. 순서 = 배열 순서 (F13)
   /**
@@ -116,7 +124,53 @@ export type Slide = {
    * 좌표는 **0~1 비율**이다. 캔버스가 1080이든 편집 화면이 320이든 같은 값을 쓴다.
    */
   elements?: SlideElement[];
+
+  /**
+   * 이 장의 그림이 **어떻게 만들어졌는가** (09-02).
+   *
+   * - `rendered` — 우리 렌더러(satori)가 `layoutId`·`texts`로 그린다. **기본값**이고
+   *   옛 카드가 전부 여기 해당한다. 값이 없으면 이것으로 본다.
+   * - `generated` — 시안 템플릿의 글자를 바꿔 만든 완성 PNG. `generatedUrl`에 주소가 있다.
+   *
+   * **왜 남기는가** — 이미지 생성은 장마다 실패할 수 있어서(6장 중 1~2장이 실측),
+   * 실패한 장은 렌더러로 물러선다. 한 카드 안에 두 종류가 섞이므로 **어느 장이
+   * 어느 쪽인지** 알아야 「이 장만 다시 만들기」가 가능하다.
+   */
+  origin?: SlideOrigin;
+  /**
+   * 완성된 카드 이미지 주소 (09-02). `origin === 'generated'`일 때만 채워진다.
+   *
+   * ⚠️ **`imageUrl`과 다르다.** `imageUrl`은 슬라이드 «안에 들어가는 사진»이고,
+   * 이건 글자까지 다 얹힌 **한 장 전체**다. 이름을 헷갈리면 사진 자리에 완성 카드가
+   * 들어가는 사고가 난다.
+   *
+   * 파일은 `cards/{cardId}/slides/{order}.png` (PLAN §7).
+   */
+  generatedUrl?: string | null;
+  /**
+   * 어느 템플릿 장을 **쓰기로 했는가** (0부터). `origin`과 무관하게 남긴다 —
+   * 시안 생성이 실패해 렌더러로 물러선 장도 「이 장 다시 만들기」를 누르면
+   * 같은 템플릿으로 돌아가야 한다 (`lib/render/template-sheets.ts`).
+   */
+  sheetIndex?: number | null;
+  /**
+   * 그 템플릿 장의 글자 자리에 넣기로 한 문구 (09-02). 슬롯 순서 그대로.
+   *
+   * **다시 만들 때 그대로 쓴다.** `texts`는 렌더러 슬롯에 맞춰 옮겨 담은 것이라
+   * 시안 슬롯으로 되돌릴 수 없다 — 「제목 / 본문」 둘로 뭉개진 값에서
+   * 「배지 · 큰 제목 · 부제 · 하단 영문」 네 자리를 복원할 방법이 없다.
+   */
+  sheetLines?: string[] | null;
 };
+
+/**
+ * 그림을 만든 방식 (09-02).
+ *
+ * 기본은 `rendered`다 — 값이 없는 옛 카드도 그렇게 읽는다.
+ * `generated`가 실패하면 그 장만 `rendered`로 내려앉는다
+ * (DESIGN.md §12 「어디서 멈춰도 완성된다」).
+ */
+export type SlideOrigin = "rendered" | "generated";
 
 /**
  * 자유 배치 요소 하나.
@@ -215,6 +269,24 @@ export type ThemeId = "warm" | "editorial" | "graphic";
  * 실제 구성은 `lib/card-templates.ts`.
  */
 export type TemplateId = "informational" | "diary" | "statement" | "editorial";
+
+/**
+ * 카드뉴스 «비주얼 스타일» 6종 (09-02). **기획 단계에서 고른다.**
+ *
+ * 템플릿이 «몇 장을 어떤 순서로»라면 스타일은 **«어떤 분위기로»**다 —
+ * 색·글꼴·껍데기에 더해 **문구의 길이와 말투까지** 한 벌로 정한다.
+ * 테마(`ThemeId`)가 색·글자 비율만 다루는 것보다 넓다.
+ *
+ * `null`이면 고르지 않은 것 — 옛 카드가 전부 여기 해당한다. 실제 값은
+ * `lib/render/card-styles.ts`.
+ */
+export type StyleId =
+  | "bold-graphic"
+  | "photo-frame"
+  | "serif-soft"
+  | "promo"
+  | "pixel"
+  | "character";
 
 /**
  * 카드뉴스 레이아웃 6종 (PLAN.md §2-3, 08-27 확정).
