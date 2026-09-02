@@ -3,6 +3,8 @@ import sharp from "sharp";
 import type { ReactNode } from "react";
 import { loadCardFonts } from "./fonts";
 import { buildLayout, SLIDE_SIZE, type SlideContent } from "./layouts";
+import { AI_DISCLOSURE_XMP } from "../ai-disclosure";
+import { embedXmpInPng } from "./png-xmp";
 
 /**
  * 슬라이드 1장을 PNG 버퍼로 렌더링한다.
@@ -60,5 +62,15 @@ export async function renderSlidePng(content: SlideContent): Promise<Buffer> {
     fonts,
   });
 
-  return sharp(Buffer.from(svg)).png().toBuffer();
+  const png = await sharp(Buffer.from(svg)).png().toBuffer();
+
+  /*
+    **AI 생성물 비가시 표시** (AI 기본법 제31조 — `lib/ai-disclosure.ts`).
+    미리보기와 내려받는 파일이 같은 경로를 쓰므로, 여기 한 곳에서 심으면 둘 다 붙는다.
+
+    sharp의 기본 동작은 메타데이터를 전부 **버리는 것**이라 이 줄이 없으면
+    아무 표시도 남지 않는다. 표시가 빠지면 다운로드 단계 안내(제작 결과 화면)까지
+    함께 무효가 되므로 지우지 말 것.
+  */
+  return embedXmpInPng(png, AI_DISCLOSURE_XMP);
 }

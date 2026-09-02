@@ -11,6 +11,7 @@ import PageHeader from "@/components/PageHeader";
 import StockAttribution from "@/components/StockAttribution";
 import { THEMES, THEME_ORDER, isHexColor, resolveTheme } from "@/lib/render/themes";
 import { CARD_TEMPLATES, TEMPLATE_ORDER, worksWithoutPhotos } from "@/lib/card-templates";
+import { AI_DISCLOSURE } from "@/lib/ai-disclosure";
 import type { Card, Caption, ThemeId, TemplateId } from "@/types";
 
 /**
@@ -125,7 +126,8 @@ export default function CardResultPage() {
         // 연달아 부르면 브라우저가 뒤엣것을 흘린다 — 한 박자씩 띄운다
         await new Promise((r) => setTimeout(r, 250));
       }
-      showToast(`이미지 ${slideUrls.length}장을 저장했어요.`);
+      // AI 생성 사실은 「다운로드 단계에서 최소 1회」 알려야 한다 (lib/ai-disclosure.ts)
+      showToast(`이미지 ${slideUrls.length}장을 저장했어요. ${AI_DISCLOSURE.downloadToast}`);
     } finally {
       setDownloading(false);
     }
@@ -148,7 +150,7 @@ export default function CardResultPage() {
 
     try {
       await navigator.clipboard.writeText(text);
-      showToast("캡션을 복사했어요.");
+      showToast(`캡션을 복사했어요. ${AI_DISCLOSURE.captionToast}`);
     } catch {
       // 권한이 없거나 https가 아닌 환경 — 사용자가 직접 고르도록 알린다
       showToast("복사하지 못했어요. 캡션을 길게 눌러 복사해주세요.");
@@ -677,6 +679,13 @@ export default function CardResultPage() {
                 </button>
                 <p className="text-caption text-sub">
                   저장한 이미지를 인스타그램에 직접 올려주세요.
+                  <br />
+                  {/*
+                    법이 요구하는 고지다 — 지우지 말 것 (lib/ai-disclosure.ts).
+                    이미지 안에는 표시를 넣지 않는 대신(파일 메타데이터로만 심는다),
+                    내려받는 자리에서 반드시 말해줘야 그 방식이 인정된다.
+                  */}
+                  {AI_DISCLOSURE.download}
                 </p>
               </div>
             )}
@@ -688,6 +697,11 @@ export default function CardResultPage() {
       {/* 캡션 편집 */}
       {phase === "ready" && captionDraft && (
         <section aria-label="캡션" className="flex flex-col gap-4 rounded-lg border border-line bg-surface p-6">
+          {/*
+            텍스트에는 메타데이터를 실을 수 없다 — 이미지처럼 파일 안에 숨겨둘 자리가
+            없으므로 캡션은 화면에 대놓고 표시한다 (lib/ai-disclosure.ts).
+          */}
+          <p className="text-caption text-sub">{AI_DISCLOSURE.caption}</p>
           <label className="flex flex-col gap-1">
             <span className="text-label font-semibold text-sub">Hook</span>
             <textarea

@@ -23,6 +23,7 @@ import FeaturedContentCard from "@/components/FeaturedContentCard";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { formatMonthDayWeekday } from "@/lib/format";
+import { AI_DISCLOSURE } from "@/lib/ai-disclosure";
 import type { Card } from "@/types";
 
 /**
@@ -75,6 +76,14 @@ function Landing() {
       >
         시작하기
       </Link>
+      {/*
+        사전 고지 — 「생성형 AI로 운용된다」는 사실은 **쓰기 전에** 알려야 한다
+        (AI 기본법 제31조 ①, lib/ai-disclosure.ts). 그래서 가입 뒤가 아니라
+        비로그인 첫 화면에 둔다.
+      */}
+      <p className="max-w-[320px] text-center text-caption text-sub">
+        {AI_DISCLOSURE.service}
+      </p>
     </main>
   );
 }
