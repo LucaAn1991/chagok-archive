@@ -34,7 +34,7 @@
 
   /* 카드 상태 — 명도 계단식 (진할수록 완료에 가깝다). 08-31 crafted 제거로 4색 */
   --st-planned:    #D9CCE8;  /* 제작 대기 */
-  --st-pending:    #DFAFC6;  /* 올리기만 남음 — 붉은 기 제거, berry(#A85578)의 옅은 톤 (09-01) */
+  --st-pending:    #DFAFC6;  /* 업로드 대기 — 붉은 기 제거, berry(#A85578)의 옅은 톤 (09-01) */
   --st-published:  #A85578;  /* 발행 완료 = berry */
   --st-discarded:  #C4BDB7;  /* 버림 */
 
