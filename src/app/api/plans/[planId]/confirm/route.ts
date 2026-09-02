@@ -179,7 +179,14 @@ export async function POST(
     await batch.commit(); // 전부 성공하거나 전부 취소
 
     return NextResponse.json({ cardCount: drafts.length, capped });
-  } catch {
+  } catch (e) {
+    /*
+      **원인을 반드시 남긴다** (09-02). 여기가 `catch {}`였던 탓에 AI 호출이 왜 실패했는지
+      화면에도 로그에도 남지 않았다. 실제로 잔액 부족(400 invalid_request_error)으로
+      전부 500이 났는데, 서버가 죽은 것처럼 보여 한참을 엉뚱한 데서 찾았다.
+      사용자 문구는 그대로 두고(사정을 알릴 필요가 없다) 서버에만 적는다.
+    */
+    console.error("[plans/confirm]", e);
     return NextResponse.json(
       { error: "카드를 만들지 못했어요. 잠시 후 다시 시도해주세요." },
       { status: 500 },
