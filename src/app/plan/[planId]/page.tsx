@@ -157,7 +157,7 @@ function DetailBody({ plan, cards }: { plan: Plan; cards: Card[] }) {
                     {card.title}
                   </span>
                   <span className="mt-0.5 block text-caption text-sub">
-                    {audienceLine(card.audience)} · {formatMonthDayWeekday(card.scheduledDate)}
+                    {audienceLine(card.audience)} · {formatMonthDayWeekday(card.scheduledDate ?? "")}
                   </span>
                 </Link>
               </li>

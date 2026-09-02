@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Landing from "@/components/Landing";
 import { useRouter } from "next/navigation";
 import { LogoSymbol } from "@/components/Logo";
 import { onAuthStateChanged, signOut, type User as AuthUser } from "firebase/auth";
@@ -10,19 +11,21 @@ import {
   doc,
   getDoc,
   getDocs,
-  limit,
-  orderBy,
   query,
+  updateDoc,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import { ArrowUp, ChevronRight, CircleUserRound } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import FeaturedContentCard from "@/components/FeaturedContentCard";
+import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { formatMonthDayWeekday } from "@/lib/format";
-import { AI_DISCLOSURE } from "@/lib/ai-disclosure";
+import { greetingFor, kstToday } from "@/lib/greetings";
+import { isConsentCurrent } from "@/lib/legal/consent-client";
 import type { Card } from "@/types";
 
 /**
@@ -54,40 +57,6 @@ export default function RootPage() {
 }
 
 /* ============================================================
-   랜딩 (비로그인) — 담당 밖. 진입만 막히지 않게 최소로 둔다
-   ============================================================ */
-
-function Landing() {
-  return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-6 p-4">
-      <div className="text-center">
-        <h1 className="text-h1 font-bold text-ink">차곡</h1>
-        <p className="mt-3 text-body-l text-sub">
-          말하면 정리되고, 정리되면 일정이 되고,
-          <br />
-          일정이 하나씩 콘텐츠로 완성됩니다.
-        </p>
-        {/* @TODO: 랜딩 본문 — 제품 소개 · 테스트 참가자 컨텍스트 (PRD §5-1, 담당 별도) */}
-      </div>
-      <Link
-        href="/login"
-        className="flex h-12 w-full max-w-[320px] items-center justify-center rounded-md bg-berry text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
-      >
-        시작하기
-      </Link>
-      {/*
-        사전 고지 — 「생성형 AI로 운용된다」는 사실은 **쓰기 전에** 알려야 한다
-        (AI 기본법 제31조 ①, lib/ai-disclosure.ts). 그래서 가입 뒤가 아니라
-        비로그인 첫 화면에 둔다.
-      */}
-      <p className="max-w-[320px] text-center text-caption text-sub">
-        {AI_DISCLOSURE.service}
-      </p>
-    </main>
-  );
-}
-
-/* ============================================================
    홈 (로그인)
    ============================================================ */
 
@@ -99,7 +68,48 @@ function toDateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-/** 이번 주 월요일~일요일. 「이번 주 예정」의 조회 범위 */
+/**
+ * 발행 요일(0=월 … 6=일) 기준으로 오늘 «이후» 발행일을 차례로 뽑는다.
+ * 이미 카드가 있는 날짜(taken)는 건너뛰고, 뽑은 날짜는 taken에 더해
+ * 다음 호출·다음 장과 겹치지 않게 한다. 자동 이월(D)과 [날짜 정해주기](C)가 같이 쓴다.
+ */
+function nextPublishDates(
+  uploadDays: number[],
+  todayKey: string,
+  count: number,
+  taken: Set<string>,
+): string[] {
+  const days = uploadDays.length > 0 ? uploadDays : [0, 3];
+  const out: string[] = [];
+  const cursor = new Date(`${todayKey}T00:00:00`);
+  // 상한 10년 — 발행 요일이 비어 있어도 무한 루프가 되지 않게
+  for (let i = 0; out.length < count && i < 3660; i++) {
+    cursor.setDate(cursor.getDate() + 1);
+    const mondayFirst = (cursor.getDay() + 6) % 7; // JS 0=일 → 0=월 규약
+    const key = toDateKey(cursor);
+    if (days.includes(mondayFirst) && !taken.has(key)) {
+      out.push(key);
+      taken.add(key);
+    }
+  }
+  return out;
+}
+
+/** C(날짜 없음) 카드들에 발행 주기대로 날짜를 배분해 저장한다 — 한 장씩 차례로 */
+async function assignDatesToCards(cards: Card[], uploadDays: number[], takenDates: string[]) {
+  const taken = new Set(takenDates);
+  const targets = nextPublishDates(uploadDays, toDateKey(new Date()), cards.length, taken);
+  // Firestore 배치 상한(500) 아래로 끊어서 커밋한다
+  for (let i = 0; i < cards.length; i += 450) {
+    const batch = writeBatch(db);
+    cards.slice(i, i + 450).forEach((c, j) => {
+      batch.update(doc(db, "cards", c.id), { scheduledDate: targets[i + j] });
+    });
+    await batch.commit();
+  }
+}
+
+/** 이번 주 월요일~일요일. 「이번 주 콘텐츠」의 범위 */
 function thisWeekRange(today: Date): { start: string; end: string } {
   const day = today.getDay(); // 0=일
   const sinceMonday = day === 0 ? 6 : day - 1;
@@ -110,17 +120,31 @@ function thisWeekRange(today: Date): { start: string; end: string } {
   return { start: toDateKey(monday), end: toDateKey(sunday) };
 }
 
+/** 날짜가 붙은 카드 — 목록·정렬에서 scheduledDate를 안심하고 쓰기 위한 좁힘 */
+type DatedCard = Card & { scheduledDate: string };
+
+/*
+ * 카드 네 갈래 (09-01) — 날짜 유무·시점으로 나눠 홈에서 자리를 달리 준다:
+ *   A  이번 주 (월~일)      → 중앙 펼침 「이번 주 콘텐츠」
+ *   B  다음 주 이후          → 하단 접힘 «9월에 올릴 콘텐츠 2개»
+ *   C  날짜 없음             → 하단 접힘 «언젠가 올릴 콘텐츠 25개» + [날짜 정해주기]
+ *   D  과거인데 아직 안 올림  → 진입 시 다음 발행일로 자동 이월 (경고 없이 조용히)
+ */
 type HomeState =
   | { phase: "loading" }
   | { phase: "error" }
   | {
       phase: "ready";
       hasAnyCard: boolean;
-      todayCard: Card | null;
-      nextCard: Card | null; // 오늘 이후 가장 가까운 카드 (케이스 C)
+      todayCard: DatedCard | null;
+      nextCard: DatedCard | null; // 오늘 이후 가장 가까운 카드 (케이스 C)
       publishToday: boolean; // 오늘이 발행 요일인가 — user.uploadDays 기준 (케이스 B)
-      weekCards: Card[];
-      futureCards: Card[]; // 이번 주 이후 — ③ 접힌 나머지 요약용
+      weekCards: DatedCard[]; // A
+      futureCards: DatedCard[]; // B
+      somedayCards: Card[]; // C — 만든 순서(오래된 것부터)
+      movedCount: number; // D — 이번 진입에 자동 이월된 장수 (조용한 한 줄용)
+      uploadDays: number[]; // 발행 요일 (0=월)
+      takenDates: string[]; // 오늘 이후 이미 카드가 있는 날짜 — 배분 시 건너뛴다
     };
 
 function Home({ uid }: { uid: string }) {
@@ -145,6 +169,11 @@ function Home({ uid }: { uid: string }) {
           router.replace("/onboarding");
           return;
         }
+        // 약관 동의 가드 (09-01 §5) — 기록이 없거나 저장된 버전이 현행과 다르면 (재)동의로
+        if (!isConsentCurrent(userSnap.data().latestConsent)) {
+          router.replace("/consent");
+          return;
+        }
 
         /*
          * 발행 요일 — 기존 user.uploadDays(0=월 … 6=일, 08-28 가영 추가)를 그대로 쓴다.
@@ -161,51 +190,78 @@ function Home({ uid }: { uid: string }) {
         const { start, end } = thisWeekRange(new Date());
         const cardsRef = collection(db, "cards");
 
-        // 카드가 1장이라도 있는가 — 상태 A 판정
-        const anySnap = await getDocs(query(cardsRef, where("userId", "==", uid), limit(1)));
-
-        // 이번 주 카드 — 인덱스 (userId ASC, scheduledDate ASC) 사용 (PLAN §7)
-        const weekSnap = await getDocs(
-          query(
-            cardsRef,
-            where("userId", "==", uid),
-            where("scheduledDate", ">=", start),
-            where("scheduledDate", "<=", end),
-            orderBy("scheduledDate", "asc"),
-          ),
-        );
-        const weekCards = weekSnap.docs
+        /*
+         * 카드 전체를 한 번에 받아 네 갈래로 나눈다 (09-01) —
+         * 날짜 없는 카드(C)는 Firestore 범위 쿼리에 아예 안 걸려서 쿼리로는 못 가른다.
+         */
+        const allSnap = await getDocs(query(cardsRef, where("userId", "==", uid)));
+        const all = allSnap.docs
           .map((d) => ({ ...(d.data() as Omit<Card, "id">), id: d.id }))
           .filter((c) => c.status !== "discarded");
 
-        // 오늘의 카드 (F5) — scheduledDate == today && status != 'discarded', 1건만
-        const todayCard = weekCards.find((c) => c.scheduledDate === todayKey) ?? null;
+        // 오늘 이후 이미 카드가 있는 날짜 — 이월·배분이 같은 날에 겹치지 않게 건너뛴다
+        const taken = new Set(
+          all
+            .filter((c): c is DatedCard => Boolean(c.scheduledDate))
+            .filter((c) => c.scheduledDate >= todayKey)
+            .map((c) => c.scheduledDate),
+        );
 
+        // D — 날짜가 오늘보다 앞인데 아직 안 올린 카드: 다음 발행일로 조용히 옮긴다.
+        // 발행일마다 한 장씩, 원래 날짜가 이른 것부터 차례로
+        const overdue = all
+          .filter(
+            (c): c is DatedCard =>
+              Boolean(c.scheduledDate) &&
+              (c.scheduledDate as string) < todayKey &&
+              c.status !== "published",
+          )
+          .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
+        let movedCount = 0;
+        if (overdue.length > 0) {
+          const targets = nextPublishDates(uploadDays, todayKey, overdue.length, taken);
+          await Promise.all(
+            overdue.map((c, i) =>
+              updateDoc(doc(db, "cards", c.id), { scheduledDate: targets[i] })
+                .then(() => {
+                  c.scheduledDate = targets[i];
+                  movedCount += 1;
+                })
+                // 실패한 카드는 이번엔 그대로 둔다 — 다음 진입에 다시 시도된다
+                .catch(() => {}),
+            ),
+          );
+        }
+
+        const dated = all
+          .filter((c): c is DatedCard => Boolean(c.scheduledDate))
+          .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
+        const weekCards = dated.filter((c) => c.scheduledDate >= start && c.scheduledDate <= end); // A
+        const futureCards = dated.filter((c) => c.scheduledDate > end); // B
+        const somedayCards = all
+          .filter((c) => !c.scheduledDate) // C
+          .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
+
+        // 오늘의 카드 (F5) — 아직 안 올린 것만
+        const todayCard =
+          weekCards.find((c) => c.scheduledDate === todayKey && c.status !== "published") ?? null;
         // 오늘 이후 가장 가까운 카드 — 케이스 C용. 이번 주 밖(다음 주 이후)도 잡는다
-        const nextSnap = await getDocs(
-          query(
-            cardsRef,
-            where("userId", "==", uid),
-            where("scheduledDate", ">", todayKey),
-            orderBy("scheduledDate", "asc"),
-            limit(30),
-          ),
-        );
-        const upcoming = nextSnap.docs
-          .map((d) => ({ ...(d.data() as Omit<Card, "id">), id: d.id }))
-          .filter((c) => c.status !== "discarded");
-        const nextCard = upcoming[0] ?? null;
-        const futureCards = upcoming.filter((c) => c.scheduledDate > end); // 이번 주 밖
+        const nextCard =
+          dated.find((c) => c.scheduledDate > todayKey && c.status !== "published") ?? null;
 
         if (cancelled) return; // 화면을 떠났으면 상태를 건드리지 않는다
         setState({
           phase: "ready",
-          hasAnyCard: !anySnap.empty,
+          hasAnyCard: allSnap.docs.length > 0,
           todayCard,
           nextCard,
           publishToday,
           weekCards,
           futureCards,
+          somedayCards,
+          movedCount,
+          uploadDays,
+          takenDates: [...taken],
         });
       } catch {
         if (!cancelled) setState({ phase: "error" });
@@ -250,21 +306,15 @@ function Home({ uid }: { uid: string }) {
               }}
             />
           )}
-          {state.phase === "ready" && <HomeReady {...state} />}
+          {state.phase === "ready" && (
+            <HomeReady {...state} onReload={() => setReloadKey((k) => k + 1)} />
+          )}
         </main>
       </div>
 
       <MobileBottomNav />
     </div>
   );
-}
-
-/** 시간대별 인사 (08-31 확정 문구 — 이모지·수정 금지) */
-function greetingForHour(hour: number): string {
-  if (hour >= 5 && hour < 11) return "좋은 아침이에요";
-  if (hour >= 11 && hour < 17) return "맛점하셨나요?";
-  if (hour >= 17 && hour < 22) return "오늘 하루 고생하셨어요";
-  return "늦게까지 고생 많으세요";
 }
 
 /** 상대일 표기 — 내일 / 모레 / «9월 5일에» (요일 없이) */
@@ -294,38 +344,53 @@ function HomeReady({
   publishToday,
   weekCards,
   futureCards,
+  somedayCards,
+  movedCount,
+  uploadDays,
+  takenDates,
+  onReload,
 }: {
   hasAnyCard: boolean;
-  todayCard: Card | null;
-  nextCard: Card | null;
+  todayCard: DatedCard | null;
+  nextCard: DatedCard | null;
   publishToday: boolean;
-  weekCards: Card[];
-  futureCards: Card[];
+  weekCards: DatedCard[];
+  futureCards: DatedCard[];
+  somedayCards: Card[];
+  movedCount: number;
+  uploadDays: number[];
+  takenDates: string[];
+  onReload: () => void;
 }) {
   const now = new Date();
   const todayKey = toDateKey(now);
 
+  // E — 이번 주(A)가 비었고 날짜 없는 카드(C)만 있으면, C가 그날의 주 행동이 된다 (§6)
   const situation = todayCard
     ? ("A" as const)
     : publishToday
       ? ("B" as const)
       : nextCard
         ? ("C" as const)
-        : ("D" as const);
+        : somedayCards.length > 0
+          ? ("E" as const)
+          : ("D" as const);
 
   return (
     <div className="flex flex-col gap-4 md:gap-8">
-      {/*
-        PageHeader를 두지 않는다 (09-02). 홈은 GNB의 첫 자리라 돌아갈 곳이 없는데,
-        기본 동작이 브라우저 기록을 보는 것이라 로그인을 거쳐 들어오면
-        좌상단에 화살표가 생겼다 — 눌러봐야 로그인 화면으로 나가버린다.
-        제목도 아래 인사말이 대신하므로 헤더 자체가 필요 없다.
-      */}
-      {/* 인사 한 줄 + 오늘 날짜 — 이모지 없음 (08-31) */}
+      <PageHeader />
+      {/* 인사 한 줄 + 오늘 날짜 — 이모지 없음, KST 고정 9구간 (09-01, lib/greetings.ts) */}
       <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h1 className="text-h2 font-bold text-ink">{greetingForHour(now.getHours())}</h1>
-        <span className="text-body text-sub">{formatMonthDayWeekday(now)}</span>
+        <h1 className="text-h2 font-bold text-ink">{greetingFor(now)}</h1>
+        <span className="text-body text-sub">{formatMonthDayWeekday(kstToday(now))}</span>
       </header>
+
+      {/* 자동 이월 알림 — 조용한 한 줄. 경고색·느낌표·뱃지 없음 (§3) */}
+      {movedCount > 0 && (
+        <p role="status" className="-mt-2 text-caption text-sub md:-mt-4">
+          카드 {movedCount}장을 다음 발행일로 옮겨뒀어요
+        </p>
+      )}
 
       {situation === "A" && todayCard && (
         <section>
@@ -366,6 +431,24 @@ function HomeReady({
         </section>
       )}
 
+      {situation === "E" && (
+        /* 날짜 없는 카드가 그날의 주 행동 (§6) — 하단 C 줄은 이때 중앙으로 올라와 숨긴다 */
+        <section>
+          <p className="text-body-l text-ink">
+            언젠가 올릴 콘텐츠가 {somedayCards.length}개 있어요. 날짜를 정해볼까요?
+          </p>
+          <div className="mt-4">
+            <AssignDatesControl
+              cards={somedayCards}
+              uploadDays={uploadDays}
+              takenDates={takenDates}
+              onDone={onReload}
+              primary
+            />
+          </div>
+        </section>
+      )}
+
       {situation === "D" && (
         <section>
           <p className="text-body-l text-ink">요즘 올리고 싶은 거 있으세요? 여러 개여도 좋아요</p>
@@ -393,6 +476,14 @@ function HomeReady({
 
       <WeekSection weekCards={weekCards} />
       <CollapsedFuture cards={futureCards} />
+      {situation !== "E" && (
+        <CollapsedSomeday
+          cards={somedayCards}
+          uploadDays={uploadDays}
+          takenDates={takenDates}
+          onReload={onReload}
+        />
+      )}
     </div>
   );
 }
@@ -449,8 +540,8 @@ function shortDateLabel(dateKey: string): string {
 }
 
 /** 날짜 기준으로 묶는다 — 같은 날짜의 카드는 날짜를 한 번만 적기 위해 */
-function groupByDate(cards: Card[]): { dateKey: string; cards: Card[] }[] {
-  const groups: { dateKey: string; cards: Card[] }[] = [];
+function groupByDate(cards: DatedCard[]): { dateKey: string; cards: DatedCard[] }[] {
+  const groups: { dateKey: string; cards: DatedCard[] }[] = [];
   for (const card of cards) {
     const last = groups[groups.length - 1];
     if (last && last.dateKey === card.scheduledDate) last.cards.push(card);
@@ -473,7 +564,7 @@ function CardRow({ card }: { card: Card }) {
 }
 
 /** 날짜 열(고정 폭) + 카드 열(남는 폭) — 날짜는 그룹 첫 행에만 */
-function DateGroupedList({ cards, todayKey }: { cards: Card[]; todayKey: string }) {
+function DateGroupedList({ cards, todayKey }: { cards: DatedCard[]; todayKey: string }) {
   return (
     <div className="flex flex-col gap-2">
       {groupByDate(cards).map((group) => (
@@ -498,33 +589,19 @@ function DateGroupedList({ cards, todayKey }: { cards: Card[]; todayKey: string 
 }
 
 /**
- * 이번 주 예정 — 가장 이른 4건까지만, 나머지는 렌더링하지 않는다 (08-31 2차).
- * 화면에 표시하는 숫자는 「이번 주엔 N개 남아있어요」 하나뿐이다.
+ * A — 이번 주 콘텐츠 (09-01 개편). 이번 주 날짜가 붙은, 아직 안 올린 카드만.
+ * 부제 숫자 = 아래 목록에 실제로 보이는 카드 수 — 날짜 없는 카드는 절대 섞지 않는다.
  */
-const mediaSubscribe = (cb: () => void) => {
-  const mq = window.matchMedia("(max-width: 767px) and (max-height: 900px)");
-  mq.addEventListener("change", cb);
-  return () => mq.removeEventListener("change", cb);
-};
-
-function WeekSection({ weekCards }: { weekCards: Card[] }) {
-  // 한 화면 규칙(08-31 2차) — 높이가 모자라는 모바일에서는 4건 → 3건으로 줄인다.
-  // 폰트를 깎아 맞추지 않는다
-  const compact = useSyncExternalStore(
-    mediaSubscribe,
-    () => window.matchMedia("(max-width: 767px) and (max-height: 900px)").matches,
-    () => false,
-  );
-  if (weekCards.length === 0) return null;
-
+function WeekSection({ weekCards }: { weekCards: DatedCard[] }) {
   const todayKey = toDateKey(new Date());
-  const remaining = weekCards.filter((c) => c.status !== "published").length;
-  const visible = weekCards.slice(0, compact ? 3 : 4);
+  // 「올릴」 목록 — 이미 올린 카드는 접는다. 이미 만들어둔 카드(올리기만 남음)는 들어온다
+  const remaining = weekCards.filter((c) => c.status !== "published");
+  if (remaining.length === 0) return null;
 
   return (
     <section className="border-y border-line py-2.5">
       <div className="flex items-baseline justify-between">
-        <h2 className="text-title font-bold text-ink">이번 주 예정</h2>
+        <h2 className="text-title font-bold text-ink">이번 주 콘텐츠</h2>
         {/* 배정 카드 전체 목록은 캘린더가 담당 — 새 페이지를 만들지 않는다 */}
         <Link
           href="/calendar"
@@ -533,20 +610,19 @@ function WeekSection({ weekCards }: { weekCards: Card[] }) {
           전체보기
         </Link>
       </div>
-      <p className="mt-0.5 text-caption text-sub">이번 주엔 {remaining}개 남아있어요</p>
+      <p className="mt-0.5 text-caption text-sub">{remaining.length}개 남아있어요</p>
 
       <div className="mt-2">
-        <DateGroupedList cards={visible} todayKey={todayKey} />
+        <DateGroupedList cards={remaining} todayKey={todayKey} />
       </div>
     </section>
   );
 }
 
 /**
- * ③ 접힌 나머지 — 이번 주 밖 카드를 한 줄 요약 + 펼치기로만 (08-31 2차).
- * 예: «9월에 쓸 거 2개 있어요»
+ * B — 다음 주 이후 카드. 접힌 한 줄 «9월에 올릴 콘텐츠 2개», 펼치면 목록 (09-01).
  */
-function CollapsedFuture({ cards }: { cards: Card[] }) {
+function CollapsedFuture({ cards }: { cards: DatedCard[] }) {
   const [open, setOpen] = useState(false);
   if (cards.length === 0) return null;
 
@@ -568,7 +644,7 @@ function CollapsedFuture({ cards }: { cards: Card[] }) {
           aria-hidden
           className={`transition-transform duration-200 ${open ? "rotate-90" : ""}`}
         />
-        {firstMonth}월에 쓸 거 {countInMonth}개 있어요
+        {firstMonth}월에 올릴 콘텐츠 {countInMonth}개
       </button>
       {open && (
         <div className="mt-2">
@@ -576,6 +652,153 @@ function CollapsedFuture({ cards }: { cards: Card[] }) {
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * C — 날짜 없는 카드. 접힌 한 줄 «언젠가 올릴 콘텐츠 25개» + [날짜 정해주기] (09-01).
+ * 50개를 넘으면 숫자를 표시하지 않는다.
+ */
+function CollapsedSomeday({
+  cards,
+  uploadDays,
+  takenDates,
+  onReload,
+}: {
+  cards: Card[];
+  uploadDays: number[];
+  takenDates: string[];
+  onReload: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (cards.length === 0) return null;
+
+  const label =
+    cards.length > 50 ? "언젠가 올릴 콘텐츠" : `언젠가 올릴 콘텐츠 ${cards.length}개`;
+
+  return (
+    <section>
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="flex min-w-0 items-center gap-1 text-body text-sub transition-colors duration-200 hover:text-ink"
+        >
+          <ChevronRight
+            size={16}
+            aria-hidden
+            className={`shrink-0 transition-transform duration-200 ${open ? "rotate-90" : ""}`}
+          />
+          <span className="truncate">{label}</span>
+        </button>
+        <AssignDatesControl
+          cards={cards}
+          uploadDays={uploadDays}
+          takenDates={takenDates}
+          onDone={onReload}
+        />
+      </div>
+      {open && (
+        <div className="mt-2 flex flex-col gap-0.5 pl-5">
+          {cards.map((card) => (
+            <CardRow key={card.id} card={card} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * [날짜 정해주기] — 누르면 먼저 확인 문구를 보여주고, 확정해야 배분한다 (§5).
+ * primary면 §6 중앙용 큰 버튼, 아니면 접힌 줄 오른쪽의 작은 텍스트 버튼.
+ */
+function AssignDatesControl({
+  cards,
+  uploadDays,
+  takenDates,
+  onDone,
+  primary,
+}: {
+  cards: Card[];
+  uploadDays: number[];
+  takenDates: string[];
+  onDone: () => void;
+  primary?: boolean;
+}) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const perWeek = (uploadDays.length > 0 ? uploadDays : [0, 3]).length;
+  const weeks = Math.ceil(cards.length / perWeek);
+
+  async function run() {
+    setSaving(true);
+    setFailed(false);
+    try {
+      await assignDatesToCards(cards, uploadDays, takenDates);
+      onDone(); // 카드들이 B로, 이번 주에 걸린 것은 A로 — 다시 불러와 반영한다
+    } catch {
+      setFailed(true);
+      setSaving(false);
+    }
+  }
+
+  if (!confirmOpen) {
+    return (
+      <button
+        type="button"
+        onClick={() => setConfirmOpen(true)}
+        className={
+          primary
+            ? "flex h-11 items-center justify-center rounded-md bg-berry px-6 text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+            : "shrink-0 text-caption font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
+        }
+      >
+        날짜 정해주기
+      </button>
+    );
+  }
+
+  return (
+    <div
+      className={[
+        "rounded-md border border-line bg-surface px-4 py-3",
+        primary ? "" : "max-w-[360px]",
+      ].join(" ")}
+    >
+      <p className="text-body text-ink">
+        {cards.length}개를 주 {perWeek}회로 올리면 {weeks}주 걸려요. 이대로 정할까요?
+      </p>
+      {/* 에러도 조용히 — 빨간색·느낌표 금지 (§3) */}
+      {failed && (
+        <p className="mt-1 text-caption text-ink">날짜를 정하지 못했어요 — 한 번 더 눌러주세요.</p>
+      )}
+      <div className="mt-2.5 flex items-center gap-3">
+        {saving ? (
+          <p className="text-body text-sub">날짜를 정하고 있어요...</p>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => void run()}
+              className="flex h-10 items-center justify-center rounded-md bg-berry px-4 text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+            >
+              이대로 정하기
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmOpen(false)}
+              className="px-1 text-body text-sub transition-colors duration-200 hover:text-ink"
+            >
+              취소
+            </button>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 

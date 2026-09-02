@@ -143,7 +143,7 @@ function PlanResultScreen() {
                       className="flex min-h-14 items-center gap-4 px-4 py-3 transition-colors duration-200 hover:bg-surface-muted"
                     >
                       <span className="w-16 shrink-0 text-caption text-sub">
-                        {formatDate(card.scheduledDate)}
+                        {formatDate(card.scheduledDate ?? "")}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-body text-ink">{card.title}</span>

@@ -100,7 +100,9 @@ export default function CardTile({
         <span className="line-clamp-2 break-keep text-caption font-semibold text-ink">
           {card.title}
         </span>
-        <StatusBadge status={card.status} />
+        <span className="self-center">
+          <StatusBadge status={card.status} />
+        </span>
       </div>
     </article>
   );

@@ -309,11 +309,20 @@ function MissedView({ uid }: { uid: string }) {
                       <StatusBadge status={card.status} />
                     </div>
                     <p className="mt-2 text-body text-sub">
-                      {formatDayLabel(card.scheduledDate)} 예정이었어요
+                      {formatDayLabel(card.scheduledDate ?? "")} 예정이었어요
                     </p>
                     <p className="mt-1 text-body text-sub">{card.audience}</p>
 
                     <div className="mt-4 flex flex-wrap items-center gap-2">
+                      {/* 제작 대기 카드는 다음 행동이 «제작» — 제일 앞, primary (09-01) */}
+                      {card.status === "planned" && (
+                        <Link
+                          href={`/card/${card.id}/result`}
+                          className="flex h-9 items-center rounded-md bg-berry px-3 text-body font-semibold text-white hover:bg-berry-dark"
+                        >
+                          제작하기
+                        </Link>
+                      )}
                       {publishId === card.id ? (
                         <span className="flex flex-wrap items-center gap-2">
                           <span className="text-body text-sub">언제 올리셨어요?</span>
@@ -350,7 +359,11 @@ function MissedView({ uid }: { uid: string }) {
                             setPublishDate(todayKey);
                             setRescheduleId(null);
                           }}
-                          className="h-9 rounded-md bg-berry px-3 text-body font-semibold text-white hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+                          className={
+                            card.status === "planned"
+                              ? "h-9 rounded-md border-2 border-berry bg-surface px-3 text-body font-semibold text-berry hover:bg-berry-light hover:text-berry-dark disabled:border-line disabled:text-sub"
+                              : "h-9 rounded-md bg-berry px-3 text-body font-semibold text-white hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+                          }
                         >
                           올렸어요
                         </button>
@@ -461,7 +474,7 @@ function MissedView({ uid }: { uid: string }) {
       {notice && (
         <div
           role="alert"
-          className="fixed bottom-20 left-1/2 -translate-x-1/2 rounded-md border border-line bg-surface px-4 py-2.5 text-body text-ink shadow-sm md:bottom-8"
+          className="fixed right-4 top-16 z-50 rounded-md bg-ink px-4 py-2.5 text-body text-white shadow-lg md:right-8 md:top-20"
         >
           {notice}
         </div>

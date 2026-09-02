@@ -13,7 +13,12 @@ export type Card = {
   audience: string; // 이 카드가 겨냥한 대상 1개 (plan.audiences 중 하나)
   intent: string; // 기획의도. 카드 상세에서만 노출
 
-  scheduledDate: string; // 예정일 'YYYY-MM-DD'. 캘린더 배치(F4)가 부여, 드래그로 변경
+  /**
+   * 올릴 날짜 'YYYY-MM-DD' — **없을 수 있다** (09-01 홈 분류 개편).
+   * 날짜를 정하지 않은 카드가 정상 상태다 — 임의의 기본 날짜를 넣지 않는다.
+   * 캘린더 배치(F4)·홈 「날짜 정해주기」가 부여하고, 캘린더 드래그로 바꾼다.
+   */
+  scheduledDate?: string;
   status: CardStatus;
   publishIntent: PublishIntent; // status와 별개 필드 (DESIGN.md §11)
 

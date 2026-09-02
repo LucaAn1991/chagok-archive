@@ -69,7 +69,7 @@ export default function CardDetailPage() {
           return;
         }
         setCard(data);
-        setDateDraft(data.scheduledDate);
+        setDateDraft(data.scheduledDate ?? "");
 
         /*
           슬라이드 이미지는 페이지를 막지 않는다 (09-01 버그 수정) — 8장 렌더를
@@ -120,7 +120,7 @@ export default function CardDetailPage() {
       setCard({ ...card, scheduledDate: dateDraft });
       showToast("일정이 변경됐어요.");
     } catch {
-      setDateDraft(card.scheduledDate); // 실패 → 원위치 + Toast (PLAN.md §3-1)
+      setDateDraft(card.scheduledDate ?? ""); // 실패 → 원위치 + Toast (PLAN.md §3-1)
       showToast("일정을 바꾸지 못했어요. 다시 시도해주세요.");
     } finally {
       setSavingDate(false);
@@ -170,7 +170,8 @@ export default function CardDetailPage() {
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const overdue = card.scheduledDate < today && card.status !== "published";
+  const overdue =
+    card.scheduledDate !== undefined && card.scheduledDate < today && card.status !== "published";
   const discarded = card.status === "discarded";
 
   return (
@@ -511,7 +512,7 @@ export default function CardDetailPage() {
         {toast && (
           <div
             role="status"
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-pill bg-ink px-5 py-2 text-body text-white shadow-lg"
+            className="fixed right-4 top-16 z-50 rounded-md bg-ink px-4 py-2.5 text-body text-white shadow-lg md:right-8 md:top-20"
           >
             {toast}
           </div>
