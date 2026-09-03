@@ -15,48 +15,44 @@
    ============================================================ */
 :root {
   /*
-    Brand — 09-02 팔레트 교체 (더스티 로즈 → 잉크 + 웜 뉴트럴).
-    바꾼 이유는 §2 「색 비율」이다. 브랜드색이 5%여야 하는데 로그인 화면에서
-    옛 `--berry-tint`가 **화면의 64%**를 덮고 있었다. 색조가 아니라 면적이 문제였고,
-    UI가 색을 쥐고 있으면 사용자 카드뉴스가 묻힌다(§1 Content-first).
+    Brand — **Warm Blush로 되돌렸다 (09-03).**
 
-    ⚠️ **이름이 값과 어긋난다.** `--berry`는 더 이상 베리색이 아니다.
-    이름을 바꾸면 화면 12개를 함께 고쳐야 해서 값만 교체했다.
-    @TODO: 토큰 이름 정리 (--berry → --accent 등)
+    09-02에 무채색(잉크 + 웜 뉴트럴)으로 갈았다가 다시 이 팔레트로 왔다.
+    바꿨던 이유는 색조가 아니라 **면적**이었다 — 로그인 화면에서 옛 `--berry-tint`가
+    화면의 64%를 덮고 있었다. 그 문제는 색을 바꾸지 않아도 §2 「색 비율 75·20·5」를
+    지키면 해결되고, 실제로 지금 화면들은 브랜드색을 CTA·선택 상태·상태 점에만 쓴다.
+
+    ⚠️ **그래서 규칙은 그대로다.** 브랜드색으로 넓은 면을 칠하지 않는다.
+    `--berry-tint`를 배경 대신 쓰고 싶어지면 그때 다시 64%가 된다.
   */
-  --berry:         #2A2724;  /* Primary CTA · 선택 상태 · 핵심 강조 */
-  --berry-dark:    #131211;  /* Primary hover · 연한 브랜드 면 위 글자 */
-  --berry-light:   #EEEDEA;  /* 칩 배경 · soft background */
-  --berry-tint:    #F2F1EF;  /* berry-light보다 더 연한 면 */
-  --purple:        #4A5568;  /* AI 포인트 · 보조 강조 */
-  --coral:         #B8734E;  /* Accent — 장식 전용, 텍스트 금지 */
+  --berry:         #A85578;  /* 메인 — CTA · 선택 상태 · 핵심 강조 */
+  --berry-dark:    #914868;  /* hover · 연한 분홍 면 위의 글자 */
+  --berry-light:   #F2DCE5;  /* 칩 배경 · 연한 강조 면 */
+  --berry-tint:    #F0E6EA;  /* berry-light보다 더 연한 면 */
+  --purple:        #806FA6;  /* AI 포인트 · 보조 강조 */
+  --coral:         #F28A72;  /* 장식 전용 — 텍스트 금지 (대비 2.43:1) */
 
   /* Surface */
-  --bg:            #FAFAF9;  /* 페이지 배경 Warm Off-white */
+  --bg:            #FCF8F7;  /* 페이지 배경 (Warm Blush) */
   --surface:       #FFFFFF;  /* 카드 · 입력 · 모달 */
-  --surface-muted: #F2F1EF;  /* 중립 표면 */
-  --line:          #E4E3E0;
+  --surface-muted: #F6F2F4;  /* 중립 표면 */
+  --line:          #E8E1E4;
 
   /* Text */
-  --ink:           #191817;
-  --sub:           #6A6866;
+  --ink:           #2D292B;
+  --sub:           #746F72;
 
   /* 카드 상태 — 명도 계단식 (진할수록 완료에 가깝다). 08-31 crafted 제거로 4색 */
-  /*
-    09-02 병합 — 팀이 09-01에 `--st-pending`의 붉은 기를 뺐는데(#DE7E80 → #DFAFC6),
-    같은 날 우리가 팔레트를 통째로 갈았다. **팀의 의도(붉은 기 제거)는 새 팔레트에
-    이미 들어 있다** — #B8734E는 붉지 않은 클레이색이다. 그래서 새 값을 쓴다.
-  */
-  --st-planned:    #D8D5D0;  /* 제작 대기 */
-  --st-pending:    #B8734E;  /* 업로드 대기 — 유일하게 색이 있다(할 일이 남은 상태) */
-  --st-published:  #2A2724;  /* 발행 완료 = berry */
-  --st-discarded:  #C9C6C0;  /* 버림 */
+  --st-planned:    #D9CCE8;  /* 제작 대기 */
+  --st-pending:    #DFAFC6;  /* 업로드 대기 */
+  --st-published:  #A85578;  /* 발행 완료 = berry */
+  --st-discarded:  #C4BDB7;  /* 버림 */
 
   /* 에러 — DESIGN.md §2 하단 [제안, 확정 대기] */
   --warn:          #A6472F;
 
   /* 그라데이션 — 3곳에서만 (✦ · 생성 완료 · 기획 카드 테두리) — DESIGN.md §2 */
-  --grad: linear-gradient(135deg, #4A5568, #6B6157, #B8734E);
+  --grad: linear-gradient(135deg, #806FA6, #A85578, #F28A72);
 
   /* DESIGN.md §4 — Radius */
   --r-sm:   8px;

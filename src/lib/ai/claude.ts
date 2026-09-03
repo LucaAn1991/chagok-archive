@@ -2,7 +2,14 @@ import "server-only";
 
 import { AUDIENCES, AUDIENCE_DEFAULT, audiencePrompt } from "@/lib/audiences";
 import { BASE_SYSTEM, STR, STR_ARRAY, callJson, obj } from "./client";
-import type { CardDraft, PlanningAI, PlanProposal, PlanTurnResult } from "./types";
+import type {
+  CardDraft,
+  PlanningAI,
+  PlanProposal,
+  PlanTurnResult,
+  RefineDraftResult,
+  DraftVariant,
+} from "./types";
 
 /**
  * Anthropic Claude 실구현 (PLAN.md §9).
@@ -53,6 +60,53 @@ const CARD_SCHEMA = obj({ title: STR, shortTitle: STR, intent: STR }, [
   "shortTitle",
   "intent",
 ]);
+
+/*
+  ⑤ 다듬기 — **기획안 전체를 매번 돌려받는다.** 바뀐 것만 받으면 「무엇이 안 왔는지」와
+  「빈 값으로 지우라는 것인지」를 구분할 수 없다. 안 바꿀 값은 들어온 값을 그대로 다시
+  적어 보내게 한다.
+
+  `slideCount`는 숫자 아니면 0이다 — JSON 스키마에 nullable을 쓰면 모델이 자주
+  문자열 "null"을 보낸다. 0을 «정하지 않음»으로 약속하고 아래에서 null로 바꾼다.
+*/
+const REFINE_SCHEMA = obj(
+  {
+    reply: STR,
+    title: STR,
+    shortTitle: STR,
+    intent: STR,
+    extraNote: STR,
+    slideCount: { type: "integer" },
+  },
+  ["reply", "title", "shortTitle", "intent", "extraNote", "slideCount"],
+);
+
+/*
+  ⑤ 다듬기 후보 — 같은 기획안을 다른 각도로 다시 잡는다.
+  각도 라벨(`angle`)을 따로 받는 이유: 제목만 셋 늘어놓으면 무엇이 다른지 읽어내야 한다.
+  «무엇을 바꾼 것인지»를 한마디로 먼저 말해준다.
+*/
+const VARIANTS_SCHEMA = obj(
+  {
+    variants: {
+      type: "array",
+      items: obj({ angle: STR, title: STR, shortTitle: STR, intent: STR }, [
+        "angle",
+        "title",
+        "shortTitle",
+        "intent",
+      ]),
+    },
+  },
+  ["variants"],
+);
+
+/** 후보 개수. 둘은 비교가 안 되고 넷부터는 고르는 일이 커진다 */
+const VARIANT_COUNT = 3;
+
+/** 템플릿 한 벌이 6장인데 표지가 고정이라 그 밖은 만들 수 없다 (`lib/ai/sheet-copy.ts`) */
+const MIN_SLIDES = 4;
+const MAX_SLIDES = 7;
 
 /** ② 단계 대상 후보는 AI가 만들지 않는다 — lib/audiences.ts가 단일 출처 (08-28) */
 function candidates(): PlanProposal {
@@ -151,7 +205,8 @@ export const claudePlanningAI: PlanningAI = {
         "1. purposes — 이 주제를 이 대상에게 말하는 **목적**을 1~3개. 짧은 명사구로 (예: 공감 얻기, 정보 전달, 팔로우 유도). 사용자가 고르는 항목이 아니라 네가 정한다.",
         "2. intent — 이 시리즈의 기획의도를 한 문장으로. 카드 상세에만 보인다.",
         "3. seriesTitle — 나중에 카드들을 묶어 보여줄 제목. 주제를 살려 짧게.",
-        "4. reply — 어떻게 정했는지 알리고, 「이대로 카드 만들기」를 누르라고 안내. 세 문장 이내.",
+        "4. reply — 어떻게 정했는지 알리고, **대상마다 기획안을 하나씩 준비해 보여준다**고 안내. 세 문장 이내.",
+        "   ⚠️ 「이대로 카드 만들기」를 누르라고 하지 마라 — 다음 화면은 카드가 아니라 기획안이다 (09-02).",
       ]
         .filter(Boolean)
         .join("\n"),
@@ -204,6 +259,118 @@ export const claudePlanningAI: PlanningAI = {
       shortTitle: result.shortTitle.length > 12 ? `${result.shortTitle.slice(0, 11)}…` : result.shortTitle,
       audience,
       intent: result.intent,
+    };
+  },
+
+  async draftVariants({ topic, audience, title, intent }): Promise<DraftVariant[]> {
+    const result = await callJson<{ variants: DraftVariant[] }>({
+      system: BASE_SYSTEM,
+      user: [
+        `주제: ${topic}`,
+        `대상: ${audience}`,
+        `대상별 지시: ${audiencePrompt(audience)}`,
+        "",
+        "지금 기획안:",
+        `- 제목: ${title}`,
+        `- 기획의도: ${intent}`,
+        "",
+        `할 일: **같은 주제를 같은 대상에게** 말하는 다른 방법 ${VARIANT_COUNT}개를 내라.`,
+        "",
+        "규칙:",
+        "- **지금 기획안과 겹치지 않게.** 제목만 바꿔 쓴 것은 후보가 아니다.",
+        "  들어가는 방식이 달라야 한다 — 겁을 주는 대신 준비물로, 목록 대신 한 사람의 이야기로,",
+        "  결론을 먼저 말하는 대신 질문으로 여는 식.",
+        "- `angle` — **무엇이 다른지 한마디로.** 8자 안팎. 제목을 줄여 쓰지 마라.",
+        "  (좋은 예: 「겁주기보다 준비물로」 · 「한 사람의 실패담으로」)",
+        "- `title` — 그 각도로 다시 지은 게시물 제목.",
+        "- `shortTitle` — **12자 이내.** 캘린더 칸이 좁아 길면 잘린다.",
+        "- `intent` — 그 각도의 기획의도 한 문장.",
+        "- 대상은 바뀌지 않는다. 다른 사람에게 말하는 안을 내지 마라.",
+      ].join("\n"),
+      schema: VARIANTS_SCHEMA,
+      effort: EFFORT_TURN,
+    });
+
+    return (result.variants ?? [])
+      .filter((v) => v && v.title && v.angle)
+      .slice(0, VARIANT_COUNT)
+      .map((v) => ({
+        ...v,
+        // 12자 규칙은 화면이 깨지는 문제라 여기서 한 번 더 자른다 (DESIGN §8)
+        shortTitle:
+          v.shortTitle && v.shortTitle.length > 12
+            ? `${v.shortTitle.slice(0, 11)}\u2026`
+            : v.shortTitle || v.title.slice(0, 12),
+      }));
+  },
+
+  async refineDraft({ topic, draft, history, message }, onText): Promise<RefineDraftResult> {
+    const result = await callJson<{
+      reply: string;
+      title: string;
+      shortTitle: string;
+      intent: string;
+      extraNote: string;
+      slideCount: number;
+    }>({
+      system: BASE_SYSTEM,
+      user: [
+        `주제: ${topic}`,
+        `이 기획안의 대상: ${draft.audience}`,
+        `대상별 지시: ${audiencePrompt(draft.audience)}`,
+        "",
+        "지금 기획안:",
+        `- 제목: ${draft.title}`,
+        `- 짧은 제목: ${draft.shortTitle}`,
+        `- 기획의도: ${draft.intent}`,
+        `- 꼭 넣을 것: ${draft.extraNote || "(아직 없음)"}`,
+        `- 카드 장수: ${draft.slideCount ?? "(정하지 않음 — 템플릿이 정한다)"}`,
+        ...(history.length > 0
+          ? ["", "지금까지 주고받은 말:", ...history.map((h) => `${h.role === "user" ? "사용자" : "차곡"}: ${h.text}`)]
+          : []),
+        "",
+        `사용자가 방금 한 말: ${message}`,
+        "",
+        "할 일: 이 말을 반영해 기획안을 고치고, 무엇을 어떻게 고쳤는지 한두 문장으로 답해라.",
+        "",
+        "규칙:",
+        "- **바꾸지 않은 값도 그대로 다시 적어라.** 빈 문자열은 «지웠다»는 뜻이 된다.",
+        "- `extraNote` — 사용자가 «꼭 넣어달라»고 한 내용을 누적한다. 앞에 있던 것을 지우지 마라.",
+        `- \`slideCount\` — 사용자가 장수를 말했으면 그 숫자. 말하지 않았으면 들어온 값 그대로.`,
+        `  **${MIN_SLIDES}~${MAX_SLIDES}장 밖은 만들 수 없다.** 사용자가 그 밖의 수를 말하면`,
+        `  값은 바꾸지 말고(들어온 값 유지), \`reply\`에서 «${MIN_SLIDES}~${MAX_SLIDES}장까지만 돼요»라고`,
+        "  이유와 함께 말해라. 조용히 깎지 마라.",
+        "  정하지 않은 상태는 0으로 적는다.",
+        "- `shortTitle` — 12자 이내. 제목이 바뀌면 이것도 함께 다시 지어라.",
+        "- 사용자가 말투나 피할 표현을 바꿔달라고 하면, 그건 이 기획 하나가 아니라",
+        "  계정 전체 성격이라 **설정에서 바꾸는 것**이라고 알려줘라. 기획안은 건드리지 않는다.",
+      ].join("\n"),
+      schema: REFINE_SCHEMA,
+      effort: EFFORT_TURN,
+      onText,
+    });
+
+    /*
+      범위 밖 값은 **버린다** — 프롬프트로 막아뒀지만 모델이 어길 수 있다.
+      조용히 깎으면 사용자는 10장을 요청하고 7장을 받고도 이유를 모른다.
+      들어온 값을 유지하면 화면에는 «아직 그대로»로 보이고, reply가 이유를 말한다.
+    */
+    const n = Number(result.slideCount);
+    const slideCount =
+      Number.isInteger(n) && n >= MIN_SLIDES && n <= MAX_SLIDES ? n : draft.slideCount;
+
+    return {
+      reply: result.reply,
+      draft: {
+        title: result.title || draft.title,
+        shortTitle:
+          result.shortTitle.length > 12
+            ? `${result.shortTitle.slice(0, 11)}\u2026`
+            : result.shortTitle || draft.shortTitle,
+        intent: result.intent || draft.intent,
+        extraNote: result.extraNote,
+        slideCount,
+      },
     };
   },
 };

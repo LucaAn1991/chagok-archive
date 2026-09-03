@@ -1,6 +1,7 @@
 import "server-only";
 
 import { planSheetCopy } from "../ai/sheet-copy";
+import { planPhotoPlacement } from "../ai/photo-plan";
 import { TEMPLATE_SHEETS } from "../render/template-sheets";
 import { generateSheet, isImageGenConfigured } from "./index";
 import { storeSlideImage } from "./store";
@@ -52,6 +53,7 @@ export type BuildResult = {
 function toRenderedSlide(
   order: number,
   lines: string[],
+  photoUrls: string[],
   sheetIndex: number,
   isFirst: boolean,
   isLast: boolean,
@@ -77,6 +79,7 @@ function toRenderedSlide(
     // 「이 장 다시 만들기」가 같은 템플릿·같은 문구로 돌아갈 수 있게 남긴다
     sheetIndex,
     sheetLines: lines,
+    sheetPhotoUrls: photoUrls,
   };
 }
 
@@ -93,6 +96,8 @@ export type BuildInput = {
   photos: { url: string; png: Buffer }[];
   /** 「내 스타일」 강조색 `#RRGGBB` */
   accent: string | null;
+  /** 기획 ⑤에서 정한 카드 장수. null이면 템플릿이 4~7장에서 고른다 (09-02) */
+  slideCount: number | null;
   /** 진행 상황을 받아갈 곳. 없으면 아무 데도 안 보낸다 */
   onProgress?: (e: BuildProgress) => void;
 };
@@ -102,6 +107,27 @@ export function canBuildFromTemplate(styleId: StyleId | null): styleId is StyleI
   if (!styleId) return false;
   if (!isImageGenConfigured()) return false;
   return (TEMPLATE_SHEETS[styleId]?.length ?? 0) > 0;
+}
+
+/**
+ * 이 장에 넘길 사진을 고른다 — **순서대로 돌려가며** (09-02).
+ *
+ * 예전에는 **모든 장에 올린 사진을 통째로** 넘겼다. 그러면 장마다 gpt-image-2가
+ * 알아서 하나를 고르는데, 장들이 동시에 만들어져 서로 뭘 썼는지 모른다. 그래서
+ * 같은 사진이 여러 장에 반복되고 어떤 사진은 한 번도 안 쓰이는 일이 생겼다.
+ *
+ * 여기서 **첫 사진을 장마다 한 칸씩 밀어** 정한다. 사진 3장에 카드 5장이면
+ * 1·2·3·1·2 순으로 주인공이 돌아간다.
+ *
+ * **한 장만 주지 않고 뒤따르는 것까지 함께 준다.** 시안에는 사진틀이 둘·셋인 장이
+ * 있는데(「감성」 3번은 사진 3장), 한 장만 주면 같은 사진을 세 번 넣거나 없는 것을
+ * 지어낸다. 틀 개수는 시안마다 달라 데이터로 갖고 있지 않으므로 넉넉히 준다.
+ * @TODO: TemplateSheet에 사진틀 개수를 넣으면 정확히 맞춰 줄 수 있다
+ */
+export function photosForSheet<T>(photos: T[], order: number, take = 3): T[] {
+  const n = photos.length;
+  if (n === 0) return [];
+  return Array.from({ length: Math.min(take, n) }, (_, k) => photos[(order + k) % n]);
 }
 
 export async function buildFromTemplate(input: BuildInput): Promise<BuildResult> {
@@ -114,10 +140,47 @@ export async function buildFromTemplate(input: BuildInput): Promise<BuildResult>
     tone: input.tone,
     avoidExpressions: input.avoidExpressions,
     hasUserPhotos: input.photos.length > 0,
+    slideCount: input.slideCount,
   });
 
   if (plan.sheets.length === 0) return { slides: [], generated: 0, fallback: 0 };
   input.onProgress?.({ type: "planned", total: plan.sheets.length });
+
+  /*
+    **어느 사진을 어느 장에 넣을지 클로드가 정한다** (09-02 · B안).
+
+    돌려 배정(`photosForSheet`)만으로는 중복은 없앨 수 있어도 «내용과 맞는가»는
+    아무도 안 본다 — 등산화 사진이 준비물 장이 아니라 엉뚱한 장에 들어갔다.
+    여기서 사진을 직접 보고 각 장의 문구와 맞춰 고른다.
+
+    **두 경우엔 부르지 않는다.** 사진이 한 장이면 고를 것이 없고, 아예 없으면
+    배정할 것이 없다. 괜히 부르면 시간과 비용만 든다.
+
+    실패하면 돌려 배정으로 물러선다 — 사진 배정이 안 됐다고 카드를 못 만들면 안 된다
+    (DESIGN §12 「어디서 멈춰도 완성된다」).
+  */
+  let placement: number[][] | null = null;
+  if (input.photos.length > 1) {
+    try {
+      placement = await planPhotoPlacement({
+        sheets: plan.sheets.map((s) => ({
+          role: TEMPLATE_SHEETS[input.styleId]?.[s.index]?.role ?? "",
+          lines: s.lines,
+        })),
+        photos: input.photos.map((p) => p.png),
+      });
+    } catch (e) {
+      console.error("[buildFromTemplate] 사진 배정 실패 — 순서대로 나눕니다", e);
+    }
+  }
+
+  /** 배정 결과를 실제 사진으로 바꾼다. 비었으면 돌려 배정으로 채운다 */
+  const photosFor = (order: number) => {
+    const picked = placement?.[order] ?? [];
+    return picked.length > 0
+      ? picked.map((i) => input.photos[i])
+      : photosForSheet(input.photos, order);
+  };
 
   /*
     장당 2분이라 **반드시 동시에** 던진다. 순차로 6장이면 13분이다.
@@ -131,7 +194,8 @@ export async function buildFromTemplate(input: BuildInput): Promise<BuildResult>
         styleId: input.styleId,
         index: s.index,
         lines: s.lines,
-        photos: input.photos,
+        // 클로드가 고른 사진. 못 정했으면 순서대로 돌려 배정 (09-02)
+        photos: photosFor(order),
         photoDirection: plan.photoDirection || undefined,
         accent: input.accent,
       }).then((r) => {
@@ -147,12 +211,16 @@ export async function buildFromTemplate(input: BuildInput): Promise<BuildResult>
 
   for (const [order, result] of results.entries()) {
     const lines = plan.sheets[order].lines;
+    // 이 장에 넣은 사진 — 다시 만들 때 같은 것을 쓰려고 남긴다 (09-02)
+    const urls = photosFor(order).map((p) => p.url);
     const isFirst = order === 0;
     const isLast = order === results.length - 1;
 
     if (!result.ok) {
       console.error(`[buildFromTemplate] ${order + 1}장 실패 — ${result.reason}`);
-      slides.push(toRenderedSlide(order, lines, plan.sheets[order].index, isFirst, isLast));
+      slides.push(
+        toRenderedSlide(order, lines, urls, plan.sheets[order].index, isFirst, isLast),
+      );
       fallback++;
       continue;
     }
@@ -161,7 +229,9 @@ export async function buildFromTemplate(input: BuildInput): Promise<BuildResult>
     if (!stored.ok) {
       // 그림은 나왔는데 저장을 못 했다 — 주소가 없으면 화면에 못 띄운다
       console.error(`[buildFromTemplate] ${order + 1}장 저장 실패 — ${stored.reason}`);
-      slides.push(toRenderedSlide(order, lines, plan.sheets[order].index, isFirst, isLast));
+      slides.push(
+        toRenderedSlide(order, lines, urls, plan.sheets[order].index, isFirst, isLast),
+      );
       fallback++;
       continue;
     }
@@ -180,6 +250,7 @@ export async function buildFromTemplate(input: BuildInput): Promise<BuildResult>
       generatedUrl: stored.url,
       sheetIndex: plan.sheets[order].index,
       sheetLines: lines,
+      sheetPhotoUrls: urls,
     });
     generated++;
   }

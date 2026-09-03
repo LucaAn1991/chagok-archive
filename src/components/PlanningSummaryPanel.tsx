@@ -297,7 +297,7 @@ export type PlanPhotos = {
   stockOptions: StockPick[];
   stockLoading: boolean;
   /** 고른 추천 사진의 주소. 안 골랐으면 null */
-  selectedStockUrl: string | null;
+  selectedStockUrls: string[];
   userPhotos: string[];
   onSelectStock: (photo: StockPick) => void;
   onAddUserPhotos: (files: FileList) => void;

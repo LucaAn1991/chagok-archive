@@ -25,4 +25,11 @@ export function isPlanningClaudeConfigured(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
-export type { PlanProposal, PlanTurnResult, PlanningContext } from "./types";
+export type {
+  PlanProposal,
+  PlanTurnResult,
+  PlanningContext,
+  RefineDraftInput,
+  RefineDraftResult,
+  DraftVariant,
+} from "./types";

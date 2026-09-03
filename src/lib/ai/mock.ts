@@ -2,7 +2,14 @@ import "server-only";
 
 import { AUDIENCES, AUDIENCE_DEFAULT, MAX_CARDS_PER_RUN, audiencePrompt } from "@/lib/audiences";
 import { suffix을 } from "@/lib/josa";
-import type { CardDraft, PlanningAI, PlanProposal, PlanTurnResult } from "./types";
+import type {
+  CardDraft,
+  PlanningAI,
+  PlanProposal,
+  PlanTurnResult,
+  RefineDraftResult,
+  DraftVariant,
+} from "./types";
 
 /**
  * 대본형 모의 AI — ANTHROPIC_API_KEY 없이 F2·F3 흐름 전체를 돌리기 위한 구현.
@@ -111,7 +118,7 @@ export const mockPlanningAI: PlanningAI = {
           ? `제가 이렇게 골랐어요 — ${audiences.join(" · ")}에게, ${purposes.join(" · ")}. 바꾸고 싶으면 기획안 카드에서 고칠 수 있어요.`
           : `${audiences.join(" · ")}에게 ${purposes.join(" · ")} 방향으로 정리했어요.`,
         "",
-        "마음에 들면 아래 「이대로 카드 만들기」를 눌러주세요.",
+        "대상마다 기획안을 하나씩 준비해서 보여드릴게요.",
       ].join("\n"),
       topic,
       audiences,
@@ -139,6 +146,49 @@ export const mockPlanningAI: PlanningAI = {
       audience,
       // 기본 3종·커스텀 대상 모두 audiencePrompt 한 경로 — 커스텀도 지시 없이 만들지 않는다 (08-28)
       intent: `「${topic}」${suffix을(topic)} ${audience}에게. ${audiencePrompt(audience)}`,
+    };
+  },
+
+  /*
+    ⑤ 다듬기 흉내 — **기획안을 실제로 고치지는 않는다.**
+    무엇을 고쳐야 할지 판단하려면 사용자 말을 이해해야 하는데 그게 곧 AI다.
+    대신 «받았다»는 사실만 알리고, 사용자가 적은 말을 `extraNote`에 그대로 쌓는다.
+    장수만 숫자를 찾아 반영한다 — 규칙(4~7장)이 있어 대본으로도 지킬 수 있다.
+  */
+  /*
+    후보 흉내 — 각도 라벨은 고정이고 제목만 주제를 끼워 만든다.
+    진짜 AI는 주제를 이해해서 실제로 다른 각도를 낸다.
+  */
+  async draftVariants({ topic, title }): Promise<DraftVariant[]> {
+    const short = topic.length > 8 ? `${topic.slice(0, 8)}\u2026` : topic;
+    return [
+      { angle: "질문으로 열기", title: `${topic}, 알고 계셨나요?`, shortTitle: `${short}?`, intent: `${title} — 질문으로 시작해 끝까지 읽게 만든다. (샘플)` },
+      { angle: "한 사람의 이야기로", title: `제가 ${topic} 겪어봤습니다`, shortTitle: `${short} 경험`, intent: `${title} — 겪은 일로 풀어 가깝게 느끼게 한다. (샘플)` },
+      { angle: "목록으로 정리", title: `${topic} 한눈에 정리`, shortTitle: `${short} 정리`, intent: `${title} — 번호로 나눠 훑기 좋게 만든다. (샘플)` },
+    ];
+  },
+
+  async refineDraft({ draft, message }): Promise<RefineDraftResult> {
+    const asked = message.match(/(\d+)\s*장/);
+    const n = asked ? Number(asked[1]) : NaN;
+    const inRange = Number.isInteger(n) && n >= 4 && n <= 7;
+
+    const reply = asked
+      ? inRange
+        ? `${n}장으로 맞출게요. (지금은 샘플 응답이에요)`
+        : "카드는 4~7장까지만 만들 수 있어요. 지금 장수를 그대로 둘게요. (지금은 샘플 응답이에요)"
+      : "말씀하신 내용을 기획안에 반영해 둘게요. (지금은 샘플 응답이에요)";
+
+    return {
+      reply,
+      draft: {
+        title: draft.title,
+        shortTitle: draft.shortTitle,
+        intent: draft.intent,
+        // 사용자가 적은 말을 그대로 쌓는다 — 진짜 AI는 여기서 내용을 다듬어 넣는다
+        extraNote: asked ? draft.extraNote : [draft.extraNote, message].filter(Boolean).join(" / "),
+        slideCount: inRange ? n : draft.slideCount,
+      },
     };
   },
 };

@@ -556,28 +556,56 @@ async function readRender(
                 스크롤 시작점에 딱 붙여, 방금 만든 왼쪽 틈이 화면 밖으로 밀려난다.
             */}
             <div className="-m-1 flex snap-x snap-mandatory scroll-p-1 gap-4 overflow-x-auto p-1 pb-3">
-              {(phase === "ready" && card ? card.slides : []).map((slide, i) =>
-                slideUrls[i] ? (
+              {(phase === "ready" && card ? card.slides : []).map((slide, i) => {
+                /*
+                  **시안으로 만든 장은 편집기가 안 먹는다** (09-02).
+
+                  편집기는 `texts`를 고쳐 우리 렌더러로 다시 그리는 구조인데, 이 장의
+                  그림은 gpt-image-2가 구워 Storage에 둔 PNG라 그 경로를 안 거친다.
+                  고친 글자가 저장은 되고 **어디에도 안 그려진다.** 클릭 영역(`/boxes`)도
+                  우리 레이아웃을 재서 만들어 시안 그림과 자리가 맞지 않는다.
+
+                  눌러도 아무 일이 안 일어나는 버튼을 두는 대신, **막고 이유를 적는다.**
+                  대신 「이 장만 다시 만들기」를 열어둔다 (아래).
+                */
+                const generated = slide.origin === "generated";
+                return slideUrls[i] ? (
                   <div key={slide.order} className="flex shrink-0 snap-start flex-col gap-2">
-                    <button
-                      type="button"
-                      onClick={() => router.push(`/card/${cardId}/edit/${slide.order}`)}
-                      className="rounded-lg"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element -- blob URL은 next/image 대상이 아니다 */}
-                      <img
-                        src={slideUrls[i]}
-                        alt={`슬라이드 ${i + 1} — 누르면 편집 화면으로 가요`}
-                        className="aspect-square w-72 rounded-lg border border-line bg-surface object-cover"
-                      />
-                    </button>
+                    {generated ? (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element -- blob URL은 next/image 대상이 아니다 */}
+                        <img
+                          src={slideUrls[i]}
+                          alt={`슬라이드 ${i + 1}`}
+                          className="aspect-square w-72 rounded-lg border border-line bg-surface object-cover"
+                        />
+                        <p className="w-72 break-keep text-caption text-sub">
+                          시안 그림이라 글자를 직접 고칠 수 없어요. 마음에 안 들면 다시 만들어 주세요.
+                        </p>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/card/${cardId}/edit/${slide.order}`)}
+                        className="rounded-lg"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element -- blob URL은 next/image 대상이 아니다 */}
+                        <img
+                          src={slideUrls[i]}
+                          alt={`슬라이드 ${i + 1} — 누르면 편집 화면으로 가요`}
+                          className="aspect-square w-72 rounded-lg border border-line bg-surface object-cover"
+                        />
+                      </button>
+                    )}
 
                     {/*
-                      **시안으로 못 만든 장** (09-02). 분위기를 골랐는데 이 장만
-                      렌더러로 그려졌다는 뜻이다 — 자동으로 다시 만들지 않으므로
-                      («될 재시도는 첫 판에 된다» 실측) 여기서 사용자가 정한다.
+                      **다시 만들기는 두 경우 다 연다** (09-02).
+
+                      원래는 시안으로 «못» 만든 장에만 뒀다. 그런데 시안으로 만든 장은
+                      편집기를 막았으므로, 여기까지 닫으면 그 장에 할 수 있는 일이
+                      하나도 없어진다. 결과를 보고 다시 만들지는 사용자가 정한다.
                     */}
-                    {card?.styleId && slide.origin !== "generated" && slide.sheetIndex != null && (
+                    {card?.styleId && slide.sheetIndex != null && (
                       <button
                         type="button"
                         onClick={() => void regenerateSlide(slide.order)}
@@ -595,8 +623,8 @@ async function readRender(
                     key={slide.order}
                     className="aspect-square w-72 shrink-0 animate-pulse rounded-lg bg-surface-muted"
                   />
-                ),
-              )}
+                );
+              })}
               {(phase === "loading" || phase === "generating") &&
                 Array.from({ length: build.total || 3 }, (_, i) => (
                   <div

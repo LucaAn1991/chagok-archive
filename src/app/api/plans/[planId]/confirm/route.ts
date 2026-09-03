@@ -5,7 +5,7 @@ import { getPlanningAI } from "@/lib/ai";
 import { AUDIENCES, AUDIENCE_DEFAULT, MAX_CARDS_PER_RUN } from "@/lib/audiences";
 import { verifyRequest } from "@/lib/server/request-auth";
 import { themeFromAttributes } from "@/lib/render/themes";
-import type { StockPick, StyleAttributes, StyleId } from "@/types";
+import type { PlanDraft, StockPick, StyleAttributes, StyleId } from "@/types";
 
 /**
  * POST /api/plans/[planId]/confirm — 기획 확정 → 카드 N장 생성 (F3 · PLAN §6).
@@ -71,27 +71,54 @@ export async function POST(
       );
     }
 
-    // 미선택이면 기본 대상 하나로 진행한다 (08-28 — AUDIENCE_DEFAULT)
-    const stored: string[] = planSnap.get("audiences") ?? [];
-    const fallback =
-      AUDIENCES.find((a) => a.id === AUDIENCE_DEFAULT)?.label ?? AUDIENCES[0].label;
-    const audiences = stored.length > 0 ? stored : [fallback];
+    /*
+      **여기서 AI를 부르지 않는다** (09-02).
+
+      예전에는 이 자리에서 대상마다 `generateCard()`를 돌렸다. 그래서 「이대로 카드
+      만들기」를 누르면 대상 수만큼 AI를 기다려야 했고, 그동안 사용자는 자기가 뭘 받게
+      될지 **보지 못한 채** 서 있었다.
+
+      이제 기획안은 ③ 단계(`/drafts`)에서 미리 만들어 화면에 보여준다. 여기서는
+      **고른 것을 옮겨 적기만** 한다 — 누르는 순간 카드가 생긴다.
+    */
+    const planDrafts: PlanDraft[] = planSnap.get("drafts") ?? [];
+    let chosen = planDrafts.filter((d) => d.chosen);
+
+    /*
+      기획안이 없는 옛 기획은 예전 방식으로 만든다 (과도기 방어).
+      ③을 거치지 않고 저장돼 있던 draft가 여기 해당한다 — 사용자를 막다른 곳에
+      세우지 않고, 대상만으로 그 자리에서 만들어 넘긴다.
+    */
+    if (planDrafts.length === 0) {
+      const stored: string[] = planSnap.get("audiences") ?? [];
+      const fallback =
+        AUDIENCES.find((a) => a.id === AUDIENCE_DEFAULT)?.label ?? AUDIENCES[0].label;
+      const audiences = (stored.length > 0 ? stored : [fallback]).slice(0, MAX_CARDS_PER_RUN);
+      const { ai } = getPlanningAI();
+      const purposes: string[] = planSnap.get("purposes") ?? [];
+      const intent: string = planSnap.get("intent") ?? "";
+      const made = await Promise.all(
+        audiences.map((audience) => ai.generateCard({ topic, audience, purposes, intent })),
+      );
+      chosen = made.map((d) => ({
+        audience: d.audience,
+        title: d.title,
+        shortTitle: d.shortTitle,
+        intent: d.intent,
+        extraNote: "",
+        slideCount: null,
+        chosen: true,
+      }));
+    }
 
     // 상한을 넘으면 8장까지만 — 결과 화면이 「먼저 8장만」 안내를 띄운다
-    const capped = audiences.length > MAX_CARDS_PER_RUN;
-    const targets = audiences.slice(0, MAX_CARDS_PER_RUN);
+    const capped = chosen.length > MAX_CARDS_PER_RUN;
+    const drafts = chosen.slice(0, MAX_CARDS_PER_RUN);
 
-    const { ai } = getPlanningAI();
-    const purposes: string[] = planSnap.get("purposes") ?? [];
-    const intent: string = planSnap.get("intent") ?? "";
-    // **대상 하나당 독립 호출** — 지시가 정반대인 대상을 한 프롬프트에 섞지 않는다 (08-28)
-    const drafts = await Promise.all(
-      targets.map((audience) => ai.generateCard({ topic, audience, purposes, intent })),
-    );
     if (drafts.length < 1) {
       return NextResponse.json(
-        { error: "카드를 만들지 못했어요. 잠시 후 다시 시도해주세요." },
-        { status: 500 },
+        { error: "만들 기획안을 하나도 고르지 않았어요." },
+        { status: 400 },
       );
     }
 
@@ -109,7 +136,7 @@ export async function POST(
     */
     const planPhotos: string[] = planSnap.get("photoUrls") ?? [];
     // 기획 단계에서 고른 스톡 한 장 (09-01). 사진처럼 주소만 물려준다
-    const planStock: StockPick | null = planSnap.get("stockPhoto") ?? null;
+    const planStock: StockPick[] = planSnap.get("stockPhotos") ?? [];
     /*
       기획에서 고른 분위기를 카드 전부에 그대로 물려준다 (09-02).
       한 기획에서 나온 카드가 제각각이면 시리즈로 보이지 않는다.
@@ -147,10 +174,12 @@ export async function POST(
         themeId, // 온보딩 취향에서 정한 기본값. 제작 결과 화면에서 변경 가능 (08-31)
         visualType, // 사진 유무로 판정. 렌더 시점에 다시 확인한다 (DESIGN §12)
         photoUrls: planPhotos, // 기획 단계 사진을 그대로 물려받는다 (08-31)
-        stockPhoto: planStock, // 기획 단계에서 고른 스톡 (09-01). 안 골랐으면 null
+        stockPhotos: planStock, // 기획 단계에서 고른 스톡들 (09-02). 안 골랐으면 빈 배열
         styleId: planStyle, // 기획 단계에서 고른 분위기 (09-02). 안 골랐으면 null → themeId로 그린다
         templateId: null, // 구성은 제작 결과 화면에서 고른다. null이면 AI가 정한다
-        extraNote: "",
+        // ⑤ 다듬기에서 더한 «꼭 넣을 것»과 장수를 그대로 물려준다 (09-02)
+        extraNote: draft.extraNote ?? "",
+        slideCount: draft.slideCount ?? null,
         templateVars: {},
         caption: null,
         slides: [],

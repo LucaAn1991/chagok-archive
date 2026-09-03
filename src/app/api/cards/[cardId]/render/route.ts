@@ -66,7 +66,7 @@ export async function POST(
     card.photoUrls.length > 0
       ? "user_photo_preferred"
       : // 기획에서 고른 스톡은 이미 손에 있다 — 검색 키가 없어도 그 한 장은 쓸 수 있다 (09-01)
-        isStockConfigured() || card.stockPhoto
+        isStockConfigured() || card.stockPhotos?.length
         ? "stock_recommended"
         : "text_only";
 
@@ -82,7 +82,17 @@ export async function POST(
     */
     if (canBuildFromTemplate(card.styleId)) {
       const styleId = card.styleId;
-      const photos = await loadUserPhotos(card.photoUrls ?? []);
+      /*
+        **고른 추천 사진도 함께 넘긴다** (09-02).
+
+        지금까지는 올린 사진(`photoUrls`)만 시안에 들어가고, 기획에서 고른 스톡은
+        렌더러 경로에서만 쓰였다 — 사진을 골라도 시안 카드에는 안 나왔다.
+        폴백 사슬 순서(DESIGN §12)대로 **올린 사진을 앞에** 두고 스톡을 뒤에 붙인다.
+      */
+      const photos = await loadUserPhotos([
+        ...(card.photoUrls ?? []),
+        ...(card.stockPhotos ?? []).map((p) => p.imageUrl),
+      ]);
 
       /*
         **NDJSON 스트림으로 돌려준다** (09-02). 이 일은 3분쯤 걸리는데, 다 끝난 뒤에
@@ -111,6 +121,8 @@ export async function POST(
               // 올린 사진은 «그대로» 들어간다 — 다시 그리지 말라고 프롬프트가 못박는다
               photos,
               accent: user.brand?.accent ?? null,
+              // 기획 ⑤에서 정한 장수. 안 정했으면 null → 템플릿이 4~7장에서 고른다 (09-02)
+              slideCount: card.slideCount ?? null,
               onProgress: send,
             });
 
@@ -168,7 +180,8 @@ export async function POST(
       visualPreferences: user.visualPreferences ?? null, // 취향의 문구 톤 반영 (08-31)
       visualType,
       photoUrls: card.photoUrls ?? [], // 이미지 레이아웃에 순서대로 배정된다 (08-31)
-      chosenStock: card.stockPhoto ?? null, // 기획에서 고른 스톡 — 첫 이미지 자리 (09-01)
+      // 기획에서 고른 스톡의 첫 장 — 렌더러는 첫 이미지 자리에 한 장만 쓴다 (09-01)
+      chosenStock: card.stockPhotos?.[0] ?? null,
       templateId, // 주면 장수·순서가 고정된다 (08-31)
       styleId: card.styleId ?? null, // 분위기의 문구 규칙을 프롬프트에 얹는다 (09-02)
     });

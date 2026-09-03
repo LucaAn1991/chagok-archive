@@ -22,8 +22,14 @@ const SEARCH_URL = "https://api.pexels.com/v1/search";
 /** 카드뉴스는 정사각형(1080×1080)이라 세로로 긴 사진은 위아래가 잘린다 */
 const ORIENTATION = "landscape";
 
-/** 한 검색어에 여러 장을 받아 «같은 사진이 두 장 들어가는» 것을 피한다 */
-const PER_PAGE = 5;
+/**
+ * 한 검색어에 여러 장을 받아 «같은 사진이 두 장 들어가는» 것을 피한다.
+ *
+ * 09-02 — 5에서 12로 늘렸다. 기획 화면에서 사진을 **여러 장 고르게** 바뀌었는데,
+ * 다섯 장뿐이면 「마음에 드는 게 없다」가 되기 쉽다. 카드뉴스도 4~7장이라
+ * 고를 수 있는 폭이 그보다는 넓어야 한다.
+ */
+const PER_PAGE = 12;
 
 export function isStockConfigured(): boolean {
   return Boolean(process.env.PEXELS_API_KEY);

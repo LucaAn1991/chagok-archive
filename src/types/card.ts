@@ -54,8 +54,14 @@ export type Card = {
    * 남은 이미지 자리의 **첫 장**을 이걸로 채운다. 그 뒤는 슬라이드 내용에 맞춰
    * 검색한 스톡이 이어받는다 (`lib/ai/slides.ts`).
    */
-  stockPhoto: StockPick | null;
+  /** 기획에서 고른 스톡 사진들 (09-01 · 09-02에 여러 장으로). 안 골랐으면 빈 배열 */
+  stockPhotos: StockPick[];
   extraNote: string; // «이번에 꼭 넣을 내용» 자유 입력 (F13)
+  /**
+   * 카드 장수 (09-02). 기획 ⑤ 다듬기에서 정하면 채워지고, 안 정하면 null.
+   * null이면 템플릿이 알아서 4~7장을 고른다 (`lib/ai/sheet-copy.ts`).
+   */
+  slideCount: number | null;
   templateVars: Record<string, string>; // 기록형의 그날 값. plan.templateVarNames와 짝을 이룬다
 
   caption: Caption | null; // 캡션 생성(F7) 전에는 null
@@ -166,6 +172,14 @@ export type Slide = {
    * 「배지 · 큰 제목 · 부제 · 하단 영문」 네 자리를 복원할 방법이 없다.
    */
   sheetLines?: string[] | null;
+  /**
+   * 이 장에 실제로 넣은 사진 주소들 (09-02).
+   *
+   * 「이 장만 다시 만들기」가 **처음과 같은 사진**을 쓰게 하려고 남긴다. 배정은
+   * 클로드가 사진을 보고 정하는데(`lib/ai/photo-plan.ts`), 그 판단을 한 장 때문에
+   * 다시 돌릴 수는 없다. 결과만 적어두고 그대로 다시 쓴다.
+   */
+  sheetPhotoUrls?: string[] | null;
 };
 
 /**

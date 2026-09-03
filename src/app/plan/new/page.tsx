@@ -1,10 +1,10 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
-import { ArrowUp, Check, ChevronRight, Pencil, Plus } from "lucide-react";
+import { ArrowUp, Check, ChevronLeft, ChevronRight, Pencil, Plus, X } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/draft";
 import { addCustomAudience, loadCustomAudiences } from "@/lib/custom-audiences";
@@ -18,6 +18,7 @@ import {
   type PlanSummaryPatch,
 } from "@/components/PlanningSummaryPanel";
 import PlanPhotoPicker from "@/components/PlanPhotoPicker";
+import PlanDraftList, { type RefineTurn } from "@/components/PlanDraftList";
 import PageHeader from "@/components/PageHeader";
 import {
   CARD_STYLES,
@@ -27,13 +28,19 @@ import {
 } from "@/lib/render/card-styles";
 import { PREVIEW_VERSION, TEMPLATE_SHEETS } from "@/lib/render/template-sheets";
 import PlanTabs from "@/components/PlanTabs";
-import type { StockPick, StyleId } from "@/types";
+import type { DraftVariant, PlanDraft, StockPick, StyleId } from "@/types";
 
 /**
- * 새 기획 — AI 기획 대화 3단계 (F2 · IA 2.1, 08-27 원안 복원).
+ * 새 기획 — AI 기획 대화 (F2 · IA 2.1). **09-02에 3단계에서 6단계로 늘렸다.**
  *   ① 주제 확인 — 주제가 전혀 없을 때만. 후보 4개 제시 · 열린 질문 금지
- *   ② 대상·목적 선택 — 후보 멀티 선택 + 기타 입력. 안 고르면 AI가 알아서 정한다
- *   ③ 카드 생성 — [이대로 카드 만들기] → 배치 결과 확인
+ *   ② 대상 선택 — 후보 멀티 선택 + 기타 입력. 안 고르면 AI가 알아서 정한다
+ *   ③ 기획안 제시 — 대상마다 하나씩. **원래 confirm이 몰래 하던 일을 꺼냈다**
+ *   ④ 기획안 고르기 — 여러 개 고를 수 있다. 고른 것만 카드가 된다
+ *   ⑤ 다듬기 — 고른 것을 대화로 고친다 (내용·장수·제목·의도). **건너뛸 수 있다**
+ *   ⑥⑦⑧ 분위기 → 사진 → [이대로 카드 만들기] → 배치 결과 확인
+ *
+ * ③을 넣은 이유 — 예전에는 사용자가 자기가 뭘 받게 될지 **보지 못한 채** 결과를 받았다.
+ * 대상만 고르고 나면 곧바로 카드가 만들어져서, 마음에 안 들면 처음부터 다시였다.
  *
  * ?idea=  홈 「아이디어 말하기」에서 온 첫 문장 (①을 건너뛴다)
  * ?from=  지난 기획 상세 「이어서 기획하기」(F11) — 원 기획의 주제를 이어받는다
@@ -66,12 +73,14 @@ async function postJson(
   path: string,
   body: unknown,
   onText?: OnStreamText,
+  /** ④ 고른 기획안 저장은 PATCH다 — 그것 하나 때문에 헬퍼를 또 만들지 않는다 */
+  method: "POST" | "PATCH" = "POST",
 ): Promise<Record<string, unknown>> {
   const user = auth.currentUser;
   if (!user) throw new Error("로그인이 필요합니다.");
   const token = await user.getIdToken();
   const res = await fetch(path, {
-    method: "POST",
+    method,
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -207,13 +216,43 @@ function NewPlanScreen() {
   const [confirmError, setConfirmError] = useState(false);
 
   /*
+    ③④⑤ 기획안 (09-02).
+
+    ②가 끝나면 대상마다 기획안을 만들어 보여주고, 고른 것만 카드가 된다.
+    `draftsDone`이 true가 되어야 ⑥ 분위기·⑦ 사진·⑧ 확정으로 넘어간다 —
+    껍데기를 먼저 고르게 하면 무엇을 담을지 모르는 채로 옷부터 고르는 셈이 된다.
+  */
+  const [drafts, setDrafts] = useState<PlanDraft[]>([]);
+  const [draftsLoading, setDraftsLoading] = useState(false);
+  const [draftsError, setDraftsError] = useState<string | null>(null);
+  const [draftsSaving, setDraftsSaving] = useState(false);
+  const [draftsDone, setDraftsDone] = useState(false);
+  /** 지금 다듬고 있는 기획안. null이면 목록 */
+  const [refineIndex, setRefineIndex] = useState<number | null>(null);
+  /** 기획안별 다듬기 대화 — 목록으로 나갔다 와도 남아 있게 번호로 들고 있는다 */
+  const [refineTurns, setRefineTurns] = useState<Record<number, RefineTurn[]>>({});
+  const [refining, setRefining] = useState(false);
+  const [refineStream, setRefineStream] = useState<string | null>(null);
+  /*
+    ⑤ 다듬기 후보 — 기획안 번호별로 들고 있는다.
+    **한 번 받으면 다시 받지 않는다.** 목록으로 나갔다 들어올 때마다 새로 뽑으면
+    그때마다 몇 초가 들고, 아까 봤던 후보가 사라져서 «그거 뭐였지»가 된다.
+  */
+  const [variants, setVariants] = useState<Record<number, DraftVariant[]>>({});
+  const [variantsLoading, setVariantsLoading] = useState<number | null>(null);
+
+  /*
     사진 — 올린 사진은 기획에 저장되고, 카드 생성 때 주소를 물려준다 (08-31).
     추천(스톡) 칩은 기획안 박스의 3×2 그리드로 유지한다 — 09-01 병합 시 확정.
     실제 스톡 배정은 제작 단계에서 슬라이드 내용을 보고 다시 고른다 (`lib/ai/slides.ts`).
   */
   const [stockOptions, setStockOptions] = useState<StockPick[]>([]);
   const [stockLoading, setStockLoading] = useState(false);
-  const [selectedStock, setSelectedStock] = useState<StockPick | null>(null);
+  /*
+    고른 추천 사진들 (09-02 — 한 장에서 여러 장으로).
+    카드뉴스가 4~7장인데 사진이 하나뿐이면 같은 그림이 계속 나온다.
+  */
+  const [selectedStocks, setSelectedStocks] = useState<StockPick[]>([]);
   const [userPhotos, setUserPhotos] = useState<string[]>([]);
 
   // 입력창이 주인공 — 칩은 입력창을 채울 뿐, 전송은 사용자가 한다 (08-28)
@@ -323,9 +362,15 @@ function NewPlanScreen() {
    * 저장이 실패해도 화면은 막지 않는다 — 사진은 «있으면 쓰는» 재료다.
    */
   function pickStock(photo: StockPick) {
-    setSelectedStock(photo);
-    if (!planId) return;
-    void updateDoc(doc(db, "plans", planId), { stockPhoto: photo }).catch(() => {});
+    setSelectedStocks((prev) => {
+      const next = prev.some((p) => p.imageUrl === photo.imageUrl)
+        ? prev.filter((p) => p.imageUrl !== photo.imageUrl)
+        : [...prev, photo];
+      if (planId) {
+        void updateDoc(doc(db, "plans", planId), { stockPhotos: next }).catch(() => {});
+      }
+      return next;
+    });
   }
 
   /**
@@ -353,7 +398,7 @@ function NewPlanScreen() {
     렌더가 한 번 더 도는데, 사진을 올리거나 지울 때마다 그게 반복된다.
   */
   const recommendedStyle: StyleId =
-    userPhotos.length > 0 || selectedStock !== null ? "photo-frame" : DEFAULT_STYLE_ID;
+    userPhotos.length > 0 || selectedStocks.length > 0 ? "photo-frame" : DEFAULT_STYLE_ID;
   const effectiveStyle = styleId ?? recommendedStyle;
 
   /*
@@ -399,12 +444,19 @@ function NewPlanScreen() {
 
         const photos = data.photos ?? [];
         setStockOptions(photos);
-        // 첫 장을 미리 골라둔다. 사용자가 이미 고른 게 있으면 건드리지 않는다
+        /*
+          첫 장을 미리 골라둔다 — 「빈칸을 주지 않는다」(DESIGN §1).
+          사용자가 이미 고른 게 있으면 건드리지 않는다.
+
+          **한 장만 미리 고른다.** 여러 장 고를 수 있게 됐다고 전부 켜두면
+          «빼는 일»부터 시켜야 하고, 안 볼 사진까지 카드에 들어간다.
+        */
         if (photos[0]) {
-          setSelectedStock((prev) => {
-            if (prev) return prev;
-            void updateDoc(doc(db, "plans", planId), { stockPhoto: photos[0] }).catch(() => {});
-            return photos[0];
+          setSelectedStocks((prev) => {
+            if (prev.length > 0) return prev;
+            const next = [photos[0]];
+            void updateDoc(doc(db, "plans", planId), { stockPhotos: next }).catch(() => {});
+            return next;
           });
         }
       } catch {
@@ -629,6 +681,178 @@ function NewPlanScreen() {
     void runTurn({ kind: "selection", audiences, purposes: [] });
   }
 
+  /*
+    ②가 끝나면 곧바로 기획안을 만든다 (09-02).
+
+    사용자가 버튼을 한 번 더 누르게 하지 않는다 — 대상을 고른 순간 이미
+    «만들어달라»고 말한 것이고, 여기서 또 물으면 같은 대답을 두 번 시키는 셈이다.
+  */
+  useEffect(() => {
+    if (!ready || !planId || confirmedLock) return;
+    if (drafts.length > 0 || draftsLoading || draftsError) return;
+    void loadDrafts();
+    // loadDrafts는 planId만 보고 도는 함수라 의존성에 넣지 않는다 (매 렌더 새로 만들어진다)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, planId, confirmedLock, drafts.length, draftsLoading, draftsError]);
+
+  /**
+   * ③ 기획안 만들기 — ②가 끝나면 한 번 부른다.
+   *
+   * 서버가 멱등이라 두 번 들어와도 이미 만든 것을 그대로 돌려준다.
+   * 고르고 다듬은 것이 새로고침으로 날아가지 않는다.
+   */
+  async function loadDrafts() {
+    if (!planId) return;
+    setDraftsLoading(true);
+    setDraftsError(null);
+    try {
+      const data = await postJson(`/api/plans/${planId}/drafts`, {});
+      setDrafts((data.drafts as PlanDraft[]) ?? []);
+    } catch (e) {
+      setDraftsError(
+        e instanceof Error ? e.message : "기획안을 만들지 못했어요. 잠시 후 다시 시도해주세요.",
+      );
+    } finally {
+      setDraftsLoading(false);
+    }
+  }
+
+  /** ④ 넣고 빼기 — 저장은 「이 N개로 갈게요」에서 한 번만 한다 */
+  function toggleDraft(index: number) {
+    setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, chosen: !d.chosen } : d)));
+  }
+
+  /** ④ 확정 — 고른 것을 저장하고 ⑥으로 넘어간다 */
+  async function saveChosen() {
+    if (!planId || draftsSaving) return;
+    const chosen = drafts.flatMap((d, i) => (d.chosen ? [i] : []));
+    if (chosen.length === 0) return;
+    setDraftsSaving(true);
+    try {
+      const data = await postJson(`/api/plans/${planId}/drafts`, { chosen }, undefined, "PATCH");
+      setDrafts((data.drafts as PlanDraft[]) ?? drafts);
+      setDraftsDone(true);
+    } catch (e) {
+      setDraftsError(e instanceof Error ? e.message : "고른 내용을 저장하지 못했어요.");
+    } finally {
+      setDraftsSaving(false);
+    }
+  }
+
+  /**
+   * ⑤ 다듬기 화면을 열 때 후보를 받는다.
+   *
+   * **연 것만 받는다.** 기획안 셋을 만들었다고 셋 다 미리 뽑아두면, 열어보지도 않을
+   * 것에 시간과 비용이 든다.
+   */
+  async function openRefine(index: number) {
+    setRefineIndex(index);
+    if (variants[index] || !planId) return;
+
+    setVariantsLoading(index);
+    try {
+      const data = await postJson(`/api/plans/${planId}/drafts/${index}/variants`, {});
+      setVariants((prev) => ({ ...prev, [index]: (data.variants as DraftVariant[]) ?? [] }));
+    } catch {
+      /*
+        후보를 못 받아도 **다듬기는 된다.** 빈 배열을 넣어두면 화면이 자유 입력만
+        남기고 계속 간다 — 거들어주는 것이지 관문이 아니다.
+      */
+      setVariants((prev) => ({ ...prev, [index]: [] }));
+    } finally {
+      setVariantsLoading(null);
+    }
+  }
+
+  /**
+   * ⑤ 눌러서 고치기 — 후보나 장수를 그대로 넣는다. **AI를 부르지 않는다.**
+   *
+   * 대화로 고치는 것과 저장 경로가 같다(`refine`의 `apply`) — 갈라두면 언젠가
+   * 둘이 어긋난다.
+   */
+  async function applyToDraft(patch: Record<string, unknown>) {
+    if (!planId || refineIndex === null || refining) return;
+    const index = refineIndex;
+
+    setRefining(true);
+    try {
+      const data = await postJson(`/api/plans/${planId}/drafts/${index}/refine`, {
+        apply: patch,
+      });
+      const next = data.draft as PlanDraft | undefined;
+      if (next) setDrafts((prev) => prev.map((d, i) => (i === index ? next : d)));
+      setRefineTurns((prev) => ({
+        ...prev,
+        [index]: [
+          ...(prev[index] ?? []),
+          { role: "user", text: (data.said as string) ?? "" },
+          { role: "assistant", text: (data.reply as string) ?? "" },
+        ],
+      }));
+    } catch (e) {
+      setRefineTurns((prev) => ({
+        ...prev,
+        [index]: [
+          ...(prev[index] ?? []),
+          {
+            role: "assistant",
+            text: e instanceof Error ? e.message : "바꾸지 못했어요. 다시 눌러주세요.",
+          },
+        ],
+      }));
+    } finally {
+      setRefining(false);
+    }
+  }
+
+  /**
+   * ⑤ 다듬기 한 턴.
+   *
+   * 실패해도 **기획안을 건드리지 않는다** — 지금 있는 값이 그대로 남는다.
+   * 사용자 말풍선은 남겨두고 답만 실패 안내로 바꾼다. 무엇을 물었는지가 사라지면
+   * 다시 쓰라는 뜻이 되어버린다.
+   */
+  async function sendRefine(text: string) {
+    if (!planId || refineIndex === null || refining) return;
+    const index = refineIndex;
+
+    setRefining(true);
+    setRefineStream(null);
+    setRefineTurns((prev) => ({
+      ...prev,
+      [index]: [...(prev[index] ?? []), { role: "user", text }],
+    }));
+
+    try {
+      const data = await postJson(
+        `/api/plans/${planId}/drafts/${index}/refine`,
+        { message: text },
+        (full) => setRefineStream(full),
+      );
+      const reply = typeof data.reply === "string" ? data.reply : "";
+      const next = data.draft as PlanDraft | undefined;
+      if (next) setDrafts((prev) => prev.map((d, i) => (i === index ? next : d)));
+      setRefineTurns((prev) => ({
+        ...prev,
+        [index]: [...(prev[index] ?? []), { role: "assistant", text: reply }],
+      }));
+    } catch (e) {
+      setRefineTurns((prev) => ({
+        ...prev,
+        [index]: [
+          ...(prev[index] ?? []),
+          {
+            role: "assistant",
+            text: e instanceof Error ? e.message : "고치지 못했어요. 다시 말씀해주세요.",
+          },
+        ],
+      }));
+    } finally {
+      setRefining(false);
+      setRefineStream(null);
+    }
+  }
+
   /**
    * ③ 카드 생성 (F3) → 날짜 배치 (F4) → 배치 결과 화면.
    * confirm은 멱등이라 배치 단계에서 실패해도 [다시 시도]가 안전하다.
@@ -666,7 +890,7 @@ function NewPlanScreen() {
     photos: {
       stockOptions,
       stockLoading,
-      selectedStockUrl: selectedStock?.imageUrl ?? null,
+      selectedStockUrls: selectedStocks.map((p) => p.imageUrl),
       userPhotos,
       onSelectStock: pickStock,
       onAddUserPhotos: uploadPhotos,
@@ -728,7 +952,12 @@ function NewPlanScreen() {
               */}
               <div
                 className={[
-                  "flex flex-col gap-4 [scrollbar-gutter:stable] lg:min-h-0 lg:flex-1 lg:overflow-y-auto",
+                  /*
+                    `overflow-x-hidden`을 못박는다 (09-02). `overflow-y: auto`만 주면
+                    CSS가 가로도 auto로 계산해서, 안쪽 템플릿 줄을 가로로 밀 때
+                    **대화 칸 전체가 같이 옆으로 움직였다.**
+                  */
+                  "flex flex-col gap-4 overflow-x-hidden [scrollbar-gutter:stable] lg:min-h-0 lg:flex-1 lg:overflow-y-auto",
                   messages.some((m) => m.role === "user") ? "" : "lg:justify-center",
                 ].join(" ")}
               >
@@ -798,11 +1027,70 @@ function NewPlanScreen() {
                 )}
 
                 {/*
-                  ③ 분위기 고르기 (09-02) — 대상이 정해진 뒤에 나온다.
-                  주제·대상이 정해지기 전에 껍데기부터 고르게 하면 순서가 뒤집힌다.
+                  ③④⑤ 기획안 — 만들고 · 고르고 · 다듬는다 (09-02).
+                  여기를 지나야 분위기·사진으로 넘어간다.
                 */}
-                {ready && !confirmedLock && (
-                  <StylePicker selected={effectiveStyle} onPick={pickStyle} />
+                {ready && !confirmedLock && !draftsDone && (
+                  <PlanDraftList
+                    drafts={drafts}
+                    loading={draftsLoading}
+                    error={draftsError}
+                    refining={refining}
+                    refineIndex={refineIndex}
+                    refineTurns={refineIndex === null ? [] : (refineTurns[refineIndex] ?? [])}
+                    streamingText={refineStream}
+                    onRetryLoad={() => void loadDrafts()}
+                    onToggle={toggleDraft}
+                    onOpenRefine={(i) => void openRefine(i)}
+                    onCloseRefine={() => setRefineIndex(null)}
+                    onSendRefine={(t) => void sendRefine(t)}
+                    onNext={() => void saveChosen()}
+                    saving={draftsSaving}
+                    variants={refineIndex === null ? [] : (variants[refineIndex] ?? [])}
+                    variantsLoading={refineIndex !== null && variantsLoading === refineIndex}
+                    onApplyVariant={(v) =>
+                      void applyToDraft({
+                        angle: v.angle,
+                        title: v.title,
+                        shortTitle: v.shortTitle,
+                        intent: v.intent,
+                      })
+                    }
+                    onApplySlideCount={(n) => void applyToDraft({ slideCount: n })}
+                  />
+                )}
+
+                {/*
+                  ⑥ 분위기 고르기 (09-02) — **기획안이 정해진 뒤에** 나온다.
+                  무엇을 담을지 모르는 채로 껍데기부터 고르면 순서가 뒤집힌다.
+                */}
+                {ready && !confirmedLock && draftsDone && (
+                  <>
+                    {/*
+                      돌아갈 길을 남긴다 — 분위기를 고르다가 «아까 그 기획안 뭐였지»가
+                      생기는데, 길이 없으면 처음부터 다시 하게 된다.
+                    */}
+                    <div className="flex items-center justify-between gap-3 rounded-md bg-surface-muted px-3 py-2">
+                      <p className="min-w-0 truncate text-caption text-sub">
+                        기획안 {drafts.filter((d) => d.chosen).length}개 ·{" "}
+                        {drafts
+                          .filter((d) => d.chosen)
+                          .map((d) => d.audience)
+                          .join(" · ")}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDraftsDone(false);
+                          setRefineIndex(null);
+                        }}
+                        className="shrink-0 text-caption font-semibold text-berry-dark underline underline-offset-2"
+                      >
+                        다시 고르기
+                      </button>
+                    </div>
+                    <StylePicker selected={effectiveStyle} onPick={pickStyle} />
+                  </>
                 )}
 
                 {/* 만들어지는 중인 답 — 다 오면 위 목록의 진짜 말풍선이 자리를 넘겨받는다 */}
@@ -846,7 +1134,8 @@ function NewPlanScreen() {
 
             {/* 우 — 기획안 박스: 주제·대상 + 사진 그리드 + 버튼 전부 (§2).
                 sticky·자체 스크롤 — 왼쪽 스크롤에 따라 움직이지 않는다 */}
-            {ready && (
+            {/* ⑦⑧ 사진·확정 — 기획안이 정해진 뒤에 (09-02). 그 전에는 왼쪽에 집중한다 */}
+            {ready && draftsDone && (
               <aside className="min-h-0 lg:h-full lg:w-[420px] lg:flex-none">
                 <div className="lg:sticky lg:top-0 lg:h-full">
                   <PlanBox
@@ -857,6 +1146,11 @@ function NewPlanScreen() {
                     confirming={confirming}
                     confirmError={confirmError}
                     saving={sending}
+                    chosenDrafts={drafts.filter((d) => d.chosen)}
+                    onEditDrafts={() => {
+                      setDraftsDone(false);
+                      setRefineIndex(null);
+                    }}
                   />
                 </div>
               </aside>
@@ -903,10 +1197,23 @@ function PlanBox({
   confirming,
   confirmError,
   saving,
+  chosenDrafts,
+  onEditDrafts,
 }: {
   summary: PlanSummary;
   photos: PlanPhotos;
   onSave: (patch: PlanSummaryPatch) => void;
+  /**
+   * ④에서 고른 기획안 (09-02).
+   *
+   * **여기에 ②의 대상을 그대로 보여주면 안 된다.** 대상을 넷 고르고 기획안은 둘만
+   * 골랐는데 박스가 넷을 적고 있어서, 만들어질 카드와 화면이 어긋났다.
+   * (실제로 「선택하지 않은 기획안이 나온다」는 말이 나온 자리다 — 카드는 맞게
+   * 나오는데 박스가 틀렸다.)
+   */
+  chosenDrafts: PlanDraft[];
+  /** 기획안을 고치러 ④로 돌아간다 */
+  onEditDrafts: () => void;
   onConfirm: () => void;
   confirming: boolean;
   confirmError: boolean;
@@ -916,6 +1223,7 @@ function PlanBox({
   const [editing, setEditing] = useState(false);
   const [topicDraft, setTopicDraft] = useState("");
   const [audDraft, setAudDraft] = useState("");
+  const hasDrafts = chosenDrafts.length > 0;
 
   function startEdit() {
     setTopicDraft(summary.topic);
@@ -983,11 +1291,34 @@ function PlanBox({
             {/* 라벨 없이 값만 — 읽으면 무엇인지 안다 (08-31 §2) */}
             <p className="truncate text-body-l font-bold text-ink">{summary.topic}</p>
             <p className="mt-0.5 truncate text-caption text-sub">
-              {summary.audiences.join(" · ")}에게
+              {/* 만들어질 것만 적는다 — ②의 대상이 아니라 ④에서 고른 기획안이다 (09-02) */}
+              {hasDrafts
+                ? `카드 ${chosenDrafts.length}장 · ${chosenDrafts.map((d) => d.audience).join(" · ")}`
+                : `${summary.audiences.join(" · ")}에게`}
             </p>
           </div>
         )}
-        {!editing && (
+
+        {/*
+          기획안이 있으면 **여기서 고치지 않고 ④로 보낸다** (09-02).
+
+          이 자리의 「수정」은 주제·대상을 바꾸는데, 기획안은 이미 그 값으로 만들어진
+          뒤라 따라가지 않는다. 대상을 「러너」로 바꿔도 기획안 제목은 옛 대상 그대로다.
+          고칠 곳이 따로 있으면 그리로 보내는 편이 맞다.
+        */}
+        {!editing && hasDrafts && (
+          <button
+            type="button"
+            onClick={onEditDrafts}
+            className="flex h-11 shrink-0 items-center gap-1 rounded-md px-3 text-body font-semibold
+                       text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
+          >
+            <Pencil size={16} aria-hidden />
+            기획안 고치기
+          </button>
+        )}
+
+        {!editing && !hasDrafts && (
           /*
             아이콘만 두면 «눌러도 되는 것»인지 모른다 (09-02).
             글자를 붙이고 높이를 44로 올렸다 — DESIGN.md §5가 아이콘 단독 클릭 영역을
@@ -1315,7 +1646,12 @@ function ProposalPicker({
         onClick={onSubmit}
         className="mt-5 flex h-11 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
       >
-        {picked.length === 0 ? "차곡이 정해줄게요" : `카드 ${picked.length}장 만들기`}
+        {/*
+          09-02 — 「카드 N장 만들기」였는데, 이제 여기서 카드가 나오지 않는다.
+          기획안을 먼저 보여주고 고르게 하는 단계(③④⑤)가 사이에 생겼다.
+          버튼이 약속한 것과 다음 화면이 어긋나면 그게 곧 «속았다»는 인상이 된다.
+        */}
+        {picked.length === 0 ? "차곡이 정해줄게요" : `이 ${picked.length}명에게 어떻게 말할지 보기`}
       </button>
     </div>
   );
@@ -1418,12 +1754,18 @@ function ChatInputBar({
 }
 
 /**
- * ③ 분위기 고르기 (09-02) — 6종 중 하나.
+ * ⑥ 템플릿 고르기 (09-02) — 6종 중 하나.
+ *
+ * **「분위기」에서 「템플릿」으로 이름을 바꿨다 (09-02).** 원래 「템플릿」은 제작 결과
+ * 화면에서 «몇 장을 어떤 순서로»를 고르는 다른 것이었는데, 그 선택을 없애면서
+ * 그 말이 비었다. 사용자가 여기서 고르는 것은 실제로 시안 한 벌이므로
+ * 「템플릿」이 맞고, 「분위기」는 무엇을 고르는지 짐작이 안 된다는 말이 있었다.
+ * 코드의 `styleId`·`CARD_STYLES`는 그대로 둔다 — 화면 12곳이 함께 걸린다.
  *
  * **미리보기는 실제 렌더러가 그린 그림이다** (`/api/styles/[id]/preview`).
  * 시안 이미지를 쓰면 고를 때 본 것과 나오는 결과가 달라진다.
  *
- * 그림 에셋이 아직 없는 분위기는 **고를 수 없게 막고 이유를 적는다** —
+ * 그림 에셋이 아직 없는 템플릿은 **고를 수 없게 막고 이유를 적는다** —
  * 목록에서 아예 빼면 「왜 6개라더니 3개지」가 되고, 그냥 고르게 두면
  * 시안과 다른 결과를 받게 된다.
  */
@@ -1435,32 +1777,67 @@ function StylePicker({
   onPick: (id: StyleId) => void;
 }) {
   /*
-    펼쳐서 나머지 장까지 보고 있는 분위기 (09-02).
-    표지만으로는 「이 템플릿이 내 이야기를 담을 수 있나」를 알 수 없다 —
-    목차·비교·체크리스트 같은 장이 있는지가 고르는 데 실제로 중요하다.
-    한 번에 하나만 펼친다. 여섯 개를 다 펼치면 화면이 사진 벽이 된다.
+    자세히 보고 있는 템플릿 (09-02).
+
+    **누르면 곧바로 정해지지 않고 먼저 크게 보여준다.** 표지 한 장만으로는
+    「이 템플릿이 내 이야기를 담을 수 있나」를 알 수 없다 — 목차·비교·체크리스트
+    같은 장이 있는지가 고르는 데 실제로 중요하다. 작은 칸에 여섯 장을 늘어놓는
+    대신 한 장씩 크게 넘겨 본다.
   */
-  const [opened, setOpened] = useState<StyleId | null>(null);
+  const [detail, setDetail] = useState<StyleId | null>(null);
+
+  /*
+    **순서를 섞는다** (09-02). 고정 순서로 두면 맨 앞 한둘만 눌린다 —
+    뒤에 있는 템플릿은 있는 줄도 모르고 지나간다. 가로로 넘겨 보게 만든 것도 같은 이유다.
+
+    `useState` 초깃값으로 한 번만 섞는다. 그릴 때마다 섞으면 고르려고 손을 뻗는 사이에
+    자리가 바뀐다. 이 화면은 ⑥에서야 나타나므로 서버에서 그려질 일이 없어
+    («기획안을 고른 뒤»는 브라우저에서 정해진다) 서버·브라우저 순서가 어긋날 걱정도 없다.
+
+    쓸 수 없는 템플릿(에셋 준비 중)은 섞지 않고 뒤에 붙인다 — 못 고르는 것이 앞줄에
+    끼어 있으면 넘겨 보는 흐름이 끊긴다.
+  */
+  const [order] = useState<StyleId[]>(() => {
+    const ready = STYLE_ORDER.filter((id) => isReady(CARD_STYLES[id]));
+    const rest = STYLE_ORDER.filter((id) => !isReady(CARD_STYLES[id]));
+    for (let i = ready.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [ready[i], ready[j]] = [ready[j], ready[i]];
+    }
+    return [...ready, ...rest];
+  });
 
   return (
-    <section aria-label="분위기 고르기" className="flex flex-col gap-3">
-      <p className="text-body text-ink">어떤 분위기로 만들까요?</p>
+    <section aria-label="템플릿 고르기" className="flex flex-col gap-3">
+      <p className="text-body text-ink">어떤 템플릿으로 만들까요?</p>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {STYLE_ORDER.map((id) => {
+      {/*
+        **가로로 넘겨 본다** (09-02). 세로로 깔면 여섯 장이 화면을 통째로 먹어서,
+        아래 사진·[이대로 카드 만들기]까지 스크롤이 한참이다. 오른쪽 칸이 반쯤 잘려
+        보이는 것이 «더 있다»는 신호가 된다.
+
+        **음수 여백으로 화면 끝까지 흘려보내지 않는다.** 바깥 대화 칸이 `overflow-y: auto`라
+        (그러면 CSS가 가로도 auto로 계산한다) 여백 밖으로 내민 만큼이 잘려서, 첫 칸의
+        왼쪽이 뭉텅 사라졌다. 칸 안에서 얌전히 흐르게 둔다.
+      */}
+      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-1">
+        {order.map((id) => {
           const style = CARD_STYLES[id];
           const ready = isReady(style);
           const on = selected === id;
+          const count = TEMPLATE_SHEETS[id]?.length ?? 0;
 
           return (
             <button
               key={id}
               type="button"
               disabled={!ready}
-              onClick={() => onPick(id)}
+              onClick={() => setDetail(id)}
               aria-pressed={on}
+              aria-label={`${style.label} 템플릿 자세히 보기${on ? " (지금 고른 것)" : ""}`}
               className={[
-                "flex flex-col overflow-hidden rounded-lg border text-left transition-colors duration-200",
+                // 폭을 못박아 마지막 칸이 반쯤 잘리게 한다 — 그게 «더 있다»는 신호다
+                "relative flex w-[168px] shrink-0 snap-start flex-col overflow-hidden rounded-lg border text-left transition-colors duration-200 sm:w-[196px]",
                 on ? "border-2 border-berry" : "border-line",
                 ready ? "bg-surface hover:border-berry" : "cursor-not-allowed bg-surface-muted",
               ].join(" ")}
@@ -1480,16 +1857,27 @@ function StylePicker({
                   ready ? "" : "opacity-40",
                 ].join(" ")}
               />
+
+              {/* 고른 것에 표시를 남긴다 — 테두리만으로는 좁은 화면에서 잘 안 보인다 */}
+              {on && (
+                <span className="absolute right-2 top-2 flex items-center gap-1 rounded-pill bg-berry px-2 py-1 text-label font-semibold text-white">
+                  <Check size={11} strokeWidth={3} aria-hidden />
+                  고름
+                </span>
+              )}
+
               <span className="flex flex-col gap-0.5 p-3">
                 <span className="text-body font-semibold text-ink">{style.label}</span>
                 <span className="text-caption text-sub">
                   {ready ? style.hint : "준비 중이에요"}
                 </span>
                 {/* 왜 못 고르는지 적는다 — 「준비 중」만 보이면 언제 되는지 알 수 없다 */}
-                {!ready && (
+                {!ready ? (
                   <span className="text-caption text-sub">
                     {style.missing.map((m) => m.what).join(" · ")}이 필요해요
                   </span>
+                ) : (
+                  <span className="text-label text-sub">{count}장 · 눌러서 자세히 보기</span>
                 )}
               </span>
             </button>
@@ -1497,63 +1885,170 @@ function StylePicker({
         })}
       </div>
 
-      {/*
-        고른 분위기의 나머지 장 — 버튼 안에 넣지 않고 그리드 아래 한 줄로 편다.
-        버튼 안에 버튼을 넣으면 눌렀을 때 분위기까지 같이 골라진다.
-      */}
-      {selected && (
-        <SheetPeek
-          styleId={selected}
-          open={opened === selected}
-          onToggle={() => setOpened((v) => (v === selected ? null : selected))}
+      {detail && (
+        <TemplateModal
+          styleId={detail}
+          selected={selected === detail}
+          onPick={() => {
+            onPick(detail);
+            setDetail(null);
+          }}
+          onClose={() => setDetail(null)}
         />
       )}
     </section>
   );
 }
 
-/** 고른 분위기가 몇 장짜리인지, 각 장이 무슨 역할인지 보여준다 (09-02) */
-function SheetPeek({
+/**
+ * 템플릿 자세히 보기 (09-02) — 한 장씩 크게, ‹ ›로 넘긴다.
+ *
+ * 작은 칸에 여섯 장을 늘어놓던 것을 대신한다. 카드뉴스는 한 장이 1080×1080이라
+ * 격자에 넣으면 글자가 뭉개져서 «무슨 장인지»를 알 수 없었다.
+ *
+ * 화면을 덮는 창이므로 빠져나갈 길을 셋 둔다 — Esc · 바깥 누르기 · 닫기 버튼.
+ * 하나라도 빠지면 갇혔다고 느끼는 사람이 생긴다.
+ */
+function TemplateModal({
   styleId,
-  open,
-  onToggle,
+  selected,
+  onPick,
+  onClose,
 }: {
   styleId: StyleId;
-  open: boolean;
-  onToggle: () => void;
+  selected: boolean;
+  onPick: () => void;
+  onClose: () => void;
 }) {
   const sheets = TEMPLATE_SHEETS[styleId] ?? [];
-  if (sheets.length === 0) return null;
+  const [at, setAt] = useState(0);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  const total = sheets.length;
+  // 끝에서 처음으로 돈다 — 여섯 장뿐이라 막다른 끝이 있는 편이 더 답답하다
+  const go = useCallback(
+    (step: number) => setAt((v) => (total === 0 ? 0 : (v + step + total) % total)),
+    [total],
+  );
+
+  useEffect(() => {
+    // 창이 열리면 여기로 초점을 옮긴다 — 그래야 화살표·Esc가 바로 먹는다
+    boxRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft") go(-1);
+      else if (e.key === "ArrowRight") go(1);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [go, onClose]);
+
+  if (total === 0) return null;
+  const sheet = sheets[at];
 
   return (
-    <div className="flex flex-col gap-3">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="self-start text-body text-sub underline underline-offset-4 hover:text-ink"
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${CARD_STYLES[styleId].label} 템플릿 자세히 보기`}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
+      onClick={onClose}
+    >
+      <div
+        ref={boxRef}
+        tabIndex={-1}
+        data-focus-ring="none"
+        /* 바깥을 누르면 닫히는데, 안쪽 클릭까지 올라가면 그림을 눌러도 닫힌다 */
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-full w-full max-w-[520px] flex-col overflow-y-auto rounded-lg bg-surface p-4 outline-none"
       >
-        {open ? "접기" : `${CARD_STYLES[styleId].label} ${sheets.length}장 모두 보기`}
-      </button>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-body font-bold text-ink">{CARD_STYLES[styleId].label}</p>
+            <p className="mt-0.5 text-caption text-sub">{CARD_STYLES[styleId].hint}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="닫기"
+            className="flex size-9 shrink-0 items-center justify-center rounded-md border border-line bg-surface text-ink transition-colors duration-200 hover:bg-surface-muted"
+          >
+            <X size={16} aria-hidden />
+          </button>
+        </div>
 
-      {open && (
-        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
-          {sheets.map((sheet, i) => (
-            <figure key={sheet.file} className="flex flex-col gap-1">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`/api/styles/${styleId}/preview?sheet=${i + 1}&v=${PREVIEW_VERSION}`}
-                alt=""
-                width={240}
-                height={240}
-                className="aspect-square w-full rounded-md border border-line bg-surface-muted object-cover"
-              />
-              <figcaption className="text-caption text-sub">
-                {i + 1}. {sheet.role}
-              </figcaption>
-            </figure>
+        <div className="relative mt-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/styles/${styleId}/preview?sheet=${at + 1}&v=${PREVIEW_VERSION}`}
+            alt={`${at + 1}번째 장 — ${sheet.role}`}
+            width={1080}
+            height={1080}
+            className="aspect-square w-full rounded-md border border-line bg-surface-muted object-contain"
+          />
+
+          {/*
+            넘기는 버튼은 그림 **위에** 얹는다. 아래로 내리면 그림이 클수록
+            손이 멀어지고, 넘길 때마다 시선이 위아래로 왕복한다.
+          */}
+          <button
+            type="button"
+            onClick={() => go(-1)}
+            aria-label="앞 장"
+            className="absolute left-2 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-pill bg-surface/90 text-ink shadow-sm transition-colors duration-200 hover:bg-surface"
+          >
+            <ChevronLeft size={18} aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={() => go(1)}
+            aria-label="다음 장"
+            className="absolute right-2 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-pill bg-surface/90 text-ink shadow-sm transition-colors duration-200 hover:bg-surface"
+          >
+            <ChevronRight size={18} aria-hidden />
+          </button>
+        </div>
+
+        {/* 지금 몇 번째 장이고 무슨 장인지 — 그림만으로는 역할을 못 읽는 장이 있다 */}
+        <p aria-live="polite" className="mt-3 text-center text-caption text-sub">
+          <b className="text-ink">
+            {at + 1} / {total}
+          </b>{" "}
+          · {sheet.role}
+        </p>
+
+        {/* 장 건너뛰기 — ‹ ›로만 다니면 6장 중 5장을 보려고 네 번 눌러야 한다 */}
+        <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+          {sheets.map((sh, i) => (
+            <button
+              key={sh.file}
+              type="button"
+              onClick={() => setAt(i)}
+              aria-label={`${i + 1}번째 장 — ${sh.role}`}
+              aria-current={i === at}
+              className={[
+                "size-8 rounded-md border text-label font-semibold transition-colors duration-200",
+                i === at
+                  ? "border-berry bg-berry text-white"
+                  : "border-line bg-surface text-sub hover:bg-surface-muted",
+              ].join(" ")}
+            >
+              {i + 1}
+            </button>
           ))}
         </div>
-      )}
+
+        <button
+          type="button"
+          onClick={onPick}
+          className="mt-4 flex h-12 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+        >
+          {selected ? "이 템플릿으로 계속하기" : "이 템플릿으로 만들기"}
+        </button>
+      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { getUidFromRequest } from "@/lib/api/auth";
-import { canBuildFromTemplate } from "@/lib/imagegen/build-sheets";
+import { canBuildFromTemplate, photosForSheet } from "@/lib/imagegen/build-sheets";
 import { generateSheet } from "@/lib/imagegen";
 import { storeSlideImage } from "@/lib/imagegen/store";
 import type { Card, Slide, User } from "@/types";
@@ -75,7 +75,26 @@ export async function POST(
       styleId: card.styleId,
       index: sheetIndex,
       lines,
-      photos: await loadUserPhotos(card.photoUrls ?? []),
+      /*
+        **처음 만들 때와 같은 사진을 준다** (09-02). 배정이 순서로 정해지므로
+        여기서도 같은 규칙을 써야 다시 만든 장만 딴 사진이 되지 않는다.
+      */
+      /*
+        **처음 만들 때 넣었던 그 사진을 그대로 쓴다** (09-02).
+
+        배정은 클로드가 사진을 보고 정하는데(`lib/ai/photo-plan.ts`), 한 장을 다시
+        만들자고 그 판단을 다시 돌릴 수는 없다. 만들 때 `sheetPhotoUrls`에 적어둔
+        결과를 그대로 읽는다. 그 기록이 없는 옛 카드는 순서대로 돌려 배정한다.
+      */
+      photos: slide.sheetPhotoUrls?.length
+        ? await loadUserPhotos(slide.sheetPhotoUrls)
+        : photosForSheet(
+            await loadUserPhotos([
+              ...(card.photoUrls ?? []),
+              ...(card.stockPhotos ?? []).map((p) => p.imageUrl),
+            ]),
+            index,
+          ),
       accent: user?.brand?.accent ?? null,
     });
 
@@ -109,6 +128,7 @@ export async function POST(
       generatedUrl: stored.url,
       sheetIndex,
       sheetLines: lines,
+      sheetPhotoUrls: slide.sheetPhotoUrls ?? null,
     };
     // 배열 통째로 쓴다 — Firestore는 배열 한 칸만 고치지 못한다
     const slides = card.slides.map((s) => (s.order === index ? next : s));

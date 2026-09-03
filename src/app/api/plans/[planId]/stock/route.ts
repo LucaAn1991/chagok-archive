@@ -19,8 +19,13 @@ import type { Plan } from "@/types";
  * 화면은 빈 목록을 받으면 「내 사진」 올리기만 보여주면 된다.
  */
 
-/** 그리드가 3×2라 「내 사진」 칸을 빼면 다섯 장이 들어간다 */
-const MAX_CANDIDATES = 5;
+/**
+ * 09-02 — 5장에서 12장으로 늘렸다.
+ *
+ * 카드뉴스가 4~7장인데 고를 수 있는 사진이 다섯이면 «마음에 드는 게 없다»가 되기 쉽고,
+ * 여러 장을 고르게 바꾸면서 더 필요해졌다. 그리드는 스크롤되므로 칸은 늘어도 된다.
+ */
+const MAX_CANDIDATES = 12;
 
 export async function GET(
   req: NextRequest,

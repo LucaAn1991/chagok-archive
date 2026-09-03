@@ -45,6 +45,46 @@ export type CardDraft = {
 };
 
 /**
+ * ⑤ 다듬기 한 턴 (09-02).
+ *
+ * ③에서 만든 기획안 하나를 사용자와 주고받으며 고친다. 고칠 수 있는 것은 넷:
+ * **세부 내용 · 카드 장수 · 제목 · 기획의도.** 말투와 피할 표현은 여기서 다루지 않는다 —
+ * 그건 기획 하나가 아니라 계정 전체의 성격이라 설정에 있다.
+ */
+export type RefineDraftInput = {
+  topic: string;
+  /** 지금까지의 기획안 — 사용자가 고쳐온 결과가 누적돼 있다 */
+  draft: {
+    audience: string;
+    title: string;
+    shortTitle: string;
+    intent: string;
+    extraNote: string;
+    slideCount: number | null;
+  };
+  /** 이 기획안에 대해 지금까지 주고받은 말 (이 기획안 것만) */
+  history: { role: "user" | "assistant"; text: string }[];
+  /** 사용자가 방금 한 말 */
+  message: string;
+};
+
+export type { DraftVariant } from "../../types/plan";
+import type { DraftVariant } from "../../types/plan";
+
+export type RefineDraftResult = {
+  /** 말풍선에 들어갈 답 */
+  reply: string;
+  /** 고쳐진 기획안. 안 바뀐 값은 들어온 값 그대로 돌아온다 */
+  draft: {
+    title: string;
+    shortTitle: string;
+    intent: string;
+    extraNote: string;
+    slideCount: number | null;
+  };
+};
+
+/**
  * 답이 만들어지는 동안 말풍선에 글자를 흘려보내는 콜백.
  *
  * 실측(08-31): 전체 응답은 11초가 걸리는데 **첫 글자는 1.2초**에 온다.
@@ -81,4 +121,25 @@ export type PlanningAI = {
     purposes: string[];
     intent: string; // plan 수준 기획의도 — 참고 맥락. 카드의 기획의도는 대상별로 만든다
   }): Promise<CardDraft>;
+
+  /**
+   * ⑤ 기획안 다듬기 — 고른 기획안 하나를 대화로 고친다 (09-02).
+   *
+   * **건너뛸 수 있는 단계다.** 대상을 셋 고르면 다듬기도 세 번이라, 매번 강제하면
+   * 그 자리가 이탈 구간이 된다. 안 부르면 ③에서 만든 값이 그대로 카드가 된다.
+   */
+  refineDraft(input: RefineDraftInput, onText?: OnText): Promise<RefineDraftResult>;
+
+  /**
+   * ⑤ 다듬기 후보 — 같은 기획안을 다른 각도로 2~3개 다시 잡는다 (09-02).
+   *
+   * 다듬기 화면을 열 때 한 번만 부른다. 열지 않은 기획안에는 부르지 않는다 —
+   * 셋을 만들면 셋 다 후보를 뽑는 셈이라, 쓰지도 않을 값에 시간과 비용이 든다.
+   */
+  draftVariants(input: {
+    topic: string;
+    audience: string;
+    title: string;
+    intent: string;
+  }): Promise<DraftVariant[]>;
 };

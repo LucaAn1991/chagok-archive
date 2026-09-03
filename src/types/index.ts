@@ -5,7 +5,7 @@
  * (CLAUDE.md 「우선순위 및 충돌 처리」).
  */
 export type { User, ToneKey, StyleAttributes, Brand, FontId } from "./user";
-export type { Plan, PlanType, PlanStatus, PlanMessage } from "./plan";
+export type { Plan, PlanDraft, DraftVariant, PlanType, PlanStatus, PlanMessage } from "./plan";
 export type {
   Card,
   CardStatus,

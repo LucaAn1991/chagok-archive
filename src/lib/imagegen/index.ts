@@ -108,6 +108,12 @@ function buildPrompt(req: SheetRequest, sheet: TemplateSheet, problems: string[]
     parts.push(
       "",
       "Place the user's photo(s) into the photo frame(s) of the design, cropped to fit the frame shape.",
+      /*
+        **순서를 못박는다** (09-02). 부르는 쪽이 장마다 첫 사진을 한 칸씩 밀어 보내는데
+        (`photosForSheet`), 모델이 그중 아무거나 고르면 그 배정이 헛수고가 된다.
+      */
+      "Use them in the order given: the first user photo goes in the main (largest) frame.",
+      "If the design has fewer frames than photos, use only the first ones and ignore the rest.",
       "**Do not redraw, restyle or reinterpret the user's photos — they must remain the same photographs.**",
       "Cropping and resizing to fit the frame is fine; changing what is in the photo is not.",
     );

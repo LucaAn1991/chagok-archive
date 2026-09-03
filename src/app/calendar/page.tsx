@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -15,7 +15,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import AppShell from "@/components/AppShell";
 import CardTile from "@/components/CardTile";
@@ -181,6 +181,21 @@ function CalendarView({ uid }: { uid: string }) {
   const [anchor, setAnchor] = useState<string>(todayKey);
   const [state, setState] = useState<ViewState>({ phase: "loading" });
   const [selectedDate, setSelectedDate] = useState<string>(todayKey);
+  /*
+    그 날 상세를 띄울지 (09-02 — 오른쪽 패널을 모달로 옮겼다).
+
+    패널이 있던 자리는 1200 이상에서만 나오고 그보다 좁으면 아래 리스트라,
+    같은 화면이 폭에 따라 다르게 동작했다. 게다가 펼쳐진 주 칸과 패널이 같은
+    제목·상태를 **두 번** 보여줬다. 모달로 옮겨 한 군데로 모은다.
+  */
+  const [dayOpen, setDayOpen] = useState(false);
+  /*
+    고른 카드 (09-03). 날짜만 강조하면 그 날에 카드가 둘일 때
+    «둘 중 어느 것을 눌렀는지»가 사라진다. 달력 칸과 모달 양쪽에서 같은 것을 짚는다.
+  */
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  /* 버리기 확인 (09-03) — 되돌릴 수 없으므로 한 번 묻는다 (놓친 카드 화면과 같은 방식) */
+  const [discardTarget, setDiscardTarget] = useState<Card | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -192,7 +207,6 @@ function CalendarView({ uid }: { uid: string }) {
   // 온보딩에서 고른 업로드 요일 (월=0…일=6) — 쉬는 날/채울 날 구분·목표 개수에 쓴다 (08-31)
   const [uploadDays, setUploadDays] = useState<number[] | null>(null);
   // [실험] 아코디언 — 기본은 순수 월간. «주 펼치기»를 눌러야 그 주만 보드로 확장 (주 시작일 키)
-  const [expandedWeekKey, setExpandedWeekKey] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -269,14 +283,19 @@ function CalendarView({ uid }: { uid: string }) {
     const r = rangeFor(view, nextAnchor);
     setAnchor(nextAnchor);
     setSelectedDate(todayKey >= r.start && todayKey <= r.end ? todayKey : r.start);
-    setExpandedWeekKey(null); // 월·주 이동 시 기본(순수 월간)으로
+    setDayOpen(false); // 달을 옮기면 옛 날짜 창을 띄워둘 이유가 없다
+    setSelectedCardId(null);
     setState({ phase: "loading" });
   }
 
   function goToday() {
     setSelectedDate(todayKey);
-    // 오늘로 점프하면서 그 주를 바로 펼친다 — 오늘 할 일이 목적이므로 (09-01)
-    setExpandedWeekKey(weekDates(todayKey)[0]);
+    /*
+      **오늘 창을 바로 열지는 않는다** (09-02). 예전에는 그 주를 펼쳤는데
+      (「오늘 할 일이 목적」), 아코디언을 없애면서 그 자리가 사라졌다.
+      창을 자동으로 띄우면 「오늘」이 «오늘로 이동»이 아니라 «오늘을 연다»가 되어
+      달을 훑다가 위치만 잡고 싶을 때 매번 닫아야 한다.
+    */
     if (anchor !== todayKey) {
       setAnchor(todayKey);
       setState({ phase: "loading" });
@@ -288,15 +307,45 @@ function CalendarView({ uid }: { uid: string }) {
     if (next === view) return;
     setView(next);
     setAnchor(selectedDate);
-    setExpandedWeekKey(null);
+    setDayOpen(false); // 달이 바뀌면 옛 날짜 창을 띄워둘 이유가 없다
     setState({ phase: "loading" });
   }
 
-  /** 날짜 선택 — 패널 갱신 + 그 주를 바로 펼친다 (v3: 펼치기 버튼은 불편해서 제거).
-      초기 진입·월 이동 때는 순수 월간 — 클릭해야만 펼쳐진다 */
-  function selectDate(dateKey: string) {
+  /** 날짜 선택 — 칸을 강조하고, 카드가 있으면 상세 모달을 연다 (09-02) */
+  function selectDate(dateKey: string, cardId: string | null = null) {
     setSelectedDate(dateKey);
-    setExpandedWeekKey(weekDates(dateKey)[0]);
+    setSelectedCardId(cardId);
+    /*
+      **카드가 있는 날만 모달을 연다.** 빈 날까지 열면 달을 훑는 동안 빈 창이
+      계속 뜬다. 빈 날은 펼쳐진 주 칸의 `+`로 담으면 된다 (DESIGN §8).
+      모달 안에서 ‹ ›로 옮길 때는 빈 날도 그대로 보여준다 — 건너뛰면
+      «몇 일로 갔는지»를 알 수 없다.
+    */
+    if ((byDate.get(dateKey)?.length ?? 0) > 0) setDayOpen(true);
+  }
+
+  /**
+   * 버리기 — **삭제가 아니라 `discarded`다** (DESIGN §11).
+   *
+   * 카드는 사라지지 않고 상태만 바뀐다. 발행률의 분모에 남아야 해서다 —
+   * 빼버리면 성적을 조작할 수 있다. 보안 규칙도 `allow delete: if false`로
+   * 클라이언트 삭제를 아예 막아뒀다.
+   *
+   * 화면에서는 사라진다 — 달력은 `discarded`를 걸러서 그린다.
+   */
+  async function discardCard(card: Card) {
+    try {
+      await updateDoc(doc(db, "cards", card.id), { status: "discarded" });
+      setState((prev) =>
+        prev.phase === "ready"
+          ? { ...prev, cards: prev.cards.filter((c) => c.id !== card.id) }
+          : prev,
+      );
+      if (selectedCardId === card.id) setSelectedCardId(null);
+    } catch {
+      // 실패하면 카드가 그대로 남는다 — 조용히 지운 척하지 않는다
+      window.alert("버리지 못했어요. 잠시 후 다시 시도해주세요.");
+    }
   }
 
   /** 드래그로 예정일 변경 — 실패 시 원위치 + 안내 (PLAN §3-1) */
@@ -495,7 +544,9 @@ function CalendarView({ uid }: { uid: string }) {
         {state.phase === "ready" && state.overdueCount > 0 && (
           <Link
             href="/calendar/missed"
-            className="flex h-9 items-center gap-1.5 rounded-md border border-line bg-surface px-3 text-body text-ink hover:bg-surface-muted desktop:hidden"
+            /* 09-02 — 패널이 모달로 바뀌면서 이 배지의 자리가 없어졌다.
+               DESIGN §8 「오른쪽 정렬로 작게」는 여기서도 지켜진다 (헤더 오른쪽 끝) */
+            className="flex h-9 items-center gap-1.5 rounded-md border border-line bg-surface px-3 text-body text-ink hover:bg-surface-muted"
           >
             놓친 카드
             <span className="rounded-pill bg-berry-light px-1.5 text-caption font-semibold text-berry-dark">
@@ -540,7 +591,7 @@ function CalendarView({ uid }: { uid: string }) {
         {view === "list" ? (
           <ListSection cards={state.cards} todayKey={todayKey} onPublish={openPublish} />
         ) : (
-        <div className="mt-4 flex gap-6">
+        <div className="mt-4">
           {/* 격자 영역 */}
           <div className="min-w-0 flex-1">
             {/* 요약 헤더 — 왼쪽 계획, 오른쪽 진행 상태. 월간·주간 공통 (08-31).
@@ -604,105 +655,44 @@ function CalendarView({ uid }: { uid: string }) {
                   ))}
                 </div>
 
-                {/* [실험] 아코디언 월간 v2 — 기본은 순수 월간. 날짜 클릭은 패널만 갱신하고,
-                    선택한 주 아래의 «주 펼치기»를 눌러야 그 주만 보드로 확장된다 (08-31) */}
-                <div className="flex flex-col gap-1">
-                  {Array.from({ length: cells.length / 7 }, (_, wi) =>
-                    cells.slice(wi * 7, wi * 7 + 7),
-                  ).map((week, wi) => {
-                    const days = week.filter((d): d is string => d !== null);
-                    const weekStart = days.length > 0 ? weekDates(days[0])[0] : null;
-                    const expanded = weekStart !== null && weekStart === expandedWeekKey;
+                {/*
+                  **아코디언을 없앴다** (09-02).
 
-                    if (!expanded) {
-                      return (
-                        <div key={`w-${wi}`}>
-                          <div className="grid grid-cols-7 gap-1">
-                            {week.map((dateKey, i) =>
-                              dateKey === null ? (
-                                <div key={`empty-${wi}-${i}`} />
-                              ) : (
-                                <DayCell
-                                  key={dateKey}
-                                  dateKey={dateKey}
-                                  cards={byDate.get(dateKey) ?? []}
-                                  isToday={dateKey === todayKey}
-                                  isSelected={dateKey === selectedDate}
-                                  dragging={draggingId != null}
-                                  onSelect={() => selectDate(dateKey)}
-                                  onDragStartCard={setDraggingId}
-                                  onDropCard={(cardId) => handleDrop(cardId, dateKey)}
-                                  showPlus={
-                                    dateKey.slice(0, 7) === anchorMonth &&
-                                    (byDate.get(dateKey) ?? []).length === 0 &&
-                                    dateKey >= todayKey &&
-                                    isUploadDayOf(uploadDays, dateKey) === true
-                                  }
-                                  muted={dateKey.slice(0, 7) !== anchorMonth}
-                                />
-                              ),
-                            )}
-                          </div>
-                        </div>
-                      );
-                    }
-                    return (
-                      <div key={`w-${wi}`}>
-                        {/* 주 전체 tint는 선택 날짜를 묻히게 해서 제거 — 선택 컬럼만 칠한다 (08-31).
-                            모바일(md 미만)은 펼치지 않는다 — 칸이 좁아 보드가 깨진다 */}
-                        <div className="hidden grid-cols-7 gap-1 md:grid">
-                          {week.map((dateKey, i) =>
-                            dateKey === null ? (
-                              <div key={`empty-${wi}-${i}`} />
-                            ) : (
-                              <WeekColumn
-                                key={dateKey}
-                                dateKey={dateKey}
-                                cards={byDate.get(dateKey) ?? []}
-                                isToday={dateKey === todayKey}
-                                isSelected={dateKey === selectedDate}
-                                dragging={draggingId != null}
-                                onSelect={() => selectDate(dateKey)}
-                                onDragStartCard={setDraggingId}
-                                onDropCard={(cardId) => handleDrop(cardId, dateKey)}
-                                emptyHint={
-                                  (byDate.get(dateKey) ?? []).length > 0
-                                    ? "none"
-                                    : isUploadDayOf(uploadDays, dateKey) === false
-                                      ? "rest"
-                                      : isUploadDayOf(uploadDays, dateKey) === true &&
-                                          dateKey >= todayKey
-                                        ? "invite"
-                                        : "none"
-                                }
-                              />
-                            ),
-                          )}
-                        </div>
+                  예전에는 날짜를 클릭하면 그 주가 주간 보드로 펼쳐졌다(08-31 v2).
+                  실제로 써보니 고를 때마다 그 주가 두 배로 부풀어 **아래 주들이
+                  화면 밖으로 밀렸다.** 월간은 「이번 달이 촘촘한지 비었는지」를 보는
+                  화면인데(DESIGN §8), 고를 때마다 모양이 바뀌면 그 감각이 깨진다.
 
-                        {/* Mobile — 펼침 없이 기존 칸 유지, 상세는 아래 리스트가 맡는다 */}
-                        <div className="grid grid-cols-7 gap-1 md:hidden">
-                          {week.map((dateKey, i) =>
-                            dateKey === null ? (
-                              <div key={`m-empty-${wi}-${i}`} />
-                            ) : (
-                              <DayCell
-                                key={dateKey}
-                                dateKey={dateKey}
-                                cards={byDate.get(dateKey) ?? []}
-                                isToday={dateKey === todayKey}
-                                isSelected={dateKey === selectedDate}
-                                dragging={draggingId != null}
-                                onSelect={() => selectDate(dateKey)}
-                                onDragStartCard={setDraggingId}
-                                onDropCard={(cardId) => handleDrop(cardId, dateKey)}
-                              />
-                            ),
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                  그 주의 작업 보드가 필요하면 **「주간」 보기**가 이미 그 일을 한다.
+                  같은 일을 두 곳에서 하지 않는다. 고른 날의 상세는 모달이 맡는다.
+                */}
+                <div className="grid grid-cols-7 gap-1">
+                  {cells.map((dateKey, i) =>
+                    dateKey === null ? (
+                      <div key={`empty-${i}`} />
+                    ) : (
+                      <DayCell
+                        key={dateKey}
+                        dateKey={dateKey}
+                        cards={byDate.get(dateKey) ?? []}
+                        isToday={dateKey === todayKey}
+                        isSelected={dateKey === selectedDate}
+                        dragging={draggingId != null}
+                        onSelect={() => selectDate(dateKey)}
+                        selectedCardId={selectedCardId}
+                        onSelectCard={(cardId) => selectDate(dateKey, cardId)}
+                        onDragStartCard={setDraggingId}
+                        onDropCard={(cardId) => handleDrop(cardId, dateKey)}
+                        showPlus={
+                          dateKey.slice(0, 7) === anchorMonth &&
+                          (byDate.get(dateKey) ?? []).length === 0 &&
+                          dateKey >= todayKey &&
+                          isUploadDayOf(uploadDays, dateKey) === true
+                        }
+                        muted={dateKey.slice(0, 7) !== anchorMonth}
+                      />
+                    ),
+                  )}
                 </div>
               </>
             ) : (
@@ -779,78 +769,92 @@ function CalendarView({ uid }: { uid: string }) {
               </div>
             )}
 
-            {/* 선택 날짜 리스트 — 패널·플래너가 없는 폭에서만 (썸네일 허용, DESIGN §8 Mobile) */}
-            {state.cards.length > 0 && (
-              <section className={view === "week" ? "mt-6 md:hidden" : "mt-6 desktop:hidden"}>
-                <h2 className="text-body font-semibold text-ink">
-                  {Number(selectedDate.slice(5, 7))}월 {Number(selectedDate.slice(8, 10))}일
-                  {selectedDate === todayKey && (
-                    <span className="ml-2 rounded-pill bg-berry-light px-2 py-0.5 text-caption font-semibold text-berry-dark">
-                      오늘
-                    </span>
-                  )}
-                </h2>
-                {selectedCards.length === 0 ? (
-                  <p className="mt-3 text-body text-sub">아직 예정된 콘텐츠가 없어요.</p>
-                ) : (
-                  <ul className="mt-3 flex flex-col gap-2">
-                    {selectedCards.map((card) => (
-                      <li key={card.id}>
-                        <CardTile
-                          card={card}
-                          variant="row"
-                          subline={
-                            card.audience +
-                            (card.scheduledDate !== undefined &&
-                            card.scheduledDate < todayKey &&
-                            card.status !== "published"
-                              ? " · 예정일 지남"
-                              : "")
-                          }
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            )}
           </div>
 
-          {/* 오른쪽 미리보기 패널 — Desktop(≥1200)만 (08-31 시안 01·06).
-              월간은 1일 칸 시작선(요일 헤더 34px), 주간은 카드 타일 시작선
-              (주 헤더 58 + 날짜 라벨 30 = 88px)에 맞춘다 */}
-          <aside
-            className={[
-              "sticky top-6 hidden w-[300px] shrink-0 self-start desktop:block",
-              // 요약 헤더(58) + 월간 요일 줄(46)/주간 날짜 라벨(30) 아래 — 칸·타일 시작선 정렬
-              view === "month" ? "mt-[92px]" : "mt-[88px]",
-            ].join(" ")}
-          >
-            {/* 놓친 카드 — 카드 상세 박스 바로 위, 오른쪽 라인 정렬 (09-01) */}
-            {state.overdueCount > 0 && (
-              <div className="mb-2 flex justify-end">
-                <Link
-                  href="/calendar/missed"
-                  className="flex h-9 items-center gap-1.5 rounded-md border border-line bg-surface px-3 text-body text-ink hover:bg-surface-muted"
-                >
-                  놓친 카드
-                  <span className="rounded-pill bg-berry-light px-1.5 text-caption font-semibold text-berry-dark">
-                    {state.overdueCount}
-                  </span>
-                </Link>
-              </div>
-            )}
-            <DayPanel
-              dateKey={selectedDate}
-              cards={selectedCards}
-              todayKey={todayKey}
-              restDay={isUploadDayOf(uploadDays, selectedDate) === false}
-              onPublish={openPublish}
-            />
-          </aside>
         </div>
         )}
         </>
+      )}
+
+      {/* 그 날 상세 — 오른쪽 패널을 대신한다 (09-02) */}
+      {dayOpen && state.phase === "ready" && (
+        <DayModal
+          dateKey={selectedDate}
+          cards={selectedCards}
+          todayKey={todayKey}
+          highlightId={selectedCardId}
+          restDay={isUploadDayOf(uploadDays, selectedDate) === false}
+          onPublish={openPublish}
+          onDiscard={setDiscardTarget}
+          onMove={(step) => {
+            /*
+              하루씩 옮긴다. **달을 넘어가면 격자도 같이 옮긴다** — 안 그러면
+              창에는 10월 1일이 떠 있는데 뒤 달력은 9월이라 어디를 보는지 어긋난다.
+            */
+            const next = parseDateKey(selectedDate);
+            next.setDate(next.getDate() + step);
+            const key = toDateKey(next);
+            setSelectedDate(key);
+            setSelectedCardId(null); // 날이 바뀌면 짚어둔 카드도 놓는다
+            if (view === "month" && next.getMonth() !== anchorDate.getMonth()) {
+              setAnchor(key);
+              setState({ phase: "loading" });
+            }
+          }}
+          onClose={() => setDayOpen(false)}
+        />
+      )}
+
+      {/*
+        버리기 확인 (09-03) — 되돌릴 수 없어서 한 번 묻는다.
+        「놓친 카드」 화면과 같은 문구·같은 모양으로 둔다. 같은 일을 두 곳에서
+        다르게 물으면 «다른 일인가»가 된다.
+
+        z-60 — 그 날 상세 창(z-50) 위에 뜬다. 아래 창을 닫지 않는 이유는,
+        취소했을 때 보고 있던 자리로 그대로 돌아와야 하기 때문이다.
+      */}
+      {discardTarget && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="discard-title"
+          onClick={() => setDiscardTarget(null)}
+          className="fixed inset-0 z-60 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex w-full max-w-[400px] flex-col gap-4 rounded-xl bg-surface p-6 shadow-lg"
+          >
+            <h2 id="discard-title" className="text-title font-bold text-ink">
+              이 카드를 버릴까요?
+            </h2>
+            <p className="break-keep text-body text-sub">
+              「{discardTarget.shortTitle || discardTarget.title}」
+              <br />
+              버린 카드는 되돌릴 수 없어요. 삭제되는 건 아니고, 계획했던 기록으로 남아요.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setDiscardTarget(null)}
+                className="h-11 flex-1 rounded-md border border-line bg-surface text-body font-semibold text-ink"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const target = discardTarget;
+                  setDiscardTarget(null);
+                  void discardCard(target);
+                }}
+                className="h-11 flex-1 rounded-md border border-warn bg-transparent text-body font-semibold text-warn"
+              >
+                버리기
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 충돌 확인 팝업 — 이미 카드가 있는 날로 드롭했을 때만 (카드 상세 모달 패턴) */}
@@ -982,6 +986,8 @@ function DayCell({
   onDropCard,
   showPlus,
   muted,
+  selectedCardId,
+  onSelectCard,
 }: {
   dateKey: string;
   cards: Card[];
@@ -995,6 +1001,9 @@ function DayCell({
   showPlus?: boolean;
   /** 인접 달 날짜 — 흐리게 그리되 선택·드롭은 받는다 (09-01) */
   muted?: boolean;
+  /** 고른 카드 (09-03). 날짜만이 아니라 «어느 카드»인지도 보여야 한다 */
+  selectedCardId?: string | null;
+  onSelectCard?: (cardId: string) => void;
 }) {
   const dayNum = Number(dateKey.slice(8, 10));
   const [over, setOver] = useState(false);
@@ -1018,14 +1027,28 @@ function DayCell({
       className={[
         "relative min-h-14 cursor-pointer rounded-sm border p-1 md:min-h-24 md:p-1.5",
         muted ? "opacity-45" : "",
-        isSelected ? "border-berry" : "border-line",
-        over && dragging ? "bg-berry-tint" : "bg-surface",
+        /*
+          **고른 칸을 확실히 띄운다** (09-03). 1px 테두리만으로는 옆 칸과 구별이 안 갔다.
+          `ring`을 쓰는 이유 — `border-2`로 굵히면 안쪽 폭이 1px 줄어 글자가 밀린다.
+          링은 상자 바깥에 그려져 **자리를 건드리지 않는다.**
+        */
+        isSelected ? "border-berry ring-2 ring-berry" : "border-line",
+        over && dragging
+          ? "bg-berry-light"
+          : isSelected
+            ? "bg-berry-tint"
+            : "bg-surface",
       ].join(" ")}
     >
       <span
         className={[
           "flex size-6 items-center justify-center rounded-pill text-caption",
-          isToday ? "bg-berry font-bold text-white" : "text-sub",
+          // 오늘 > 선택 > 평소. 오늘이면서 고른 날은 오늘 표시를 이긴다 (칸 링이 선택을 말한다)
+          isToday
+            ? "bg-berry font-bold text-white"
+            : isSelected
+              ? "bg-berry-light font-bold text-berry-dark"
+              : "text-sub",
         ].join(" ")}
       >
         {dayNum}
@@ -1046,27 +1069,50 @@ function DayCell({
       {/* Desktop — 미니 카드: 상태 dot(범례와 같은 색) + 제목 2줄 (08-31 v2).
           클릭은 칸 선택으로 흘러간다 — 상세 이동은 패널의 몫 */}
       <span className="mt-1 hidden flex-col gap-1 md:flex">
-        {cards.slice(0, maxDesktop).map((card) => (
+        {cards.slice(0, maxDesktop).map((card) => {
+          const cardOn = card.id === selectedCardId;
+          return (
           <button
             key={card.id}
             type="button"
             draggable
+            aria-pressed={cardOn}
+            onClick={(e) => {
+              // 칸 선택으로 흘러가되, 어느 카드를 눌렀는지도 남긴다 (09-03)
+              e.stopPropagation();
+              onSelectCard?.(card.id);
+            }}
             onDragStart={(e) => {
               e.dataTransfer.setData("text/card-id", card.id);
               onDragStartCard(card.id);
             }}
             onDragEnd={() => onDragStartCard(null)}
-            className="flex w-full items-start gap-1.5 overflow-hidden rounded-sm bg-surface-muted px-1.5 py-1 text-left hover:bg-berry-tint"
+            className={[
+              "flex w-full items-start gap-1.5 overflow-hidden rounded-sm px-1.5 py-1 text-left",
+              cardOn
+                ? "bg-berry text-white"
+                : "bg-surface-muted hover:bg-berry-tint",
+            ].join(" ")}
             title={card.title}
           >
             {card.status === "published" ? (
-              <span aria-hidden className="shrink-0 text-caption font-semibold leading-tight text-sub">
+              <span
+                aria-hidden
+                className={[
+                  "shrink-0 text-caption font-semibold leading-tight",
+                  cardOn ? "text-white" : "text-sub",
+                ].join(" ")}
+              >
                 ✓
               </span>
             ) : (
               <span
                 aria-hidden
-                className="mt-[3px] h-2 w-2 shrink-0 rounded-pill"
+                /* 고른 카드는 진한 브랜드색 바탕이라 상태 점에 흰 테를 둘러 살린다 */
+                className={[
+                  "mt-[3px] h-2 w-2 shrink-0 rounded-pill",
+                  cardOn ? "ring-1 ring-white/70" : "",
+                ].join(" ")}
                 style={{ background: STATUS_COLOR[card.status] }}
               />
             )}
@@ -1078,11 +1124,17 @@ function DayCell({
               옛 카드에는 없을 수 있어 원 제목으로 물러선다.
               break-keep — 한국어를 단어 중간에서 끊지 않는다 (08-31)
             */}
-            <span className="line-clamp-2 break-keep text-caption leading-tight text-ink">
+            <span
+              className={[
+                "line-clamp-2 break-keep text-caption leading-tight",
+                cardOn ? "font-semibold text-white" : "text-ink",
+              ].join(" ")}
+            >
               {card.shortTitle || card.title}
             </span>
           </button>
-        ))}
+          );
+        })}
         {cards.length > maxDesktop && (
           <span className="px-1 text-caption text-sub">+{cards.length - maxDesktop}건</span>
         )}
@@ -1433,37 +1485,189 @@ function WeekColumn({
 }
 
 /**
- * 선택 날짜 미리보기 패널 (Desktop ≥1200) — 썸네일·캡션은 여기서만 보여준다.
- * 칸(Compact)이 «무엇이 언제»라면 패널은 «어떤 내용이고, 지금 뭘 할 차례인지»다 (08-31).
+ * 그 날 상세 모달 (09-02) — 오른쪽 패널을 대신한다.
+ *
+ * **왜 옮겼나.** 패널은 1200 이상에서만 나오고 그보다 좁으면 아래 리스트였다 —
+ * 같은 화면이 폭에 따라 다르게 동작했다. 게다가 날짜를 고르면 그 주가 펼쳐지는데
+ * (아코디언), 펼쳐진 칸과 패널이 **같은 제목·상태를 두 번** 보여줬다.
+ *
+ * **‹ ›로 날짜를 넘긴다.** 모달의 유일한 약점은 달력을 가린다는 것이다.
+ * 닫고 → 다른 날 누르고 → 다시 열고를 반복하지 않게, 창 안에서 하루씩 옮긴다.
+ * 빈 날도 그대로 보여준다 — 건너뛰면 지금 며칠을 보고 있는지 알 수 없다.
+ *
+ * 빠져나갈 길 셋 — Esc · 바깥 누르기 · 닫기 버튼.
  */
-function DayPanel({
+function DayModal({
   dateKey,
   cards,
   todayKey,
+  highlightId,
   restDay,
   onPublish,
+  onDiscard,
+  onMove,
+  onClose,
 }: {
   dateKey: string;
   cards: Card[];
   todayKey: string;
-  restDay: boolean; // 업로드 요일이 아닌 빈 날 — 문구를 바꾼다 (08-31)
+  /** 달력에서 눌러 짚어둔 카드 (09-03). 창 안에서도 같은 것을 강조한다 */
+  highlightId?: string | null;
+  restDay: boolean;
   onPublish: (card: Card) => void;
+  /** 버리기 — 확인은 부르는 쪽이 받는다 (09-03) */
+  onDiscard: (card: Card) => void;
+  /** 하루 앞뒤로 옮긴다 */
+  onMove: (step: number) => void;
+  onClose: () => void;
 }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    boxRef.current?.focus(); // 화살표·Esc가 바로 먹게
+  }, []);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft") onMove(-1);
+      else if (e.key === "ArrowRight") onMove(1);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onMove, onClose]);
+
   const dow = DAY_HEADS[parseDateKey(dateKey).getDay()];
 
   return (
-    <div className="rounded-lg border border-line bg-surface p-4">
-      <h2 className="text-body font-semibold text-ink">
-        {Number(dateKey.slice(5, 7))}월 {Number(dateKey.slice(8, 10))}일 ({dow})
-        {dateKey === todayKey && (
-          <span className="ml-2 rounded-pill bg-berry-light px-2 py-0.5 text-caption font-semibold text-berry-dark">
-            오늘
-          </span>
-        )}
-      </h2>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${Number(dateKey.slice(5, 7))}월 ${Number(dateKey.slice(8, 10))}일 콘텐츠`}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
+      onClick={onClose}
+    >
+      <div
+        ref={boxRef}
+        tabIndex={-1}
+        data-focus-ring="none"
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-full w-full max-w-[440px] flex-col overflow-hidden rounded-lg bg-surface outline-none"
+      >
+        <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+          <h2 className="min-w-0 truncate text-body font-bold text-ink">
+            {Number(dateKey.slice(5, 7))}월 {Number(dateKey.slice(8, 10))}일 ({dow})
+            {dateKey === todayKey && (
+              <span className="ml-2 rounded-pill bg-berry-light px-2 py-0.5 text-caption font-semibold text-berry-dark">
+                오늘
+              </span>
+            )}
+          </h2>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => onMove(-1)}
+              aria-label="앞날"
+              className="flex size-9 items-center justify-center rounded-md text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
+            >
+              <ChevronLeft size={16} aria-hidden />
+            </button>
+            <button
+              type="button"
+              onClick={() => onMove(1)}
+              aria-label="다음날"
+              className="flex size-9 items-center justify-center rounded-md text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
+            >
+              <ChevronRight size={16} aria-hidden />
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="닫기"
+              className="flex size-9 items-center justify-center rounded-md text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
+            >
+              <X size={16} aria-hidden />
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto p-4">
+          <DayPanel
+            bare
+            dateKey={dateKey}
+            cards={cards}
+            todayKey={todayKey}
+            highlightId={highlightId}
+            restDay={restDay}
+            onPublish={onPublish}
+            onDiscard={onDiscard}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 선택 날짜 미리보기 패널 (Desktop ≥1200) — 썸네일·캡션은 여기서만 보여준다.
+ * 칸(Compact)이 «무엇이 언제»라면 패널은 «어떤 내용이고, 지금 뭘 할 차례인지»다 (08-31).
+ */
+function DayPanel({
+  bare,
+  dateKey,
+  cards,
+  todayKey,
+  highlightId,
+  restDay,
+  onPublish,
+  onDiscard,
+}: {
+  /** 모달 안에서는 상자와 날짜 제목을 창이 이미 그린다 — 두 번 그리지 않는다 */
+  bare?: boolean;
+  dateKey: string;
+  /** 이 카드를 짚어 보여준다 (09-03) */
+  highlightId?: string | null;
+  cards: Card[];
+  todayKey: string;
+  restDay: boolean; // 업로드 요일이 아닌 빈 날 — 문구를 바꾼다 (08-31)
+  onPublish: (card: Card) => void;
+  /** 있으면 카드마다 「버리기」를 단다 (09-03). 없으면 안 그린다 */
+  onDiscard?: (card: Card) => void;
+}) {
+  const dow = DAY_HEADS[parseDateKey(dateKey).getDay()];
+
+  /*
+    **제작 여부로 나눈다** (09-03).
+
+    「완료」라고 부르지 않는 이유 — `pending`(업로드 대기)은 만들어는 뒀지만 올릴 일이
+    남은 상태다. 완료라고 하면 할 일이 끝난 것처럼 읽힌다. 그래서 만든 시점을 기준으로
+    「만들어야 해요 / 만들어 뒀어요」다.
+
+    **할 일이 남은 쪽을 위에 둔다** — 이 화면의 목적이 「지금 뭘 해야 하나」다.
+  */
+  const todo = cards.filter((c) => c.status === "planned");
+  const made = cards.filter((c) => c.status !== "planned");
+  const sections = [
+    { key: "todo", label: "만들어야 해요", cards: todo },
+    { key: "made", label: "만들어 뒀어요", cards: made },
+  ].filter((sec) => sec.cards.length > 0);
+  const showHeads = sections.length > 1;
+
+  return (
+    <div className={bare ? "" : "rounded-lg border border-line bg-surface p-4"}>
+      {!bare && (
+        <h2 className="text-body font-semibold text-ink">
+          {Number(dateKey.slice(5, 7))}월 {Number(dateKey.slice(8, 10))}일 ({dow})
+          {dateKey === todayKey && (
+            <span className="ml-2 rounded-pill bg-berry-light px-2 py-0.5 text-caption font-semibold text-berry-dark">
+              오늘
+            </span>
+          )}
+        </h2>
+      )}
 
       {cards.length === 0 ? (
-        <div className="mt-3">
+        <div className={bare ? "" : "mt-3"}>
           <p className="text-body text-sub">
             {restDay ? "쉬어가는 날이에요." : "아직 예정된 콘텐츠가 없어요."}
           </p>
@@ -1475,11 +1679,36 @@ function DayPanel({
           </Link>
         </div>
       ) : (
-        <ul className="mt-3 flex flex-col gap-3">
-          {cards.map((card) => (
+        <ul className={`flex flex-col gap-3 ${bare ? "" : "mt-3"}`}>
+          {sections.map((sec) => (
+            <li key={sec.key}>
+              {/*
+                **머리글은 양쪽에 다 있을 때만 단다** (09-03).
+                하루에 카드가 하나뿐인 날이 대부분인데 거기까지 붙이면
+                제목이 카드보다 커진다 — 나눌 것이 없으면 나누지 않는다.
+              */}
+              {showHeads && (
+                <p className="mb-2 text-label font-semibold text-sub">
+                  {sec.label} {sec.cards.length}
+                </p>
+              )}
+              <ul className="flex flex-col gap-3">
+                {sec.cards.map((card) => (
             <li key={card.id}>
               {/* 딱 필요한 것만 — 제목·상태·대상·안내·CTA·상세 (08-31 v2, 사진·캡션 제외) */}
-              <article className="flex flex-col items-start gap-2 rounded-lg border border-line p-3">
+              <article
+                className={[
+                  "flex flex-col items-start gap-2 rounded-lg border p-3",
+                  /*
+                    **누른 그 카드를 짚어준다** (09-03). 하루에 카드가 둘이면
+                    창을 열었을 때 어느 것을 눌렀는지 알 수 없었다.
+                    카드가 하나뿐이면 강조가 의미 없으므로 걸지 않는다.
+                  */
+                  card.id === highlightId && cards.length > 1
+                    ? "border-berry bg-berry-tint ring-2 ring-berry"
+                    : "border-line",
+                ].join(" ")}
+              >
                 <h3 className="break-keep text-body font-semibold text-ink">{card.title}</h3>
                 <StatusBadge status={card.status} />
                 <p className="text-caption text-sub">
@@ -1527,14 +1756,33 @@ function DayPanel({
                     <p className="break-keep text-caption text-ink">✓ 발행을 마친 콘텐츠예요.</p>
                   )}
 
-                  <Link
-                    href={`/card/${card.id}`}
-                    className="text-caption font-semibold text-berry-dark underline underline-offset-2"
-                  >
-                    상세 보기 →
-                  </Link>
+                  {/*
+                    「상세 보기」와 「버리기」를 한 줄에 두되 **양 끝으로 벌린다** (09-03).
+                    나란히 붙여두면 되돌릴 수 없는 쪽을 잘못 누르기 쉽다.
+                    버리기는 글자만 — 색 있는 버튼으로 만들면 위에 있는 CTA와 경쟁한다.
+                  */}
+                  <div className="flex w-full items-center justify-between gap-3">
+                    <Link
+                      href={`/card/${card.id}`}
+                      className="text-caption font-semibold text-berry-dark underline underline-offset-2"
+                    >
+                      상세 보기 →
+                    </Link>
+                    {onDiscard && (
+                      <button
+                        type="button"
+                        onClick={() => onDiscard(card)}
+                        className="rounded-md px-2 py-1 text-caption text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-warn"
+                      >
+                        버리기
+                      </button>
+                    )}
+                  </div>
                 </div>
               </article>
+            </li>
+                ))}
+              </ul>
             </li>
           ))}
         </ul>

@@ -57,6 +57,13 @@ export type SheetCopyInput = {
   avoidExpressions: string[];
   /** 올린 사진이 있으면 사진 지시를 만들지 않는다 */
   hasUserPhotos: boolean;
+  /**
+   * 사용자가 기획 ⑤에서 정한 카드 장수 (09-02). null이면 AI가 4~7장 사이에서 고른다.
+   *
+   * 범위 밖 값은 여기 오기 전에 걸러진다 (`lib/ai/claude.ts` refineDraft) —
+   * 혹시 넘어와도 아래에서 다시 묶는다.
+   */
+  slideCount: number | null;
 };
 
 /** 카드뉴스 한 세트의 길이. 너무 짧으면 이야기가 안 되고 길면 안 넘겨본다 */
@@ -67,6 +74,14 @@ export async function planSheetCopy(input: SheetCopyInput): Promise<SheetCopyRes
   const style = CARD_STYLES[input.styleId];
   const sheets = TEMPLATE_SHEETS[input.styleId] ?? [];
   if (sheets.length === 0) return { sheets: [], photoDirection: "" };
+
+  /*
+    사용자가 장수를 정했으면 그 수에 맞춘다 (09-02).
+    쓸 수 있는 장보다 많이 요청할 수는 없어서 시트 수로도 한 번 더 묶는다.
+  */
+  const exact = input.slideCount
+    ? Math.min(Math.max(input.slideCount, MIN_SHEETS), Math.min(MAX_SHEETS, sheets.length))
+    : null;
 
   const directives = [
     toneDirective(input.tone),
@@ -97,7 +112,9 @@ export async function planSheetCopy(input: SheetCopyInput): Promise<SheetCopyRes
         (s, i) => `${i}. [${s.role}] 글자 자리 ${s.slots.length}개 — ${s.slots.join(" / ")}`,
       ),
       "",
-      `할 일: 이 중에서 **${MIN_SHEETS}~${MAX_SHEETS}장**을 골라 순서를 정하고, 각 장의 글자 자리를 채워라.`,
+      exact
+        ? `할 일: 이 중에서 **정확히 ${exact}장**을 골라 순서를 정하고, 각 장의 글자 자리를 채워라.`
+        : `할 일: 이 중에서 **${MIN_SHEETS}~${MAX_SHEETS}장**을 골라 순서를 정하고, 각 장의 글자 자리를 채워라.`,
       "",
       "규칙:",
       "- **0번(표지)은 반드시 첫 장으로 넣는다.**",
@@ -132,11 +149,11 @@ export async function planSheetCopy(input: SheetCopyInput): Promise<SheetCopyRes
   const valid = (result.sheets ?? [])
     .filter((s) => Number.isInteger(s.index) && s.index >= 0 && s.index < sheets.length)
     .filter((s) => Array.isArray(s.lines) && s.lines.length > 0)
-    .slice(0, MAX_SHEETS);
+    .slice(0, exact ?? MAX_SHEETS);
 
   const withCover = valid.some((s) => s.index === 0)
     ? valid
-    : [{ index: 0, lines: [input.title] }, ...valid].slice(0, MAX_SHEETS);
+    : [{ index: 0, lines: [input.title] }, ...valid].slice(0, exact ?? MAX_SHEETS);
 
   return { sheets: withCover, photoDirection: result.photoDirection ?? "" };
 }

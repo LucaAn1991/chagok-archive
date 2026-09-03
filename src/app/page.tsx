@@ -21,6 +21,7 @@ import { auth, db } from "@/lib/firebase/client";
 import AppSidebar from "@/components/AppSidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import FeaturedContentCard from "@/components/FeaturedContentCard";
+import TodayCardRail from "@/components/TodayCardRail";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { formatMonthDayWeekday } from "@/lib/format";
@@ -137,6 +138,8 @@ type HomeState =
       phase: "ready";
       hasAnyCard: boolean;
       todayCard: DatedCard | null;
+      /** 오늘 올릴 카드 **전부** (09-03). 여러 장이면 가로 카드 줄로 보여준다 */
+      todayCards: DatedCard[];
       nextCard: DatedCard | null; // 오늘 이후 가장 가까운 카드 (케이스 C)
       publishToday: boolean; // 오늘이 발행 요일인가 — user.uploadDays 기준 (케이스 B)
       weekCards: DatedCard[]; // A
@@ -243,8 +246,10 @@ function Home({ uid }: { uid: string }) {
           .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
 
         // 오늘의 카드 (F5) — 아직 안 올린 것만
-        const todayCard =
-          weekCards.find((c) => c.scheduledDate === todayKey && c.status !== "published") ?? null;
+        const todayCards = weekCards.filter(
+          (c) => c.scheduledDate === todayKey && c.status !== "published",
+        );
+        const todayCard = todayCards[0] ?? null;
         // 오늘 이후 가장 가까운 카드 — 케이스 C용. 이번 주 밖(다음 주 이후)도 잡는다
         const nextCard =
           dated.find((c) => c.scheduledDate > todayKey && c.status !== "published") ?? null;
@@ -254,6 +259,7 @@ function Home({ uid }: { uid: string }) {
           phase: "ready",
           hasAnyCard: allSnap.docs.length > 0,
           todayCard,
+          todayCards,
           nextCard,
           publishToday,
           weekCards,
@@ -340,6 +346,7 @@ function relativeDayLabel(dateKey: string, todayKey: string): string {
 function HomeReady({
   hasAnyCard,
   todayCard,
+  todayCards,
   nextCard,
   publishToday,
   weekCards,
@@ -352,6 +359,7 @@ function HomeReady({
 }: {
   hasAnyCard: boolean;
   todayCard: DatedCard | null;
+  todayCards: DatedCard[];
   nextCard: DatedCard | null;
   publishToday: boolean;
   weekCards: DatedCard[];
@@ -379,10 +387,17 @@ function HomeReady({
   return (
     <div className="flex flex-col gap-4 md:gap-8">
       <PageHeader />
-      {/* 인사 한 줄 + 오늘 날짜 — 이모지 없음, KST 고정 9구간 (09-01, lib/greetings.ts) */}
-      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h1 className="text-h2 font-bold text-ink">{greetingFor(now)}</h1>
-        <span className="text-body text-sub">{formatMonthDayWeekday(kstToday(now))}</span>
+      {/*
+        인사 한 줄 + 오늘 날짜 — 이모지 없음, KST 고정 9구간 (09-01, lib/greetings.ts)
+
+        **09-03 — 인사를 줄였다.** 인사가 24px 굵게로 화면에서 제일 컸고, 정작
+        «지금 뭘 해야 하나»를 말하는 줄이 그 아래 본문 크기였다. 홈의 목적은
+        「지금 무엇을 해야 하는지 하나를 정해서 보여준다」인데(DESIGN §9)
+        인사는 그 하나가 아니다. 한 줄 메타로 내리고 자리를 아래에 넘긴다.
+      */}
+      <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <h1 className="text-body font-semibold text-sub">{greetingFor(now)}</h1>
+        <span className="text-caption text-sub">{formatMonthDayWeekday(kstToday(now))}</span>
       </header>
 
       {/* 자동 이월 알림 — 조용한 한 줄. 경고색·느낌표·뱃지 없음 (§3) */}
@@ -394,20 +409,32 @@ function HomeReady({
 
       {situation === "A" && todayCard && (
         <section>
-          <p className="text-body-l text-ink">오늘 올릴 콘텐츠에요! 바로 제작해볼까요?</p>
+          <p className="break-keep text-h2 font-bold leading-snug text-ink">
+            {/*
+              여러 장이면 개수를 말한다 (09-03). 「콘텐츠에요!」만 있으면 큰 카드가
+              하나뿐이라 «오늘 할 일이 하나»로 읽힌다 — 실제로 그렇게 읽혔다.
+            */}
+            {todayCards.length > 1
+              ? `오늘 올릴 콘텐츠가 ${todayCards.length}개 있어요!`
+              : "오늘 올릴 콘텐츠에요! 바로 제작해볼까요?"}
+          </p>
           <div className="mt-3 md:mt-4">
-            <FeaturedContentCard
-              card={todayCard}
-              ctaLabel="제작하기"
-              ctaHref={`/card/${todayCard.id}/result`}
-            />
+            {todayCards.length > 1 ? (
+              <TodayCardRail cards={todayCards} />
+            ) : (
+              <FeaturedContentCard
+                card={todayCard}
+                ctaLabel="제작하기"
+                ctaHref={`/card/${todayCard.id}/result`}
+              />
+            )}
           </div>
         </section>
       )}
 
       {situation === "B" && (
         <section>
-          <p className="text-body-l text-ink">
+          <p className="break-keep text-h2 font-bold leading-snug text-ink">
             오늘 발행일이에요! 오늘은 어떤 콘텐츠를 올리고 싶으세요?
           </p>
           <div className="mt-4">
@@ -418,7 +445,7 @@ function HomeReady({
 
       {situation === "C" && nextCard && (
         <section>
-          <p className="text-body-l text-ink">
+          <p className={"break-keep text-h2 font-bold leading-snug text-ink"}>
             {relativeDayLabel(nextCard.scheduledDate, todayKey)} 올릴 콘텐츠에요!
           </p>
           <div className="mt-3 md:mt-4">
@@ -434,7 +461,7 @@ function HomeReady({
       {situation === "E" && (
         /* 날짜 없는 카드가 그날의 주 행동 (§6) — 하단 C 줄은 이때 중앙으로 올라와 숨긴다 */
         <section>
-          <p className="text-body-l text-ink">
+          <p className="break-keep text-h2 font-bold leading-snug text-ink">
             언젠가 올릴 콘텐츠가 {somedayCards.length}개 있어요. 날짜를 정해볼까요?
           </p>
           <div className="mt-4">
@@ -451,7 +478,7 @@ function HomeReady({
 
       {situation === "D" && (
         <section>
-          <p className="text-body-l text-ink">요즘 올리고 싶은 거 있으세요? 여러 개여도 좋아요</p>
+          <p className="break-keep text-h2 font-bold leading-snug text-ink">요즘 올리고 싶은 거 있으세요? 여러 개여도 좋아요</p>
           <div className="mt-4">
             <IdeaInput />
           </div>
@@ -474,7 +501,21 @@ function HomeReady({
         </section>
       )}
 
-      <WeekSection weekCards={weekCards} />
+      {/*
+        맨 위 큰 카드는 목록에서 뺀다 (09-03).
+        같은 카드가 위아래로 두 번 나와서, 오늘 3장인데 «하나만 보인다»고 읽혔다.
+        헤드라인이 이미 그 카드를 말하고 있으므로 목록에서 또 셀 이유가 없다.
+      */}
+      <WeekSection
+        weekCards={weekCards}
+        excludeIds={
+          situation === "A"
+            ? todayCards.map((c) => c.id)
+            : nextCard
+              ? [nextCard.id]
+              : []
+        }
+      />
       <CollapsedFuture cards={futureCards} />
       {situation !== "E" && (
         <CollapsedSomeday
@@ -557,8 +598,39 @@ function groupByDate(cards: DatedCard[]): { dateKey: string; cards: DatedCard[] 
 function CardRow({ card }: { card: Card }) {
   const title = card.title.split(" — ")[0];
   return (
-    <Link href={`/card/${card.id}`} className="block min-w-0 py-0.5">
-      <span className="block truncate text-body text-ink">{title}</span>
+    /*
+      **누를 수 있다는 걸 보이게 한다** (09-03).
+
+      제목 글자만 있어서 눌리는 줄 몰랐다. 손을 올리면 면이 켜지고 화살표가 짙어진다.
+      `-mx-2 px-2` — 강조 면을 글자보다 넓게 잡되 **자리는 그대로** 둔다.
+      바깥 여백을 음수로 당긴 만큼 안쪽에 돌려주는 방식이라 줄이 밀리지 않는다.
+
+      ⚠️ **hover만으로 끝내지 않는다.** 모바일에는 hover가 없어서, 늘 보이는
+      화살표를 함께 둔다. 평소엔 연하게, 올리면 짙어진다.
+
+      **강조는 브랜드색으로 한다** (09-03). 중립 회색 면은 손을 올렸는지 아닌지가
+      잘 안 보였다. 연분홍 면 + 진한 글자 + 화살표가 살짝 오른쪽으로 나간다 —
+      «눌리는 것»과 «가는 방향»을 함께 말한다.
+      대비는 지킨다: berry-dark on berry-light = 4.85:1 (실측).
+      hover는 스쳐 지나가는 상태라 §2 「색 비율 5%」와 부딪히지 않는다.
+    */
+    <Link
+      href={`/card/${card.id}`}
+      className="group -mx-2 flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5
+                 transition-colors duration-200 hover:bg-berry-light"
+    >
+      <span
+        className="block min-w-0 flex-1 truncate text-body text-ink
+                   transition-colors duration-200 group-hover:font-semibold group-hover:text-berry-dark"
+      >
+        {title}
+      </span>
+      <ChevronRight
+        size={15}
+        aria-hidden
+        className="shrink-0 text-line transition-all duration-200
+                   group-hover:translate-x-0.5 group-hover:text-berry-dark"
+      />
     </Link>
   );
 }
@@ -592,10 +664,18 @@ function DateGroupedList({ cards, todayKey }: { cards: DatedCard[]; todayKey: st
  * A — 이번 주 콘텐츠 (09-01 개편). 이번 주 날짜가 붙은, 아직 안 올린 카드만.
  * 부제 숫자 = 아래 목록에 실제로 보이는 카드 수 — 날짜 없는 카드는 절대 섞지 않는다.
  */
-function WeekSection({ weekCards }: { weekCards: DatedCard[] }) {
+function WeekSection({
+  weekCards,
+  excludeIds,
+}: {
+  weekCards: DatedCard[];
+  /** 위에서 이미 보여준 카드들 — 목록에 또 넣지 않는다 (09-03) */
+  excludeIds?: string[];
+}) {
   const todayKey = toDateKey(new Date());
   // 「올릴」 목록 — 이미 올린 카드는 접는다. 이미 만들어둔 카드(올리기만 남음)는 들어온다
-  const remaining = weekCards.filter((c) => c.status !== "published");
+  const shown = new Set(excludeIds ?? []);
+  const remaining = weekCards.filter((c) => c.status !== "published" && !shown.has(c.id));
   if (remaining.length === 0) return null;
 
   return (

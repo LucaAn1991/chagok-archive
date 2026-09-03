@@ -4,6 +4,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { getPlanningAI } from "@/lib/ai";
 import type { PlanningContext } from "@/lib/ai";
 import { verifyRequest } from "@/lib/server/request-auth";
+import { ndjson } from "@/lib/server/ndjson";
 import { suffix로 } from "@/lib/josa";
 
 /**
@@ -241,7 +242,7 @@ export async function POST(
           readyToConfirm: turn.readyToConfirm ?? false,
           isMock,
         };
-      });
+      }, "plans/messages 선택턴");
     }
 
     // ── 자유 발화·주제 후보 선택 — 주제를 (다시) 잡고 ② 후보를 제시한다 ──
@@ -270,7 +271,7 @@ export async function POST(
         readyToConfirm: false,
         isMock,
       };
-    });
+    }, "plans/messages 자유턴");
   } catch (e) {
     /*
       **원인을 반드시 남긴다** (09-02). 여기가 `catch {}`였던 탓에 AI 호출이 왜 실패했는지
@@ -284,47 +285,4 @@ export async function POST(
       { status: 500 },
     );
   }
-}
-
-/**
- * NDJSON(한 줄에 JSON 하나) 스트림 응답.
- *
- *   {"type":"delta","text":"안녕"}      ← 만들어지는 대로 여러 줄
- *   {"type":"done", ...평소의 payload}   ← 마지막 한 줄
- *   {"type":"error","error":"..."}      ← 실패했을 때
- *
- * SSE 대신 NDJSON을 쓴다 — 재연결·이벤트 이름이 필요 없는 단발 응답이고,
- * 클라이언트가 `줄 단위로 JSON.parse` 하면 끝이라 다룰 것이 적다.
- *
- * **스트림이 시작된 뒤에는 HTTP 상태코드를 바꿀 수 없다.** 그래서 실패도 200 안에서
- * `type:"error"` 줄로 알린다. 클라이언트는 이 줄을 에러로 다룬다.
- */
-function ndjson(
-  run: (emit: (delta: string) => void) => Promise<Record<string, unknown>>,
-): Response {
-  const encoder = new TextEncoder();
-
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const line = (o: unknown) =>
-        controller.enqueue(encoder.encode(`${JSON.stringify(o)}\n`));
-      try {
-        const done = await run((text) => line({ type: "delta", text }));
-        line({ type: "done", ...done });
-      } catch {
-        line({ type: "error", error: "응답을 만들지 못했어요. 잠시 후 다시 시도해주세요." });
-      } finally {
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "application/x-ndjson; charset=utf-8",
-      "Cache-Control": "no-store",
-      // 중간 프록시가 모아서 보내면 스트리밍이 의미를 잃는다
-      "X-Accel-Buffering": "no",
-    },
-  });
 }

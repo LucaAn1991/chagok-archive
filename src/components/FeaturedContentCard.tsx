@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import StatusBadge from "@/components/StatusBadge";
+import CardThumb from "@/components/CardThumb";
 import { contentTypeForAudience } from "@/lib/audiences";
 import { audienceLine } from "@/lib/format";
 import type { Card } from "@/types";
@@ -22,8 +25,6 @@ export default function FeaturedContentCard({
   ctaLabel: string; // 제작하기 · 미리 제작하기
   ctaHref: string;
 }) {
-  const thumbnail = card.photoUrls[0];
-
   return (
     <section className="rounded-lg border border-line bg-surface p-4 md:p-6">
       <StatusBadge status={card.status} />
@@ -35,14 +36,15 @@ export default function FeaturedContentCard({
             {audienceLine(card.audience)} · {contentTypeForAudience(card.audience)}
           </p>
         </div>
-        {thumbnail ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={thumbnail}
-            alt=""
-            className="h-16 w-16 shrink-0 rounded-sm border border-line object-cover"
-          />
-        ) : null}
+        {/*
+          09-03 — 재료 사진이 아니라 **완성된 첫 장**을 먼저 보여준다.
+          만들어둔 카드라면 «올릴 그 그림»이 있는데 그동안 재료만 띄우고 있었다.
+          없으면 CardThumb이 재료 사진 → 스톡 → 안내로 물러선다.
+        */}
+        <CardThumb
+          card={card}
+          className="h-20 w-20 shrink-0 overflow-hidden rounded-sm border border-line"
+        />
       </div>
 
       <Link

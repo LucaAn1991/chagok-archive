@@ -11,6 +11,10 @@ import type { StockPick } from "@/types";
  * 「사진을 골라주세요」가 아니라 「이렇게 골랐어요. 바꾸고 싶으면 바꾸세요.」 —
  * 첫 장이 미리 선택된 채로 시작한다 (DESIGN §1).
  *
+ * **09-02에 여러 장을 고를 수 있게 바꿨다.** 카드뉴스가 4~7장인데 사진이 한 장뿐이면
+ * 같은 그림이 계속 나온다. 고른 사진들이 장마다 나눠 들어간다
+ * (`lib/imagegen/build-sheets.ts`). 올린 사진이 있으면 그쪽이 먼저다.
+ *
  * **추천은 실제 스톡 사진이다 (09-01).** 예전에는 자리표시용 SVG 5장이 박혀
  * 있었는데, 고를 수는 있지만 어디에도 반영되지 않는 칩이었다. 지금은
  * `GET /api/plans/[planId]/stock`이 주제로 찾아온 사진이 오고,
@@ -26,8 +30,8 @@ type Props = {
   stockOptions: StockPick[];
   /** 추천을 불러오는 중 — 빈 자리 대신 뼈대를 보여준다 */
   stockLoading: boolean;
-  /** 고른 추천 사진의 주소. 안 골랐으면 null */
-  selectedStockUrl: string | null;
+  /** 고른 추천 사진들의 주소 (09-02 — 여러 장) */
+  selectedStockUrls: string[];
   userPhotos: string[]; // Object URL 미리보기
   onSelectStock: (photo: StockPick) => void;
   onAddUserPhotos: (files: FileList) => void;
@@ -39,7 +43,7 @@ export default function PlanPhotoPicker({
   hideIntro,
   stockOptions,
   stockLoading,
-  selectedStockUrl,
+  selectedStockUrls,
   userPhotos,
   onSelectStock,
   onAddUserPhotos,
@@ -62,11 +66,13 @@ export default function PlanPhotoPicker({
         <>
           <h3 className="text-label font-semibold text-sub">사진</h3>
           <p className="mt-0.5 text-caption text-sub">
-            {hasUserPhotos
-              ? "올려주신 사진을 먼저 쓸게요."
-              : noStock
-                ? "사진을 올리면 그걸 먼저 써요. 없어도 글자만으로 완성돼요."
-                : "이렇게 골라뒀어요 — 바꾸거나 직접 올릴 수 있어요."}
+            {noStock
+              ? "사진을 올리면 그걸 먼저 써요. 없어도 글자만으로 완성돼요."
+              : hasUserPhotos
+                ? "올려주신 사진을 먼저 쓸게요. 추천에서 더 고르면 함께 들어가요."
+                : `이렇게 골라뒀어요 — 여러 장 고를 수 있어요${
+                    selectedStockUrls.length > 0 ? ` (${selectedStockUrls.length}장)` : ""
+                  }.`}
           </p>
         </>
       )}
@@ -129,17 +135,21 @@ export default function PlanPhotoPicker({
             </div>
           ))}
 
-        {/* 추천 사진 — 내 사진이 있으면 선택 표시를 걷는다 (폴백 사슬) */}
+        {/*
+          추천 사진 — 09-02부터 **올린 사진과 함께 쓰인다.** 예전에는 올린 사진이
+          있으면 추천 선택을 걷어냈는데(둘 중 하나만 썼다), 이제 올린 사진 뒤에
+          이어 붙어 시안의 사진 자리를 채운다. 순서는 폴백 사슬 그대로다.
+        */}
         {!stockLoading &&
           stockOptions.map((photo, i) => {
-            const selected = !hasUserPhotos && photo.imageUrl === selectedStockUrl;
+            const selected = selectedStockUrls.includes(photo.imageUrl);
             return (
               <button
                 key={photo.imageUrl}
                 type="button"
                 onClick={() => onSelectStock(photo)}
                 aria-pressed={selected}
-                aria-label={`추천 사진 ${i + 1} 고르기`}
+                aria-label={`추천 사진 ${i + 1} ${selected ? "빼기" : "넣기"}`}
                 className={`flex shrink-0 flex-col text-center ${cellWidth}`}
               >
                 <span

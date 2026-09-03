@@ -66,7 +66,7 @@ const SLOT_LABELS: Record<string, string> = {
 };
 
 type Tab = "text" | "photo" | "layout";
-type Phase = "loading" | "ready" | "not-found";
+type Phase = "loading" | "ready" | "not-found" | "generated";
 
 export default function SlideEditPage() {
   const router = useRouter();
@@ -250,6 +250,21 @@ export default function SlideEditPage() {
           setPhase("not-found");
           return;
         }
+        /*
+          **시안으로 만든 장은 여기서 고칠 수 없다** (09-02).
+
+          편집기는 `texts`를 고쳐 우리 렌더러로 다시 그리는 구조인데, 이 장의 그림은
+          gpt-image-2가 구워 Storage에 둔 PNG라 그 경로를 안 거친다. 고친 글자가
+          저장은 되고 **어디에도 안 그려진다.** 클릭 영역(`/boxes`)도 우리 레이아웃을
+          재서 만들어 시안 그림과 자리가 어긋난다.
+
+          결과 화면에서 이미 막았지만 주소로 바로 들어올 수 있어 여기서도 막는다.
+        */
+        if (found.origin === "generated") {
+          setPhase("generated");
+          return;
+        }
+
         setCard(data);
         // 그 자리 편집이 옛 글자를 덮으려면 캔버스 색을 화면도 알아야 한다
         getDoc(doc(db, "users", user.uid))
@@ -471,6 +486,23 @@ export default function SlideEditPage() {
     «저장 안 됨» 상태가 없다 (08-31). 글자는 그 자리에서 고치는 즉시,
     조절은 250ms 뒤에 저장된다. 사용자가 눌러야 하는 저장 버튼이 없다.
   */
+
+  if (phase === "generated") {
+    return (
+      <AppShell>
+        <div className="mx-auto flex max-w-[420px] flex-col items-center justify-center gap-3 py-16 text-center">
+          <h1 className="text-title font-bold text-ink">이 장은 글자를 고칠 수 없어요</h1>
+          <p className="break-keep text-body leading-relaxed text-sub">
+            시안 그림으로 만든 장이라 글자가 그림에 새겨져 있어요.
+            <br />
+            바꾸고 싶으면 제작 결과에서 <b className="text-ink">「이 장만 다시 만들기」</b>를
+            눌러주세요.
+          </p>
+          <PageHeader exact fallbackHref={`/card/${cardId}/result`} backLabel="제작 결과로" />
+        </div>
+      </AppShell>
+    );
+  }
 
   if (phase === "not-found") {
     return (
