@@ -460,6 +460,15 @@ function CalendarView({ uid }: { uid: string }) {
     if (state.phase !== "ready") return;
     const moving = state.cards.find((c) => c.id === cardId);
     if (!moving || moving.scheduledDate === dateKey) return;
+    /*
+      **지난 날짜로는 못 옮긴다** (09-03). 이미 지난 날에 올릴 일정을 잡는 건 말이 안 되고,
+      옮기는 순간 «놓친 카드»가 되어버린다. 오늘은 허용한다(오늘 올릴 수 있으니).
+    */
+    if (dateKey < todayKey) {
+      setNotice("지난 날짜로는 옮길 수 없어요.");
+      setTimeout(() => setNotice(null), 3000);
+      return;
+    }
     if ((byDate.get(dateKey) ?? []).length > 0) {
       setPendingMove({ cardId, toDate: dateKey });
     } else {
@@ -700,8 +709,19 @@ function CalendarView({ uid }: { uid: string }) {
               </>
             ) : (
               <>
-                {/* Desktop/Tablet — 플래너 컬럼 */}
-                <div className="mt-3 hidden grid-cols-7 gap-1 md:grid">
+                {/* Desktop/Tablet — 플래너 컬럼 (09-03: 요일 헤더 + 자연 높이) */}
+                <div className="mt-3 hidden grid-cols-7 md:grid">
+                  {(cells as string[]).map((dateKey) => (
+                    <div key={`h-${dateKey}`} className="py-1 text-center text-caption text-sub">
+                      {DAY_HEADS[parseDateKey(dateKey).getDay()]}
+                    </div>
+                  ))}
+                </div>
+                {/*
+                  `items-start` — 빈 날이 가장 긴 칼럼 높이로 늘어나지 않게 (09-03).
+                  전엔 한 날에 카드가 둘이면 나머지 빈 날도 그만큼 커져 여백이 컸다.
+                */}
+                <div className="hidden grid-cols-7 items-start gap-1 md:grid">
                   {(cells as string[]).map((dateKey) => (
                     <WeekColumn
                       key={dateKey}
@@ -989,6 +1009,7 @@ function DayCell({
   onDropCard,
   showPlus,
   muted,
+  isPast,
   selectedCardId,
   onSelectCard,
 }: {
@@ -1004,6 +1025,8 @@ function DayCell({
   showPlus?: boolean;
   /** 인접 달 날짜 — 흐리게 그리되 선택·드롭은 받는다 (09-01) */
   muted?: boolean;
+  /** 지난 날짜 — 드롭을 안 받는다 (09-03). 드래그 중이면 «못 놓음»을 보여준다 */
+  isPast?: boolean;
   /** 고른 카드 (09-03). 날짜만이 아니라 «어느 카드»인지도 보여야 한다 */
   selectedCardId?: string | null;
   onSelectCard?: (cardId: string) => void;
@@ -1017,19 +1040,23 @@ function DayCell({
       data-date={dateKey}
       onClick={onSelect}
       onDragOver={(e) => {
-        e.preventDefault(); // 드롭 허용
+        if (isPast) return; // 지난 날짜엔 드롭을 안 받는다 — preventDefault를 안 하면 커서가 «금지»
+        e.preventDefault();
         setOver(true);
       }}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => {
         e.preventDefault();
         setOver(false);
+        if (isPast) return;
         const cardId = e.dataTransfer.getData("text/card-id");
         if (cardId) onDropCard(cardId);
       }}
       className={[
         "relative min-h-14 cursor-pointer rounded-sm border p-1 md:min-h-24 md:p-1.5",
         muted ? "opacity-45" : "",
+        // 드래그 중인데 지난 날짜면 «여기엔 못 놓음»을 옅게 (09-03)
+        isPast && dragging ? "opacity-50" : "",
         /*
           **고른 칸을 확실히 띄운다** (09-03). 1px 테두리만으로는 옆 칸과 구별이 안 갔다.
           `ring`을 쓰는 이유 — `border-2`로 굵히면 안쪽 폭이 1px 줄어 글자가 밀린다.
@@ -1423,6 +1450,7 @@ function WeekColumn({
   onDragStartCard,
   onDropCard,
   emptyHint,
+  isPast,
 }: {
   dateKey: string;
   cards: Card[];
@@ -1434,6 +1462,8 @@ function WeekColumn({
   onDropCard: (cardId: string) => void;
   /** 빈 날 표현 — rest: 업로드 요일 아님(쉬어가는 날) · invite: 채울 수 있는 날 */
   emptyHint: "none" | "rest" | "invite";
+  /** 지난 날짜 — 드롭을 안 받는다 (09-03) */
+  isPast?: boolean;
 }) {
   const [over, setOver] = useState(false);
   const dayNum = Number(dateKey.slice(8, 10));
@@ -1443,6 +1473,7 @@ function WeekColumn({
       data-date={dateKey}
       onClick={onSelect}
       onDragOver={(e) => {
+        if (isPast) return; // 지난 날짜엔 드롭 안 받는다 (09-03)
         e.preventDefault();
         setOver(true);
       }}
@@ -1450,13 +1481,15 @@ function WeekColumn({
       onDrop={(e) => {
         e.preventDefault();
         setOver(false);
+        if (isPast) return;
         const cardId = e.dataTransfer.getData("text/card-id");
         if (cardId) onDropCard(cardId);
       }}
       className={[
         // 박스 없이 — 드롭 대상으로 살아 있도록 최소 높이와 hover 배경만
-        "flex min-h-32 cursor-pointer flex-col gap-2 rounded-md p-1.5",
+        "flex min-h-20 cursor-pointer flex-col gap-2 rounded-md p-1.5",
         over && dragging ? "bg-berry-tint" : isSelected ? "bg-berry-tint" : "",
+        isPast && dragging ? "opacity-50" : "",
       ].join(" ")}
     >
       {/* 날짜 라벨 — 카드보다 약하게 */}

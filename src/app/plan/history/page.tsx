@@ -64,6 +64,33 @@ export default function PlanHistoryPage() {
   const [state, setState] = useState<ListState>({ phase: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  /**
+   * 기획 한 건 삭제 (09-03) — 목록에서 먼저 빼고(낙관적) 서버에 알린다.
+   * 실패하면 원래 목록으로 되돌리고 알린다. 카드는 서버에서 건드리지 않는다.
+   */
+  async function handleDelete(id: string) {
+    const user = auth.currentUser;
+    if (!user) return;
+    if (state.phase !== "ready") return;
+
+    const prevRows = state.rows;
+    setState({ phase: "ready", rows: prevRows.filter((r) => r.id !== id) });
+
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/plans/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(String(res.status));
+    } catch {
+      setState({ phase: "ready", rows: prevRows });
+      setNotice("삭제하지 못했어요. 잠시 후 다시 시도해주세요.");
+      setTimeout(() => setNotice(null), 3000);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -170,7 +197,17 @@ export default function PlanHistoryPage() {
               rows={state.rows.slice(0, visibleCount)}
               hasMore={state.rows.length > visibleCount}
               onMore={() => setVisibleCount((n) => n + PAGE_SIZE)}
+              onDelete={handleDelete}
             />
+          )}
+
+          {notice && (
+            <div
+              role="status"
+              className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-md bg-ink px-4 py-2 text-caption text-white shadow-md md:bottom-8"
+            >
+              {notice}
+            </div>
           )}
         </main>
       </div>
@@ -184,10 +221,12 @@ function HistoryList({
   rows,
   hasMore,
   onMore,
+  onDelete,
 }: {
   rows: Row[];
   hasMore: boolean;
   onMore: () => void;
+  onDelete: (id: string) => void;
 }) {
   // 날짜별 그룹 — 최신 날짜가 위 (rows는 이미 confirmedAt 내림차순)
   const groups: { dateKey: string; rows: Row[] }[] = [];
@@ -222,21 +261,13 @@ function HistoryList({
                   const title = listTitle(row);
                   const duplicated = (titleCount.get(title) ?? 0) > 1;
                   return (
-                    /* 한 항목 = 제목 한 줄 (08-31). 같은 날 제목이 겹칠 때만 오른쪽 끝에 시각 */
-                    <Link
+                    <HistoryRow
                       key={row.id}
-                      href={`/plan/${row.id}`}
-                      className="flex min-w-0 items-baseline gap-2"
-                    >
-                      <span className="min-w-0 flex-1 truncate text-body font-semibold text-ink">
-                        {title}
-                      </span>
-                      {duplicated && (
-                        <span className="shrink-0 text-caption text-sub">
-                          {timeLabel(row.confirmedAt)}
-                        </span>
-                      )}
-                    </Link>
+                      row={row}
+                      title={title}
+                      timeLabel={duplicated ? timeLabel(row.confirmedAt) : ""}
+                      onDelete={onDelete}
+                    />
                   );
                 })}
               </div>
@@ -252,6 +283,72 @@ function HistoryList({
           className="mt-6 flex h-11 w-full items-center justify-center rounded-md border border-line text-body font-semibold text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
         >
           더 보기
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 목록 한 줄 (09-03) — 호버하면 배경이 옅게 깔리고 오른쪽에 삭제 버튼이 뜬다.
+ *
+ * 삭제는 한 번 더 물어본다: 휴지통 → 「삭제 / 취소」. 실수로 지우는 걸 막는다.
+ * 모바일은 호버가 없어 휴지통을 항상 옅게 보여주고(터치로 누름), 데스크톱은
+ * 호버할 때만 드러낸다. 제목(Link)과 삭제 버튼은 형제라 링크 안에 버튼이 겹치지 않는다.
+ */
+function HistoryRow({
+  row,
+  title,
+  timeLabel,
+  onDelete,
+}: {
+  row: Row;
+  title: string;
+  timeLabel: string;
+  onDelete: (id: string) => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <div className="group -mx-2 flex min-w-0 items-center gap-2 rounded-md px-2 py-1 transition-colors duration-150 hover:bg-surface-muted">
+      <Link href={`/plan/${row.id}`} className="flex min-w-0 flex-1 items-baseline gap-2">
+        <span className="min-w-0 flex-1 truncate text-body font-semibold text-ink">{title}</span>
+        {timeLabel && <span className="shrink-0 text-caption text-sub">{timeLabel}</span>}
+      </Link>
+
+      {confirming ? (
+        <span className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onDelete(row.id)}
+            className="rounded-sm px-2 py-1 text-caption font-semibold text-warn hover:bg-berry-tint"
+          >
+            삭제
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirming(false)}
+            className="rounded-sm px-2 py-1 text-caption text-sub hover:bg-surface"
+          >
+            취소
+          </button>
+        </span>
+      ) : (
+        <button
+          type="button"
+          aria-label="기획 삭제"
+          onClick={() => setConfirming(true)}
+          className="shrink-0 rounded-sm p-1.5 text-sub transition-opacity duration-150 hover:text-warn md:opacity-0 md:group-hover:opacity-100"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path
+              d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m2 0v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </button>
       )}
     </div>
