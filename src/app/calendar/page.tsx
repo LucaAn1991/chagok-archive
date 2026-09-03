@@ -480,7 +480,7 @@ function CalendarView({ uid }: { uid: string }) {
   const pendingTargetCards = pendingMove ? (byDate.get(pendingMove.toDate) ?? []) : [];
 
   return (
-    <AppShell width={1200}>
+    <AppShell width={960}>
       {/* 헤더 — 이동·오늘 위, 월간/주간 토글은 제목 바로 아래 (08-31 v4) */}
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
@@ -629,6 +629,9 @@ function CalendarView({ uid }: { uid: string }) {
                       <span aria-hidden className="font-semibold">
                         ✓
                       </span>
+                    ) : status === "planned" ? (
+                      // 제작 대기 = 빈 링 (형태로 구분, 09-03)
+                      <span aria-hidden className="h-2 w-2 rounded-pill border-2 border-st-planned" />
                     ) : (
                       <span
                         aria-hidden
@@ -1040,19 +1043,32 @@ function DayCell({
             : "bg-surface",
       ].join(" ")}
     >
-      <span
-        className={[
-          "flex size-6 items-center justify-center rounded-pill text-caption",
-          // 오늘 > 선택 > 평소. 오늘이면서 고른 날은 오늘 표시를 이긴다 (칸 링이 선택을 말한다)
-          isToday
-            ? "bg-berry font-bold text-white"
-            : isSelected
-              ? "bg-berry-light font-bold text-berry-dark"
-              : "text-sub",
-        ].join(" ")}
-      >
-        {dayNum}
-      </span>
+      <div className="flex items-start justify-between">
+        <span
+          className={[
+            "flex size-6 items-center justify-center rounded-pill text-caption",
+            // 오늘 > 선택 > 평소. 오늘이면서 고른 날은 오늘 표시를 이긴다 (칸 링이 선택을 말한다)
+            isToday
+              ? "bg-berry font-bold text-white"
+              : isSelected
+                ? "bg-berry-light font-bold text-berry-dark"
+                : "text-sub",
+          ].join(" ")}
+        >
+          {dayNum}
+        </span>
+
+        {/*
+          담긴 콘텐츠 수 배지 (09-03) — 알림 숫자처럼 **오른쪽 위**에. 카드가 2건보다
+          많을 때만 뜬다. 아래 «+N건» 회색 글씨보다 한눈에 들어온다.
+          데스크톱은 «전체 N», 모바일은 칸이 좁아 점만 있으니 여기서 총수를 보여준다.
+        */}
+        {cards.length > maxDesktop && (
+          <span className="hidden shrink-0 items-center rounded-pill bg-berry px-2 py-0.5 text-label font-bold text-white md:flex">
+            +{cards.length - maxDesktop}건
+          </span>
+        )}
+      </div>
 
       {/* Mobile — 상태색 점 (최대 3개) */}
       <span className="mt-1 flex gap-0.5 md:hidden">
@@ -1105,10 +1121,22 @@ function DayCell({
               >
                 ✓
               </span>
-            ) : (
+            ) : card.status === "planned" ? (
+              /*
+                제작 대기 = **빈 링** (09-03). 아직 안 만든 상태라 «비어 있음»으로.
+                업로드 대기(꽉 찬 점)와 형태로 갈린다 — 색만으론 파스텔이라 안 갈렸다.
+              */
               <span
                 aria-hidden
-                /* 고른 카드는 진한 브랜드색 바탕이라 상태 점에 흰 테를 둘러 살린다 */
+                className={[
+                  "mt-[3px] h-2 w-2 shrink-0 rounded-pill border-2",
+                  cardOn ? "border-white/80" : "border-st-planned",
+                ].join(" ")}
+              />
+            ) : (
+              /* 업로드 대기 = **꽉 찬 점** (만들어 둠, 올릴 차례). 제작 대기와 형태로 구분 */
+              <span
+                aria-hidden
                 className={[
                   "mt-[3px] h-2 w-2 shrink-0 rounded-pill",
                   cardOn ? "ring-1 ring-white/70" : "",
@@ -1135,9 +1163,7 @@ function DayCell({
           </button>
           );
         })}
-        {cards.length > maxDesktop && (
-          <span className="px-1 text-caption text-sub">+{cards.length - maxDesktop}건</span>
-        )}
+        {/* «+N건» 회색 글씨는 09-03에 오른쪽 위 배지로 옮겼다 */}
       </span>
 
       {/* 업로드 요일인데 비어 있는 미래 날 — 칸 정중앙에 채움 신호 (클릭 = 선택 → 패널) */}
@@ -1552,7 +1578,7 @@ function DayModal({
         tabIndex={-1}
         data-focus-ring="none"
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-full w-full max-w-[440px] flex-col overflow-hidden rounded-lg bg-surface outline-none"
+        className="flex max-h-full w-full max-w-[620px] flex-col overflow-hidden rounded-lg bg-surface outline-none"
       >
         <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
           <h2 className="min-w-0 truncate text-body font-bold text-ink">
@@ -1692,13 +1718,18 @@ function DayPanel({
                   {sec.label} {sec.cards.length}
                 </p>
               )}
-              <ul className="flex flex-col gap-3">
+              {/*
+                카드를 **좌우로** 늘어놓는다 (09-03). 세로로 쌓으면 하루에 여럿일 때
+                아래로 길어져 한눈에 안 들어온다. 앱의 제작 결과·템플릿과 같은 가로 스크롤.
+                `overscroll-x-contain` — 밀 때 모달이 통째로 안 밀리게.
+              */}
+              <ul className="flex items-stretch gap-3 overflow-x-auto overscroll-x-contain pb-1">
                 {sec.cards.map((card) => (
-            <li key={card.id}>
+            <li key={card.id} className="flex">
               {/* 딱 필요한 것만 — 제목·상태·대상·안내·CTA·상세 (08-31 v2, 사진·캡션 제외) */}
               <article
                 className={[
-                  "flex flex-col items-start gap-2 rounded-lg border p-3",
+                  "flex h-full w-[240px] shrink-0 flex-col items-start gap-2 rounded-lg border p-3",
                   /*
                     **누른 그 카드를 짚어준다** (09-03). 하루에 카드가 둘이면
                     창을 열었을 때 어느 것을 눌렀는지 알 수 없었다.
@@ -1709,9 +1740,11 @@ function DayPanel({
                     : "border-line",
                 ].join(" ")}
               >
-                <h3 className="break-keep text-body font-semibold text-ink">{card.title}</h3>
+                <h3 className="line-clamp-2 w-full break-keep text-body font-semibold text-ink">
+                  {card.title}
+                </h3>
                 <StatusBadge status={card.status} />
-                <p className="text-caption text-sub">
+                <p className="line-clamp-1 w-full text-caption text-sub">
                   {card.audience}
                   {card.scheduledDate !== undefined &&
                     card.scheduledDate < todayKey &&
@@ -1720,8 +1753,12 @@ function DayPanel({
                   )}
                 </p>
 
-                {/* 다음 할 일 — 정보(위)와 안내(아래)를 선·색으로 구분한다 (08-31) */}
-                <div className="mt-1 flex w-full flex-col items-start gap-2 border-t border-line pt-2.5">
+                {/*
+                  다음 할 일 — 정보(위)와 안내(아래)를 선·색으로 구분한다 (08-31).
+                  `mt-auto` — 카드 바닥에 붙인다. 제목 길이가 달라도 CTA 줄이 나란히
+                  맞춰져 카드 높이가 통일된다 (09-03).
+                */}
+                <div className="mt-auto flex w-full flex-col items-start gap-2 border-t border-line pt-2.5">
                   {card.status === "planned" && (
                     <>
                       <p className="break-keep text-caption text-ink">

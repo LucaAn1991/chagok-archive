@@ -43,8 +43,8 @@
   --sub:           #746F72;
 
   /* 카드 상태 — 명도 계단식 (진할수록 완료에 가깝다). 08-31 crafted 제거로 4색 */
-  --st-planned:    #D9CCE8;  /* 제작 대기 */
-  --st-pending:    #DFAFC6;  /* 업로드 대기 */
+  --st-planned:    #C9B2E0;  /* 제작 대기 — 라벤더(빈 링으로 그려도 보이게). 09-03 */
+  --st-pending:    #C77BA0;  /* 업로드 대기 — 중간 톤으로 진하게(할 일 남음, 눈에 띄게). 09-03 계단 확대 */
   --st-published:  #A85578;  /* 발행 완료 = berry */
   --st-discarded:  #C4BDB7;  /* 버림 */
 
@@ -201,4 +201,36 @@ select:focus-visible:not([data-focus-ring="none"]) {
   outline: none;
   border-color: var(--berry);
   box-shadow: inset 0 0 0 1px var(--berry);
+}
+
+
+/* ============================================================
+   제작 대기 로더 — 달리는 캐릭터 (09-03)
+   캐릭터는 위아래로 통통 튀고(달리는 몸짓), 발밑 길은 왼쪽으로 흘러(앞으로 나아감).
+   prefers-reduced-motion이면 멈춘다 — 흔들림에 예민한 사람을 배려.
+   ============================================================ */
+@keyframes loader-run {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50%      { transform: translateY(-14px) rotate(3deg); }
+}
+@keyframes loader-track {
+  from { background-position-x: 0; }
+  to   { background-position-x: -28px; }
+}
+.loader-run {
+  animation: loader-run 0.5s ease-in-out infinite;
+}
+.loader-track {
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--line) 0 14px,
+    transparent 14px 28px
+  );
+  background-repeat: repeat-x;
+  background-position-y: center;
+  background-size: 28px 3px;
+  animation: loader-track 0.5s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .loader-run, .loader-track { animation: none; }
 }

@@ -35,7 +35,11 @@ export default function StatusBadge({ status: rawStatus }: { status: CardStatus 
         <span aria-hidden className="font-semibold">
           ✓
         </span>
-      ) : ( // 09-01 — 점 복원. 빨간 느낌은 점이 아니라 색(--st-pending)을 고쳐 해결
+      ) : status === "planned" ? (
+        /* 제작 대기 = 빈 링 (아직 안 만듦). 업로드 대기(꽉 찬 점)와 형태로 갈린다 (09-03) */
+        <span aria-hidden className="h-2 w-2 rounded-pill border-2 border-st-planned" />
+      ) : (
+        /* 업로드 대기 = 꽉 찬 점 (만들어 둠) */
         <span
           aria-hidden
           className="h-2 w-2 rounded-pill"

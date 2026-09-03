@@ -20,14 +20,14 @@ import MobileBottomNav from "@/components/MobileBottomNav";
  * 이렇게 미리 적어둔 것 중에서 골라야 한다.
  */
 const MAX_WIDTH = {
-  720: "max-w-[720px]", // 제작 결과 · 카드 상세
-  960: "max-w-[960px]", // 홈 · 설정 · 놓친 카드
-  1200: "max-w-[1200px]", // 캘린더 — 전폭
+  720: "max-w-[720px]", // (옛) — 09-03에 전 페이지를 960으로 통일하며 기본에서 제외
+  960: "max-w-[960px]", // 기본 — 모든 콘텐츠 페이지 (홈 폭에 맞춤, 09-03)
+  1200: "max-w-[1200px]", // 캘린더 등 넓은 격자
 } as const;
 
 export default function AppShell({
   children,
-  width = 720,
+  width = 960, // 09-03 — 전 페이지를 홈 폭(960)으로 통일. 넓은 격자만 명시적으로 1200
 }: {
   children: React.ReactNode;
   /** DESIGN.md §4 「최대 폭」 */

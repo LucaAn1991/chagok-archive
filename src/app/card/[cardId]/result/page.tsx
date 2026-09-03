@@ -9,6 +9,7 @@ import { auth, db } from "@/lib/firebase/client";
 import SlideRemakePanel from "@/components/SlideRemakePanel";
 import { TEMPLATE_SHEETS } from "@/lib/render/template-sheets";
 import SlideComparePanel from "@/components/SlideComparePanel";
+import GeneratingOverlay from "@/components/GeneratingOverlay";
 import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/PageHeader";
 import StockAttribution from "@/components/StockAttribution";
@@ -873,6 +874,11 @@ async function readRender(
             </div>
           )}
         </section>
+      )}
+
+      {/* 제작 대기 — 달리는 캐릭터 오버레이 (09-03) */}
+      {phase === "generating" && (
+        <GeneratingOverlay total={build.total} done={build.done} elapsed={elapsed} />
       )}
 
       {/*

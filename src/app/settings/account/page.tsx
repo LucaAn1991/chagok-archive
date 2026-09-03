@@ -110,7 +110,7 @@ export default function AccountSettingsPage() {
       <div className="flex flex-1">
         <AppSidebar />
         <div className="flex min-w-0 flex-1 flex-col">
-          <main className="mx-auto w-full max-w-[720px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
+          <main className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
             <div aria-hidden className="flex animate-pulse flex-col gap-4">
               <div className="h-8 w-32 rounded-md bg-surface-muted" />
               <div className="h-24 rounded-lg bg-surface-muted" />
@@ -128,7 +128,7 @@ export default function AccountSettingsPage() {
       <AppSidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <main className="mx-auto w-full max-w-[720px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
+        <main className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
           <PageHeader fallbackHref="/" backLabel="돌아가기" />
 
           <div className="mt-2">
