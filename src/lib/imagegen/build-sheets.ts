@@ -98,6 +98,10 @@ export type BuildInput = {
   accent: string | null;
   /** 기획 ⑤에서 정한 카드 장수. null이면 템플릿이 4~7장에서 고른다 (09-02) */
   slideCount: number | null;
+  /** 기획 ⑤에서 좁힌 대상 (09-03). 문구를 그 대상에 맞춘다 */
+  targeting?: import("../../types/plan").Targeting;
+  /** 브랜드 자리에 넣을 최종 이름 (09-03). 빈 문자열이면 비운다 */
+  brandLabel?: string;
   /** 진행 상황을 받아갈 곳. 없으면 아무 데도 안 보낸다 */
   onProgress?: (e: BuildProgress) => void;
 };
@@ -141,6 +145,8 @@ export async function buildFromTemplate(input: BuildInput): Promise<BuildResult>
     avoidExpressions: input.avoidExpressions,
     hasUserPhotos: input.photos.length > 0,
     slideCount: input.slideCount,
+    targeting: input.targeting,
+    brandLabel: input.brandLabel,
   });
 
   if (plan.sheets.length === 0) return { slides: [], generated: 0, fallback: 0 };

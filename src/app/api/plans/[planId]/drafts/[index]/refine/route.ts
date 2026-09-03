@@ -4,7 +4,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { getPlanningAI } from "@/lib/ai";
 import { verifyRequest } from "@/lib/server/request-auth";
 import { ndjson } from "@/lib/server/ndjson";
-import type { PlanDraft, PlanMessage } from "@/types";
+import type { PlanDraft, PlanMessage, Targeting, Promo } from "@/types";
 
 /**
  * POST /api/plans/[planId]/drafts/[index]/refine — ⑤ 기획안 하나를 대화로 다듬는다 (09-02).
@@ -91,6 +91,33 @@ function parseApply(raw: unknown): ApplyPatch | null {
   };
 }
 
+/** 홍보 대상을 받는다 (09-03). 아는 필드만. 빈 문자열은 «지움» */
+function parsePromo(raw: unknown): Promo | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const v = raw as Record<string, unknown>;
+  const out: Promo = {};
+  for (const k of ["brandName", "handle"] as const) {
+    const val = v[k];
+    if (typeof val === "string") out[k] = val.trim().slice(0, 40) || undefined;
+  }
+  return out;
+}
+
+/**
+ * 세분화 대상을 받는다 (09-03). 아는 필드만 남긴다 — 임의 키를 draft에 펼치지 않는다.
+ * 빈 문자열은 «지움»으로 본다(칩을 껐다는 뜻).
+ */
+function parseTargeting(raw: unknown): Targeting | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const v = raw as Record<string, unknown>;
+  const out: Targeting = {};
+  for (const k of ["ageRange", "gender", "tone", "timeOfDay"] as const) {
+    const val = v[k];
+    if (typeof val === "string") out[k] = val.trim().slice(0, 24) || undefined;
+  }
+  return out;
+}
+
 /** 대화 기록에서 이 기획안 것을 가려내는 표시. 화면은 이걸 떼고 그린다 */
 function markerFor(index: number): string {
   return `[기획안${index + 1}] `;
@@ -113,14 +140,18 @@ export async function POST(
 
   let message = "";
   let apply: ApplyPatch | null = null;
+  let targeting: Targeting | undefined;
+  let promo: Promo | undefined;
   try {
     const body = await request.json();
     message = typeof body?.message === "string" ? body.message.trim() : "";
     apply = parseApply(body?.apply);
+    targeting = parseTargeting(body?.targeting);
+    promo = parsePromo(body?.promo);
   } catch {
     return NextResponse.json({ error: "요청 형식이 잘못됐어요." }, { status: 400 });
   }
-  if (!message && !apply) {
+  if (!message && !apply && !targeting && !promo) {
     return NextResponse.json({ error: "무엇을 고칠지 적어주세요." }, { status: 400 });
   }
 
@@ -143,6 +174,21 @@ export async function POST(
   }
 
   const marker0 = markerFor(index);
+
+  /*
+    세분화 대상만 바꾼 경우 (09-03) — **AI를 부르지 않는다.** 저장만 하면 된다.
+    다음에 다듬기 대화를 하거나 제작할 때 이 값이 프롬프트에 실린다.
+  */
+  if ((targeting || promo) && !message && !apply) {
+    const nextDraft: PlanDraft = {
+      ...draft,
+      ...(targeting ? { targeting: { ...draft.targeting, ...targeting } } : {}),
+      ...(promo ? { promo: { ...draft.promo, ...promo } } : {}),
+    };
+    const nextDrafts = drafts.map((d, i) => (i === index ? nextDraft : d));
+    await planRef.update({ drafts: nextDrafts });
+    return NextResponse.json({ draft: nextDraft, index, targetingOnly: true });
+  }
 
   /*
     후보·장수를 눌러서 고른 경우 — **AI를 부르지 않는다.** 이미 정해진 값을 넣는 일이라
@@ -182,6 +228,7 @@ export async function POST(
           intent: draft.intent,
           extraNote: draft.extraNote,
           slideCount: draft.slideCount,
+          targeting: { ...draft.targeting, ...targeting },
         },
         history: historyFor(stored, index),
         message,
@@ -189,7 +236,12 @@ export async function POST(
       emit,
     );
 
-    const next: PlanDraft = { ...draft, ...result.draft };
+    const next: PlanDraft = {
+      ...draft,
+      ...result.draft,
+      ...(targeting ? { targeting: { ...draft.targeting, ...targeting } } : {}),
+      ...(promo ? { promo: { ...draft.promo, ...promo } } : {}),
+    };
     // 배열 통째로 쓴다 — Firestore는 배열 한 칸만 고치지 못한다
     const nextDrafts = drafts.map((d, i) => (i === index ? next : d));
     const now = Timestamp.now();

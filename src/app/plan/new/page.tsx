@@ -28,7 +28,7 @@ import {
 } from "@/lib/render/card-styles";
 import { PREVIEW_VERSION, TEMPLATE_SHEETS } from "@/lib/render/template-sheets";
 import PlanTabs from "@/components/PlanTabs";
-import type { DraftVariant, PlanDraft, StockPick, StyleId } from "@/types";
+import type { DraftVariant, PlanDraft, Promo, StockPick, StyleId, Targeting } from "@/types";
 
 /**
  * 새 기획 — AI 기획 대화 (F2 · IA 2.1). **09-02에 3단계에서 6단계로 늘렸다.**
@@ -50,6 +50,15 @@ import type { DraftVariant, PlanDraft, StockPick, StyleId } from "@/types";
  */
 
 type Msg = { role: "user" | "assistant" | "system"; text: string };
+
+/** 빈 문자열(칩 끔)을 지운 targeting — undefined 필드는 «무관» */
+function cleanTargeting(t: Targeting): Targeting {
+  const out: Targeting = {};
+  for (const k of ["ageRange", "gender", "tone", "timeOfDay"] as const) {
+    if (t[k]) out[k] = t[k];
+  }
+  return out;
+}
 type Proposal = { audiences: string[]; purposes: string[] };
 
 /** 서버로 보낼 한 턴 — [다시 보내기]가 그대로 재사용한다 */
@@ -765,6 +774,41 @@ function NewPlanScreen() {
   }
 
   /**
+   * ⑤ 대상 좁히기 (09-03) — AI 없이 저장만 한다. 카피는 다음 다듬기·제작 때 반영된다.
+   */
+  async function sendTargeting(patch: Targeting) {
+    if (!planId || refineIndex === null) return;
+    const index = refineIndex;
+    // 화면에 먼저 반영 — 칩이 곧바로 켜져야 «눌렸다»가 느껴진다
+    setDrafts((prev) =>
+      prev.map((d, i) =>
+        i === index
+          ? { ...d, targeting: cleanTargeting({ ...d.targeting, ...patch }) }
+          : d,
+      ),
+    );
+    try {
+      await postJson(`/api/plans/${planId}/drafts/${index}/refine`, { targeting: patch });
+    } catch {
+      // 저장 실패는 조용히 — 다음 저장·제작 때 다시 시도된다
+    }
+  }
+
+  /** ⑤ 홍보 대상 저장 (09-03) — targeting과 같은 방식, AI 없이 */
+  async function sendPromo(patch: Promo) {
+    if (!planId || refineIndex === null) return;
+    const index = refineIndex;
+    setDrafts((prev) =>
+      prev.map((d, i) => (i === index ? { ...d, promo: { ...d.promo, ...patch } } : d)),
+    );
+    try {
+      await postJson(`/api/plans/${planId}/drafts/${index}/refine`, { promo: patch });
+    } catch {
+      // 조용히 — 다음 저장·제작 때 다시 시도된다
+    }
+  }
+
+  /**
    * ⑤ 눌러서 고치기 — 후보나 장수를 그대로 넣는다. **AI를 부르지 않는다.**
    *
    * 대화로 고치는 것과 저장 경로가 같다(`refine`의 `apply`) — 갈라두면 언젠가
@@ -1057,6 +1101,8 @@ function NewPlanScreen() {
                       })
                     }
                     onApplySlideCount={(n) => void applyToDraft({ slideCount: n })}
+                    onTargeting={(patch) => void sendTargeting(patch)}
+                    onPromo={(patch) => void sendPromo(patch)}
                   />
                 )}
 

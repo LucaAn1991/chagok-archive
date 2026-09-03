@@ -62,6 +62,10 @@ export type Card = {
    * null이면 템플릿이 알아서 4~7장을 고른다 (`lib/ai/sheet-copy.ts`).
    */
   slideCount: number | null;
+  /** 기획 ⑤에서 좁힌 대상 (09-03). 제작 시 문구 생성에 쓴다. 비어 있을 수 있다 */
+  targeting?: import("./plan").Targeting;
+  /** 기획 ⑤에서 받은 홍보 대상 (상품·브랜드명 / 인스타 계정명) (09-03) */
+  promo?: import("./plan").Promo;
   templateVars: Record<string, string>; // 기록형의 그날 값. plan.templateVarNames와 짝을 이룬다
 
   caption: Caption | null; // 캡션 생성(F7) 전에는 null

@@ -6,6 +6,8 @@ import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged, type User as AuthUser } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
+import SlideRemakePanel from "@/components/SlideRemakePanel";
+import SlideComparePanel from "@/components/SlideComparePanel";
 import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/PageHeader";
 import StockAttribution from "@/components/StockAttribution";
@@ -65,6 +67,19 @@ export default function CardResultPage() {
   // 지금 다시 만들고 있는 «장» (09-02). 한 번에 하나만 — 2분씩 걸려 여러 개는 무리다.
   // 카드 전체를 다시 만드는 `regenerating`(불리언)과 다른 값이라 이름을 나눴다
   const [regenSlide, setRegenSlide] = useState<number | null>(null);
+  /* 「이 장만 다시 만들기」로 편집 패널을 연 장 (09-03). null이면 다 닫힘 */
+  const [editOrder, setEditOrder] = useState<number | null>(null);
+  /*
+    다시 만든 «미리보기» (09-03). 확정 전이라 카드엔 안 들어갔다.
+    { url: 새 그림, lines: 그때 쓴 문구 }. 사용자가 옛것/새것을 고른 뒤 지운다.
+  */
+  const [preview, setPreview] = useState<{
+    order: number;
+    url: string;
+    lines: string[];
+    photoUrl: string | null;
+  } | null>(null);
+  const [applying, setApplying] = useState(false);
   /**
    * 시안으로 만드는 중의 진행 (09-02). `total`이 0이면 아직 문구를 쓰는 중이다.
    * 3분이 걸리는 일이라 **끝날 때까지 아무 말이 없으면 멈춘 줄 안다.**
@@ -166,7 +181,38 @@ export default function CardResultPage() {
    * 실패해도 지금 장은 그대로 남는다(서버가 카드를 안 고친다). 다시 만들기를
    * 눌렀다가 있던 것마저 잃으면 안 된다.
    */
-  async function regenerateSlide(order: number) {
+  /**
+   * 이 장에 넣을 사진 올리기 (09-03) — 서명 URL 발급 → Storage 직접 PUT → 읽기 주소.
+   * 전체 사진 목록엔 안 쌓인다(`forSlide`) — 이 장에만 쓰인다.
+   */
+  async function uploadSlidePhoto(file: File): Promise<string | null> {
+    const user = userRef.current;
+    if (!user) return null;
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/cards/${cardId}/photos`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ contentType: file.type, forSlide: true }),
+      });
+      if (!res.ok) {
+        showToast("사진을 올리지 못했어요.");
+        return null;
+      }
+      const ticket = (await res.json()) as { uploadUrl: string; headers: Record<string, string>; readUrl: string };
+      const put = await fetch(ticket.uploadUrl, { method: "PUT", headers: ticket.headers, body: file });
+      if (!put.ok) {
+        showToast("사진을 올리지 못했어요.");
+        return null;
+      }
+      return ticket.readUrl;
+    } catch {
+      showToast("사진을 올리지 못했어요.");
+      return null;
+    }
+  }
+
+  async function regenerateSlide(order: number, lines?: string[], request?: string, photoUrl?: string | null) {
     const user = userRef.current;
     if (!user || regenSlide !== null) return;
     setRegenSlide(order);
@@ -174,41 +220,81 @@ export default function CardResultPage() {
       const token = await user.getIdToken();
       const res = await fetch(`/api/cards/${cardId}/slides/${order}/regenerate`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ lines, request, photoUrl }),
       });
       const data = (await res.json().catch(() => null)) as
-        | { ok?: boolean; slide?: Slide; error?: string }
+        | { ok?: boolean; candidateUrl?: string; lines?: string[]; photoUrl?: string | null; error?: string }
         | null;
 
-      if (!res.ok || !data?.ok) {
+      if (!res.ok || !data?.ok || !data.candidateUrl) {
         showToast(data?.error ?? "다시 만들지 못했어요.");
         return;
       }
 
-      // 카드의 그 장만 갈아끼운다
-      setCard((prev) =>
-        prev
-          ? { ...prev, slides: prev.slides.map((s) => (s.order === order ? data.slide! : s)) }
-          : prev,
-      );
-
       /*
-        그림도 새로 받는다. **`fresh`를 켜야 한다** — 슬라이드 주소는 그대로인데
-        이미지 라우트가 5분 캐시를 주기 때문에 그냥 부르면 옛 PNG가 온다 (08-31).
+        **카드를 바꾸지 않는다** (09-03). 새 그림은 미리보기로만 받는다.
+        옛것과 나란히 놓고 사용자가 고른 뒤에야 확정한다.
       */
-      const url = await fetchSlideImage(order, token, true);
-      setSlideUrls((prev) => {
-        const next = [...prev];
-        const stale = next[order];
-        next[order] = url;
-        if (stale) URL.revokeObjectURL(stale);
-        return next;
+      setPreview({
+        order,
+        url: data.candidateUrl,
+        lines: data.lines ?? lines ?? [],
+        photoUrl: data.photoUrl ?? photoUrl ?? null,
       });
-      showToast("이 장을 다시 만들었어요.");
+      setEditOrder(null);
     } catch {
       showToast("다시 만들지 못했어요.");
     } finally {
       setRegenSlide(null);
+    }
+  }
+
+  /**
+   * 미리보기 확정 (09-03) — 사용자가 옛것/새것을 고른다.
+   * keep:"new"면 새 그림으로 바꾸고, "old"면 미리보기를 버린다.
+   */
+  async function applyPreview(keep: "new" | "old") {
+    const user = userRef.current;
+    if (!user || !preview || applying) return;
+    const { order, lines, photoUrl } = preview;
+    setApplying(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/cards/${cardId}/slides/${order}/regenerate/apply`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ keep, lines, photoUrl }),
+      });
+      const data = (await res.json().catch(() => null)) as
+        | { ok?: boolean; kept?: string; slide?: Slide; error?: string }
+        | null;
+      if (!res.ok || !data?.ok) {
+        showToast(data?.error ?? "처리하지 못했어요.");
+        return;
+      }
+      if (keep === "new" && data.slide) {
+        setCard((prev) =>
+          prev ? { ...prev, slides: prev.slides.map((s) => (s.order === order ? data.slide! : s)) } : prev,
+        );
+        // 그림도 새로 받는다 — 확정본 주소가 새 토큰이라 캐시를 안 탄다
+        const url = await fetchSlideImage(order, token, true);
+        setSlideUrls((prev) => {
+          const next = [...prev];
+          const stale = next[order];
+          next[order] = url;
+          if (stale) URL.revokeObjectURL(stale);
+          return next;
+        });
+        showToast("새 그림으로 바꿨어요.");
+      } else {
+        showToast("원래 그림을 그대로 뒀어요.");
+      }
+    } catch {
+      showToast("처리하지 못했어요.");
+    } finally {
+      setApplying(false);
+      setPreview(null);
     }
   }
 
@@ -481,7 +567,7 @@ async function readRender(
     "w-full rounded-md border border-line bg-surface px-3 py-2 text-body text-ink";
 
   return (
-    <AppShell>
+    <AppShell width={960}>
       <PageHeader fallbackHref={`/card/${cardId}`} backLabel="돌아가기" />
       <div className="mt-3 flex flex-col gap-6">
       <header className="flex flex-col gap-1 pt-4">
@@ -568,55 +654,46 @@ async function readRender(
                   눌러도 아무 일이 안 일어나는 버튼을 두는 대신, **막고 이유를 적는다.**
                   대신 「이 장만 다시 만들기」를 열어둔다 (아래).
                 */
-                const generated = slide.origin === "generated";
+                /*
+                  **카드를 눌러도 편집기로 가지 않는다** (09-03).
+
+                  편집기는 우리 렌더러로 `texts`를 다시 그리는 구조인데, 시안 그림은
+                  gpt-image-2가 구워둔 PNG라 그 경로를 안 거친다 — 고쳐도 안 그려졌다.
+                  대신 「이 장만 다시 만들기」로 **문구를 고치고 다시 굽는다**.
+                */
+                const canRemake = card?.styleId && slide.sheetIndex != null;
                 return slideUrls[i] ? (
                   <div key={slide.order} className="flex shrink-0 snap-start flex-col gap-2">
-                    {generated ? (
-                      <>
-                        {/* eslint-disable-next-line @next/next/no-img-element -- blob URL은 next/image 대상이 아니다 */}
-                        <img
-                          src={slideUrls[i]}
-                          alt={`슬라이드 ${i + 1}`}
-                          className="aspect-square w-72 rounded-lg border border-line bg-surface object-cover"
-                        />
-                        <p className="w-72 break-keep text-caption text-sub">
-                          시안 그림이라 글자를 직접 고칠 수 없어요. 마음에 안 들면 다시 만들어 주세요.
-                        </p>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/card/${cardId}/edit/${slide.order}`)}
-                        className="rounded-lg"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element -- blob URL은 next/image 대상이 아니다 */}
-                        <img
-                          src={slideUrls[i]}
-                          alt={`슬라이드 ${i + 1} — 누르면 편집 화면으로 가요`}
-                          className="aspect-square w-72 rounded-lg border border-line bg-surface object-cover"
-                        />
-                      </button>
-                    )}
+                    {/* eslint-disable-next-line @next/next/no-img-element -- blob URL은 next/image 대상이 아니다 */}
+                    <img
+                      src={slideUrls[i]}
+                      alt={`슬라이드 ${i + 1}`}
+                      className="aspect-square w-72 rounded-lg border border-line bg-surface object-cover"
+                    />
 
-                    {/*
-                      **다시 만들기는 두 경우 다 연다** (09-02).
-
-                      원래는 시안으로 «못» 만든 장에만 뒀다. 그런데 시안으로 만든 장은
-                      편집기를 막았으므로, 여기까지 닫으면 그 장에 할 수 있는 일이
-                      하나도 없어진다. 결과를 보고 다시 만들지는 사용자가 정한다.
-                    */}
-                    {card?.styleId && slide.sheetIndex != null && (
-                      <button
-                        type="button"
-                        onClick={() => void regenerateSlide(slide.order)}
-                        disabled={regenSlide !== null}
-                        className="flex h-9 items-center justify-center rounded-md border border-dashed
-                                   border-line px-3 text-caption text-sub transition-colors duration-200
-                                   hover:border-berry hover:text-ink disabled:opacity-50"
-                      >
-                        {regenSlide === slide.order ? "만드는 중···" : "이 장만 다시 만들기"}
-                      </button>
-                    )}
+                    {canRemake &&
+                      (editOrder === slide.order ? (
+                        <SlideRemakePanel
+                          lines={slide.sheetLines ?? []}
+                          busy={regenSlide === slide.order}
+                          onUploadPhoto={uploadSlidePhoto}
+                          onApply={(lines, request, photoUrl) =>
+                            void regenerateSlide(slide.order, lines, request, photoUrl)
+                          }
+                          onClose={() => setEditOrder(null)}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setEditOrder(slide.order)}
+                          disabled={regenSlide !== null}
+                          className="flex h-9 w-72 items-center justify-center rounded-md border border-dashed
+                                     border-line px-3 text-caption text-sub transition-colors duration-200
+                                     hover:border-berry hover:text-ink disabled:opacity-50"
+                        >
+                          이 장만 다시 만들기
+                        </button>
+                      ))}
                   </div>
                 ) : (
                   <div
@@ -789,6 +866,19 @@ async function readRender(
             </div>
           )}
         </section>
+      )}
+
+      {/*
+        다시 만든 그림 고르기 (09-03) — 옛것·새것을 나란히 놓고 사용자가 정한다.
+        우리가 «더 나아졌다»고 판단해 덮지 않는다.
+      */}
+      {preview && (
+        <SlideComparePanel
+          oldUrl={slideUrls[preview.order] ?? null}
+          newUrl={preview.url}
+          busy={applying}
+          onKeep={(keep) => void applyPreview(keep)}
+        />
       )}
 
       {/* 피드백 토스트 (DESIGN.md §13) */}

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { AUDIENCES, AUDIENCE_DEFAULT, audiencePrompt } from "@/lib/audiences";
+import { AUDIENCES, AUDIENCE_DEFAULT, audiencePrompt, targetingPrompt } from "@/lib/audiences";
 import { BASE_SYSTEM, STR, STR_ARRAY, callJson, obj } from "./client";
 import type {
   CardDraft,
@@ -318,6 +318,7 @@ export const claudePlanningAI: PlanningAI = {
         `주제: ${topic}`,
         `이 기획안의 대상: ${draft.audience}`,
         `대상별 지시: ${audiencePrompt(draft.audience)}`,
+        targetingPrompt(draft.targeting),
         "",
         "지금 기획안:",
         `- 제목: ${draft.title}`,

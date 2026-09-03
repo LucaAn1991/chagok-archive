@@ -108,6 +108,17 @@ export async function POST(
           const send = (o: unknown) =>
             controller.enqueue(encoder.encode(`${JSON.stringify(o)}\n`));
 
+          /*
+            브랜드 자리에 넣을 이름을 정한다 (09-03). 우선순위:
+            ① 홍보 상품·브랜드명 → ② 인스타 계정명 → ③ 계정 닉네임(이메일 @앞).
+            셋 다 없으면 빈 문자열 — 그땐 sheet-copy가 브랜드 자리를 비운다.
+          */
+          const brandLabel =
+            card.promo?.brandName?.trim() ||
+            card.promo?.handle?.trim() ||
+            (user.email ?? "").split("@")[0] ||
+            "";
+
           try {
             const built = await buildFromTemplate({
               cardId,
@@ -123,6 +134,8 @@ export async function POST(
               accent: user.brand?.accent ?? null,
               // 기획 ⑤에서 정한 장수. 안 정했으면 null → 템플릿이 4~7장에서 고른다 (09-02)
               slideCount: card.slideCount ?? null,
+              targeting: card.targeting, // ⑤에서 좁힌 대상 (09-03)
+              brandLabel, // 브랜드 자리에 넣을 이름 (09-03)
               onProgress: send,
             });
 

@@ -56,3 +56,27 @@ export function audiencePrompt(label: string): string {
   if (meta) return meta.prompt;
   return `이 게시물은 "${label}"에게 하는 이야기다. 그 사람이 지금 처한 상황을 짐작해서, 그 사람만 알아들을 수 있는 구체적인 이야기로 쓸 것.`;
 }
+
+
+/**
+ * 세분화 대상(Targeting)을 프롬프트 한 문단으로 (09-03).
+ *
+ * 있는 항목만 적는다 — 비운 항목은 «아무 말도 안 하는» 게 맞다. 시간대는 약한
+ * 신호라 «거든다» 정도로만 말한다(말투를 통째로 바꾸라고 하지 않는다).
+ * 서버(claude)·목 양쪽이 이 함수 하나를 거친다.
+ */
+import type { Targeting } from "@/types";
+
+export function targetingPrompt(t: Targeting | undefined | null): string {
+  if (!t) return "";
+  const bits: string[] = [];
+  if (t.ageRange) bits.push(`이 사람은 ${t.ageRange}다`);
+  if (t.gender) bits.push(`성별은 ${t.gender}`);
+  if (t.tone) bits.push(`말은 ${t.tone} 건넨다`);
+  if (bits.length === 0 && !t.timeOfDay) return "";
+  const lines = [
+    bits.length ? `읽는 사람을 더 좁히면: ${bits.join(", ")}. 그에 맞는 말투·단어·예시를 골라라.` : "",
+    t.timeOfDay ? `${t.timeOfDay}에 보는 콘텐츠다 — 그 시간의 결을 살짝 거들되, 억지로 시간을 언급하진 마라.` : "",
+  ].filter(Boolean);
+  return lines.join("\n");
+}

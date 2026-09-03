@@ -16,7 +16,7 @@ import type { Card } from "@/types";
  * 화면은 그걸 보고 「준비 중」으로 조용히 내려앉는다.
  */
 
-type PostBody = { contentType?: unknown };
+type PostBody = { contentType?: unknown; forSlide?: unknown };
 
 export async function POST(
   req: NextRequest,
@@ -48,8 +48,12 @@ export async function POST(
     );
   }
 
-  // 상한은 서버에서도 센다 — 화면의 제한은 우회될 수 있다
-  if (card.photoUrls.length >= MAX_PHOTOS_PER_CARD) {
+  /*
+    상한은 서버에서도 센다 — 화면의 제한은 우회될 수 있다.
+    단, «이 장만 다시 만들기»의 사진 교체(`forSlide`)는 `photoUrls`에 쌓이지 않고
+    슬라이드 한 장에만 쓰이므로 상한을 적용하지 않는다 (09-03).
+  */
+  if (body.forSlide !== true && card.photoUrls.length >= MAX_PHOTOS_PER_CARD) {
     return NextResponse.json(
       { error: `사진은 ${MAX_PHOTOS_PER_CARD}장까지 넣을 수 있어요.` },
       { status: 409 },

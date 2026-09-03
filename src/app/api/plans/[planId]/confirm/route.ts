@@ -180,6 +180,8 @@ export async function POST(
         // ⑤ 다듬기에서 더한 «꼭 넣을 것»과 장수를 그대로 물려준다 (09-02)
         extraNote: draft.extraNote ?? "",
         slideCount: draft.slideCount ?? null,
+        targeting: draft.targeting ?? null, // ⑤에서 좁힌 대상 (09-03)
+        promo: draft.promo ?? null, // ⑤에서 받은 홍보 대상 (09-03)
         templateVars: {},
         caption: null,
         slides: [],

@@ -61,6 +61,8 @@ export type RefineDraftInput = {
     intent: string;
     extraNote: string;
     slideCount: number | null;
+    /** ⑤에서 좁힌 대상 (09-03). 비어 있을 수 있다 */
+    targeting?: import("../../types/plan").Targeting;
   };
   /** 이 기획안에 대해 지금까지 주고받은 말 (이 기획안 것만) */
   history: { role: "user" | "assistant"; text: string }[];

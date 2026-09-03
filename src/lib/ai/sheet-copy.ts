@@ -1,6 +1,6 @@
 import "server-only";
 
-import { audiencePrompt } from "../audiences";
+import { audiencePrompt, targetingPrompt } from "../audiences";
 import { toneDirective } from "../tone";
 import { BASE_SYSTEM, STR, STR_ARRAY, callJson, obj } from "./client";
 import { CARD_STYLES } from "../render/card-styles";
@@ -64,6 +64,13 @@ export type SheetCopyInput = {
    * 혹시 넘어와도 아래에서 다시 묶는다.
    */
   slideCount: number | null;
+  /** ⑤에서 좁힌 대상 (09-03). 있으면 문구를 그 대상에 맞춘다 */
+  targeting?: import("../../types/plan").Targeting;
+  /**
+   * 브랜드/상품 자리에 넣을 이름 (09-03). 이미 우선순위대로 정해진 최종 문자열이다
+   * (상품명 → 인스타 계정명 → 계정 닉네임). 빈 문자열이면 브랜드 자리를 비운다.
+   */
+  brandLabel?: string;
 };
 
 /** 카드뉴스 한 세트의 길이. 너무 짧으면 이야기가 안 되고 길면 안 넘겨본다 */
@@ -104,6 +111,7 @@ export async function planSheetCopy(input: SheetCopyInput): Promise<SheetCopyRes
       `주제: ${input.title}`,
       `읽는 사람: ${input.audience}`,
       `대상별 지시: ${audiencePrompt(input.audience)}`,
+      targetingPrompt(input.targeting),
       input.intent ? `기획의도: ${input.intent}` : "",
       input.extraNote ? `**이번에 꼭 넣어야 하는 것: ${input.extraNote}**` : "",
       "",
@@ -126,6 +134,9 @@ export async function planSheetCopy(input: SheetCopyInput): Promise<SheetCopyRes
       "- 영문 자리(영문 한 줄 · 큰 영문 제목)에는 짧은 영어를 쓴다. 나머지는 한국어.",
       "- 전화번호·이메일·주소·가격·날짜를 **지어내지 마라.** 그런 자리가 있으면",
       "  「프로필 링크에서 확인」처럼 어디서 보면 되는지로 채운다.",
+      input.brandLabel
+        ? `- **「브랜드명」이라고 적힌 자리에는 정확히 「${input.brandLabel}」을 그대로 넣어라.** 다른 말로 바꾸거나 지어내지 마라.`
+        : "- **「브랜드명」 자리는 비워라 (빈 문자열).** 넣을 이름이 없다 — 지어내지 마라.",
       "",
       input.hasUserPhotos
         ? "`photoDirection`은 빈 문자열로 둬라 — 사용자가 올린 사진을 쓴다."

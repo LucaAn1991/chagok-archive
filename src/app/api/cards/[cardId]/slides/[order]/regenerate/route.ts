@@ -1,14 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { getUidFromRequest } from "@/lib/api/auth";
 import { canBuildFromTemplate, photosForSheet } from "@/lib/imagegen/build-sheets";
 import { generateSheet } from "@/lib/imagegen";
 import { storeSlideImage } from "@/lib/imagegen/store";
-import type { Card, Slide, User } from "@/types";
+import type { Card, User } from "@/types";
 
 /**
  * POST /api/cards/[cardId]/slides/[order]/regenerate — **이 장만** 다시 만든다 (09-02).
+ *
+ * **09-03 — 곧바로 덮어쓰지 않는다.** 새 그림을 «미리보기»(candidate) 경로에 두고
+ * 주소만 돌려준다. 옛 그림은 그대로 남는다. 사용자가 둘을 나란히 보고 고른 뒤에야
+ * 확정한다 (`POST .../regenerate/apply`). 우리가 «더 나아졌다»고 판단해 덮지 않는다.
  *
  * **자동 재시도를 없애고 이 자리를 만들었다.** 그림 생성은 장마다 결과가 달라
  * 실패하는데, 실측에서 한 장이 세 번 다 같은 이유로 실패하며 7분과 세 장 값을 썼다.
@@ -35,6 +38,24 @@ export async function POST(
     return NextResponse.json({ error: "슬라이드 번호가 잘못됐어요." }, { status: 400 });
   }
 
+  /*
+    수정 문구·자유 지시를 받는다 (09-03). 둘 다 없으면 «있는 그대로 다시 만들기»다 —
+    옛 흐름과 같다. body가 없어도(예전 클라이언트) 동작한다.
+  */
+  let editedLines: string[] | null = null;
+  let userRequest = "";
+  let newPhotoUrl = ""; // 사용자가 이 장에 새로 넣을 사진 (09-03)
+  try {
+    const body = await req.json();
+    if (Array.isArray(body?.lines)) {
+      editedLines = body.lines.map((l: unknown) => (typeof l === "string" ? l : ""));
+    }
+    if (typeof body?.request === "string") userRequest = body.request.trim().slice(0, 300);
+    if (typeof body?.photoUrl === "string") newPhotoUrl = body.photoUrl.trim();
+  } catch {
+    // body 없는 요청 허용
+  }
+
   const cardRef = adminDb.collection("cards").doc(cardId);
   const cardSnap = await cardRef.get();
   const card = cardSnap.data() as Card | undefined;
@@ -59,13 +80,23 @@ export async function POST(
     문구를 새로 지어 넣을 수도 있지만, 그러면 나머지 장과 흐름이 어긋난다.
   */
   const sheetIndex = slide.sheetIndex;
-  const lines = slide.sheetLines;
-  if (typeof sheetIndex !== "number" || !Array.isArray(lines) || lines.length === 0) {
+  const stored = slide.sheetLines;
+  if (typeof sheetIndex !== "number" || !Array.isArray(stored) || stored.length === 0) {
     return NextResponse.json(
       { error: "이 장은 다시 만들 정보가 없어요. 카드를 통째로 다시 만들어주세요." },
       { status: 409 },
     );
   }
+
+  /*
+    수정한 문구를 쓴다 (09-03). **자리 수는 시안이 정하므로 바꾸지 못한다** —
+    빈 줄을 없애거나 새 줄을 늘리면 슬롯과 어긋난다. 길이가 같을 때만 갈아끼우고,
+    빈 값이 오면 원래 줄로 되돌린다(칸을 통째로 비우면 «자리표시가 남았다»로 실패한다).
+  */
+  const lines =
+    editedLines && editedLines.length === stored.length
+      ? editedLines.map((l, i) => (l.trim() ? l : stored[i]))
+      : stored;
 
   const userSnap = await adminDb.collection("users").doc(uid).get();
   const user = userSnap.data() as User | undefined;
@@ -80,40 +111,51 @@ export async function POST(
         여기서도 같은 규칙을 써야 다시 만든 장만 딴 사진이 되지 않는다.
       */
       /*
-        **처음 만들 때 넣었던 그 사진을 그대로 쓴다** (09-02).
+        사진을 정한다 (09-03).
 
-        배정은 클로드가 사진을 보고 정하는데(`lib/ai/photo-plan.ts`), 한 장을 다시
-        만들자고 그 판단을 다시 돌릴 수는 없다. 만들 때 `sheetPhotoUrls`에 적어둔
-        결과를 그대로 읽는다. 그 기록이 없는 옛 카드는 순서대로 돌려 배정한다.
+        ① 사용자가 이 장에 **새 사진을 올렸으면** 그것만 쓴다 — 바꾸려고 올린 것이다.
+        ② 아니면 처음 만들 때 넣었던 그 사진(`sheetPhotoUrls`)을 그대로 쓴다 — 배정을
+           다시 돌리지 않으려고 만들 때 적어둔 값이다.
+        ③ 기록이 없는 옛 카드는 순서대로 돌려 배정한다.
       */
-      photos: slide.sheetPhotoUrls?.length
-        ? await loadUserPhotos(slide.sheetPhotoUrls)
-        : photosForSheet(
-            await loadUserPhotos([
-              ...(card.photoUrls ?? []),
-              ...(card.stockPhotos ?? []).map((p) => p.imageUrl),
-            ]),
-            index,
-          ),
+      photos: newPhotoUrl
+        ? await loadUserPhotos([newPhotoUrl])
+        : slide.sheetPhotoUrls?.length
+          ? await loadUserPhotos(slide.sheetPhotoUrls)
+          : photosForSheet(
+              await loadUserPhotos([
+                ...(card.photoUrls ?? []),
+                ...(card.stockPhotos ?? []).map((p) => p.imageUrl),
+              ]),
+              index,
+            ),
       accent: user?.brand?.accent ?? null,
+      userRequest: userRequest || undefined,
+      // 검사를 끈다 (09-03) — 결과는 사용자가 비교해서 고른다. 미리 버리지 않는다
+      verify: false,
     });
 
     if (!made.ok) {
       /*
-        또 실패했다. **카드를 건드리지 않는다** — 지금 있는 장(렌더러로 그린 것)이
-        그대로 남는다. 빈칸으로 바꿔버리면 다시 만들기를 눌렀다가 있던 것마저 잃는다.
+        **그림 생성 자체가 실패했다** (09-03). 검사를 껐으므로 여기 오는 건 «검사 반려»가
+        아니라 모델·네트워크 실패다. 보여줄 그림이 없으니 카드는 그대로 두고 알린다.
       */
       return NextResponse.json(
         {
           ok: false,
-          error: "이번에도 시안대로 나오지 않았어요. 지금 장은 그대로 두었어요.",
+          error: "그림을 만들지 못했어요. 잠시 후 다시 시도해주세요.",
           reason: made.reason,
         },
         { status: 200 },
       );
     }
 
-    const stored = await storeSlideImage({ cardId, order: index, png: made.png });
+    /*
+      **미리보기 경로에 둔다** (09-03). 확정본을 덮지 않으므로 옛 그림이 그대로 있다.
+      카드 문서(`slides`)도 **건드리지 않는다** — 사용자가 고른 뒤 apply에서 바꾼다.
+      다만 다시 만들 때 쓴 문구는 apply가 알아야 하니 함께 돌려준다.
+    */
+    const stored = await storeSlideImage({ cardId, order: index, png: made.png, variant: "candidate" });
     if (!stored.ok) {
       console.error(`[regenerate] 저장 실패 card=${cardId} order=${index} — ${stored.reason}`);
       return NextResponse.json(
@@ -122,19 +164,7 @@ export async function POST(
       );
     }
 
-    const next: Slide = {
-      ...slide,
-      origin: "generated",
-      generatedUrl: stored.url,
-      sheetIndex,
-      sheetLines: lines,
-      sheetPhotoUrls: slide.sheetPhotoUrls ?? null,
-    };
-    // 배열 통째로 쓴다 — Firestore는 배열 한 칸만 고치지 못한다
-    const slides = card.slides.map((s) => (s.order === index ? next : s));
-    await cardRef.update({ slides, updatedAt: FieldValue.serverTimestamp() });
-
-    return NextResponse.json({ ok: true, slide: next });
+    return NextResponse.json({ ok: true, candidateUrl: stored.url, lines, photoUrl: newPhotoUrl || null });
   } catch (e) {
     console.error("[regenerate]", e);
     return NextResponse.json(

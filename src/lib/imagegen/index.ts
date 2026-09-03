@@ -58,6 +58,25 @@ export type SheetRequest = {
   photos?: { url: string; png: Buffer }[];
   /** 브랜드 강조색 `#RRGGBB`. 비우면 시안 색 그대로 */
   accent?: string | null;
+  /**
+   * 검사를 돌릴지 (09-03). 기본 true. **「이 장만 다시 만들기」에서는 false로 끈다.**
+   *
+   * 자동 생성은 검사로 «시안대로 나왔나»를 봐서 실패한 장만 렌더러로 물러선다 —
+   * 그건 사용자가 안 보는 자동 판정이라 필요하다.
+   *
+   * 하지만 사용자가 손수 다시 만들 때는 **결과를 옆에 놓고 직접 고른다.** 여기서
+   * 검사가 미리 버리면 «토큰만 쓰고 아무것도 못 본» 손해가 된다. 그림만 나오면
+   * 무조건 돌려주고, 쓸지 말지는 사용자가 정한다.
+   */
+  verify?: boolean;
+  /**
+   * 사용자가 「이렇게 바꿔줘」로 적은 자유 지시 (09-03). 「이 장만 다시 만들기」에서만.
+   *
+   * **기대치를 낮춰 다룬다.** gpt-image-2는 글자 치환은 잘하지만 배치·크기 같은
+   * 자유 요청은 될 때도 안 될 때도 있다. 그래서 **디자인 못박음 뒤에** 부탁조로 얹는다 —
+   * 「이 디자인을 유지하라」를 이기지 않게 두고, 여지가 있으면 반영되게.
+   */
+  userRequest?: string;
 };
 
 export type SheetResult =
@@ -85,11 +104,21 @@ function buildPrompt(req: SheetRequest, sheet: TemplateSheet, problems: string[]
     "Keep this exact design: same layout, same photo frames and shapes, same typography style,",
     "same spacing and same background. Do not move, resize or restyle the layout blocks.",
     "",
-    "Replace the placeholder text with the following lines, in the order they appear in the design (top to bottom, left to right):",
-    ...req.lines.map((l, i) => `${i + 1}) "${l}"`),
+    /*
+      **각 줄을 슬롯에 짝지어 준다** (09-03). 「위→아래 순서로」만 말하면 큰 제목이
+      «디자인 장식»으로 오해돼 안 바뀌었다(특히 캐릭터 5번의 「비교 페이지」).
+      슬롯 이름(한국어)까지 붙여 «이 줄은 맨 위 큰 제목» 처럼 자리를 못박는다.
+      슬롯 수와 줄 수가 어긋나면 이름 없이 순서로만 준다(옛 방식).
+    */
+    "Replace each placeholder text slot with the matching line below. Each line goes to a specific slot:",
+    ...(sheet.slots.length === req.lines.length
+      ? req.lines.map((l, i) => `- Slot ${i + 1} (${sheet.slots[i]}): "${l}"`)
+      : req.lines.map((l, i) => `${i + 1}) "${l}"`)),
     "",
+    "**Every text slot is a placeholder — including the large title/heading and any small labels.**",
+    "Replace ALL of them. Korean guide words that name the template's purpose",
+    "(e.g. «비교 페이지», «흐름을 보여주는 페이지», «Notice», «Brand») are placeholders and must NOT remain.",
     "If a line is longer than the original, reduce its font size so it fits the same area.",
-    "Every placeholder must be replaced — no original sample text may remain.",
     "Render all Korean characters exactly as written: correct, legible Hangul. Do not invent or distort characters.",
   ];
 
@@ -121,6 +150,17 @@ function buildPrompt(req: SheetRequest, sheet: TemplateSheet, problems: string[]
     parts.push(
       "",
       `Replace every photo with: ${req.photoDirection}. Keep the same crop shape, the same number of photos and the same lighting mood.`,
+    );
+  }
+  if (req.userRequest) {
+    /*
+      자유 지시는 **맨 뒤, 부탁조로** 넣는다 (09-03). 앞의 「Keep this exact design」을
+      이기면 레이아웃이 무너지므로, «가능하면(if possible), 디자인을 깨지 않는 선에서»로
+      묶는다. 안 먹혀도 «부탁이 안 통한 것»이지 고장이 아니다.
+    */
+    parts.push(
+      "",
+      `If possible, also honor this request from the user, but only without breaking the design above: ${req.userRequest}`,
     );
   }
   if (problems.length > 0) {
@@ -166,6 +206,14 @@ export async function generateSheet(req: SheetRequest): Promise<SheetResult> {
         return { ok: false, reason: made.reason, attempts: attempt };
       }
       continue;
+    }
+
+    /*
+      **검사를 끄면 그림만 나오면 통과다** (09-03). 사용자가 직접 다시 만들 때다 —
+      좋고 나쁨은 비교 화면에서 사람이 정한다. 여기서 미리 버리지 않는다.
+    */
+    if (req.verify === false) {
+      return { ok: true, png: made.png, attempts: attempt, sheet };
     }
 
     let verdict: Verdict;
