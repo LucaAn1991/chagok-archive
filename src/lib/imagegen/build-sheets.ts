@@ -204,6 +204,13 @@ export async function buildFromTemplate(input: BuildInput): Promise<BuildResult>
         photos: photosFor(order),
         photoDirection: plan.photoDirection || undefined,
         accent: input.accent,
+        /*
+          **검증을 끈다** (09-03 결정). 검증이 멀쩡한 템플릿 결과까지 반려해
+          렌더러 폴백으로 떨어뜨려 왔다 — 그게 「템플릿이 안 먹던」 원인이다.
+          이제 그림만 나오면 시안 그대로 쓰고, 마음에 안 드는 장은 «이 장만 다시
+          만들기»로 사용자가 고친다. 완벽을 자동으로 거르지 않고 사람에게 넘긴다.
+        */
+        verify: false,
       }).then((r) => {
         input.onProgress?.({ type: "sheet", order, ok: r.ok });
         return r;

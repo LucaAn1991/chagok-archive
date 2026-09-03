@@ -7,6 +7,7 @@ import { onAuthStateChanged, type User as AuthUser } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import SlideRemakePanel from "@/components/SlideRemakePanel";
+import { TEMPLATE_SHEETS } from "@/lib/render/template-sheets";
 import SlideComparePanel from "@/components/SlideComparePanel";
 import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/PageHeader";
@@ -676,6 +677,12 @@ async function readRender(
                         <SlideRemakePanel
                           lines={slide.sheetLines ?? []}
                           busy={regenSlide === slide.order}
+                          /* 이 장에 사진틀이 있을 때만 사진 바꾸기를 연다 (09-03) */
+                          allowPhoto={
+                            (card?.styleId
+                              ? (TEMPLATE_SHEETS[card.styleId]?.[slide.sheetIndex ?? -1]?.photoSlots ?? 0)
+                              : 0) > 0
+                          }
                           onUploadPhoto={uploadSlidePhoto}
                           onApply={(lines, request, photoUrl) =>
                             void regenerateSlide(slide.order, lines, request, photoUrl)

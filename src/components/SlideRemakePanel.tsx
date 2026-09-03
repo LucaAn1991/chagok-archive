@@ -18,12 +18,15 @@ export default function SlideRemakePanel({
   busy,
   onApply,
   onUploadPhoto,
+  allowPhoto,
   onClose,
 }: {
   lines: string[];
   busy: boolean;
   onApply: (lines: string[], request: string, photoUrl: string | null) => void;
   onUploadPhoto: (file: File) => Promise<string | null>;
+  /** 이 장에 사진틀이 있나 (09-03). 없으면 사진 바꾸기를 숨긴다 */
+  allowPhoto: boolean;
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<string[]>(lines);
@@ -67,8 +70,9 @@ export default function SlideRemakePanel({
 
       {/*
         사진 교체 (09-03) — 이 장에 넣을 사진을 새로 올린다. 비우면 원래 사진 그대로.
-        올린 사진은 다시 만들 때 이 장에만 쓰인다(전체 사진 목록엔 안 쌓인다).
+        **사진틀이 있는 장에만 보인다** — 없는 장은 올려도 넣을 데가 없다.
       */}
+      {allowPhoto && (
       <div>
         <p className="text-caption font-semibold text-ink">사진 바꾸기</p>
         <p className="mt-0.5 text-label text-sub">안 올리면 지금 사진 그대로예요.</p>
@@ -120,6 +124,8 @@ export default function SlideRemakePanel({
           />
         </div>
       </div>
+
+      )}
 
       {/* 자유 지시 — 기대치를 낮춰 명시한다. 안 먹혀도 «부탁이 안 통한 것»이다 */}
       <div>
