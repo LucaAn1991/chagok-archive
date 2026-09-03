@@ -285,6 +285,104 @@ const CHARACTER: CardStyle = {
   missing: [],
 };
 
+/* ── 09-03 추가 시안 4벌 — 템플릿 PNG가 비주얼을 지고, 여기 값은 폴백 렌더러·문구 규칙용 ── */
+
+/** 시안 7 — 네온 라임 + 블랙. 힙한 브랜딩 */
+const NEON: CardStyle = {
+  id: "neon",
+  fontId: "black-han-sans",
+  label: "네온",
+  hint: "형광 라임과 검정 — 튀게 말할 때",
+  color: {
+    bg: "#C6F531",
+    ink: "#0A0A0A",
+    sub: "#2E3A00",
+    soft: "#E4FF7A",
+    scrim: "rgba(0,0,0,0.50)",
+    accent: "#0A0A0A",
+  },
+  type: { scale: 1.2, tracking: -1.5, lineHeight: 1.2, pad: 96, align: "left" },
+  chrome: { topLeft: true, topRight: true, bottom: true },
+  copyRules: [
+    "제목은 두세 줄, 한 줄에 3~6자. 굵고 짧게 끊는다.",
+    "낱말 단위로 줄을 끊는다 — 조사·어미로 끝내지 않는다.",
+    "본문은 두 줄 이내. 힙하고 단정하게.",
+  ],
+  missing: [],
+};
+
+/** 시안 8 — 차콜 + 팝 캐릭터. 축제·이벤트 */
+const FESTIVAL: CardStyle = {
+  id: "festival",
+  fontId: "nanum-square-neo",
+  label: "축제",
+  hint: "형광 캐릭터와 검정 배경 — 들뜬 소식에",
+  color: {
+    bg: "#1E1E1E",
+    ink: "#FFFFFF",
+    sub: "#C9C9C9",
+    soft: "#2B2B2B",
+    scrim: "rgba(0,0,0,0.50)",
+    accent: "#F45BD8",
+  },
+  type: { scale: 1.1, tracking: -0.5, lineHeight: 1.3, pad: 104, align: "center" },
+  chrome: { topLeft: false, topRight: true, bottom: true },
+  copyRules: [
+    "밝고 들뜬 말투. 활기 있게 말하되 느낌표는 아껴 쓴다.",
+    "제목은 한두 줄로 짧게, 눈에 띄는 한마디.",
+    "본문은 두 줄 이내로 리듬 있게.",
+  ],
+  missing: [],
+};
+
+/** 시안 9 — 파스텔 손그림 캐릭터. 다짐·기록 */
+const DIARY: CardStyle = {
+  id: "diary",
+  fontId: "nanum-square-neo",
+  label: "다이어리",
+  hint: "손그림 마스코트와 크림색 — 다정하게 적을 때",
+  color: {
+    bg: "#FFF6E9",
+    ink: "#4A3B2A",
+    sub: "#8A7A66",
+    soft: "#FFFFFF",
+    scrim: "rgba(74,59,42,0.35)",
+    accent: "#F2A65A",
+  },
+  type: { scale: 1.05, tracking: -0.5, lineHeight: 1.45, pad: 112, align: "center" },
+  chrome: { topLeft: false, topRight: false, bottom: false },
+  copyRules: [
+    "«~하고 싶어요» 같은 다정한 다짐체. 한 장에 한 가지만.",
+    "제목은 두 줄까지, 따뜻하게.",
+    "본문은 두세 줄, 담백하고 손글씨 같은 결로.",
+  ],
+  missing: [],
+};
+
+/** 시안 10 — 무디 블루. 감성 브랜드 */
+const MOODY: CardStyle = {
+  id: "moody",
+  fontId: "nanum-myeongjo",
+  label: "무드",
+  hint: "차분한 블루와 세리프 — 담담하게 말할 때",
+  color: {
+    bg: "#56657A",
+    ink: "#F2F4F7",
+    sub: "#C4CCD8",
+    soft: "#6C7B90",
+    scrim: "rgba(20,28,40,0.45)",
+    accent: "#A9B8CC",
+  },
+  type: { scale: 1.1, tracking: 0, lineHeight: 1.4, pad: 112, align: "left" },
+  chrome: { topLeft: true, topRight: true, bottom: true },
+  copyRules: [
+    "차분하고 담백하게. 감탄을 삼가고 문장을 짧게 여민다.",
+    "제목은 두 줄 이내, 여백을 살린다.",
+    "본문은 두세 줄, 설명보다 여운을 남긴다.",
+  ],
+  missing: [],
+};
+
 export const CARD_STYLES: Record<StyleId, CardStyle> = {
   "bold-graphic": BOLD_GRAPHIC,
   "photo-frame": PHOTO_FRAME,
@@ -292,6 +390,10 @@ export const CARD_STYLES: Record<StyleId, CardStyle> = {
   promo: PROMO,
   pixel: PIXEL,
   character: CHARACTER,
+  neon: NEON,
+  festival: FESTIVAL,
+  diary: DIARY,
+  moody: MOODY,
 };
 
 /**
@@ -305,6 +407,10 @@ export const STYLE_ORDER: StyleId[] = [
   "promo",
   "pixel",
   "character",
+  "neon",
+  "festival",
+  "diary",
+  "moody",
 ];
 
 export const DEFAULT_STYLE_ID: StyleId = "bold-graphic";

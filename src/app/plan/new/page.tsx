@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
-import { ArrowUp, Check, ChevronLeft, ChevronRight, Pencil, Plus, X } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Pencil, Plus, X } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/draft";
 import { addCustomAudience, loadCustomAudiences } from "@/lib/custom-audiences";
@@ -19,6 +19,7 @@ import {
 } from "@/components/PlanningSummaryPanel";
 import PlanPhotoPicker from "@/components/PlanPhotoPicker";
 import PlanDraftList, { type RefineTurn } from "@/components/PlanDraftList";
+import { TargetingChips, PromoFields } from "@/components/TargetingFields";
 import PageHeader from "@/components/PageHeader";
 import {
   CARD_STYLES,
@@ -51,14 +52,6 @@ import type { DraftVariant, PlanDraft, Promo, StockPick, StyleId, Targeting } fr
 
 type Msg = { role: "user" | "assistant" | "system"; text: string };
 
-/** 빈 문자열(칩 끔)을 지운 targeting — undefined 필드는 «무관» */
-function cleanTargeting(t: Targeting): Targeting {
-  const out: Targeting = {};
-  for (const k of ["ageRange", "gender", "tone", "timeOfDay"] as const) {
-    if (t[k]) out[k] = t[k];
-  }
-  return out;
-}
 type Proposal = { audiences: string[]; purposes: string[] };
 
 /** 서버로 보낼 한 턴 — [다시 보내기]가 그대로 재사용한다 */
@@ -66,7 +59,7 @@ type TurnPayload =
   | { kind: "init"; idea: string; from: string | null; freeTopic?: boolean }
   | { kind: "resume"; id: string } // 이탈 후 복원 — 진행 단계만 다시 받는다
   | { kind: "text"; text: string }
-  | { kind: "selection"; audiences: string[]; purposes: string[] }
+  | { kind: "selection"; audiences: string[]; purposes: string[]; targeting?: Targeting; promo?: Promo }
   | { kind: "update"; patch: PlanSummaryPatch };
 
 /**
@@ -501,7 +494,7 @@ function NewPlanScreen() {
               payload.kind === "text"
                 ? { text: payload.text }
                 : payload.kind === "selection"
-                  ? { selection: { audiences: payload.audiences, purposes: payload.purposes } }
+                  ? { selection: { audiences: payload.audiences, purposes: payload.purposes, targeting: payload.targeting, promo: payload.promo } }
                   : { update: payload.patch },
               setStreamingText,
             );
@@ -681,13 +674,16 @@ function NewPlanScreen() {
     return () => clearTimeout(timer);
   }, [planId, summary.topic, picked, messages, ready, proposal, confirmedLock]);
 
-  /** ② 대상 선택 제출 — 빈 선택이면 AI가 알아서 정한다. 목적은 대상에 딸려온다 (08-28) */
-  function sendSelection(audiences: string[]) {
+  /**
+   * ② 대상 선택 제출 — 빈 선택이면 AI가 알아서 정한다. 목적은 대상에 딸려온다 (08-28).
+   * 세부 대상·홍보 대상(09-03)도 여기서 함께 실어 보낸다 — 기획안 생성이 이 값을 읽는다.
+   */
+  function sendSelection(audiences: string[], targeting?: Targeting, promo?: Promo) {
     dismissBanner();
     const label = audiences.length > 0 ? audiences.join(" · ") : "차곡이 알아서 정해주세요.";
     setMessages((prev) => [...prev, { role: "user", text: label }]);
     setProposal(null);
-    void runTurn({ kind: "selection", audiences, purposes: [] });
+    void runTurn({ kind: "selection", audiences, purposes: [], targeting, promo });
   }
 
   /*
@@ -770,41 +766,6 @@ function NewPlanScreen() {
       setVariants((prev) => ({ ...prev, [index]: [] }));
     } finally {
       setVariantsLoading(null);
-    }
-  }
-
-  /**
-   * ⑤ 대상 좁히기 (09-03) — AI 없이 저장만 한다. 카피는 다음 다듬기·제작 때 반영된다.
-   */
-  async function sendTargeting(patch: Targeting) {
-    if (!planId || refineIndex === null) return;
-    const index = refineIndex;
-    // 화면에 먼저 반영 — 칩이 곧바로 켜져야 «눌렸다»가 느껴진다
-    setDrafts((prev) =>
-      prev.map((d, i) =>
-        i === index
-          ? { ...d, targeting: cleanTargeting({ ...d.targeting, ...patch }) }
-          : d,
-      ),
-    );
-    try {
-      await postJson(`/api/plans/${planId}/drafts/${index}/refine`, { targeting: patch });
-    } catch {
-      // 저장 실패는 조용히 — 다음 저장·제작 때 다시 시도된다
-    }
-  }
-
-  /** ⑤ 홍보 대상 저장 (09-03) — targeting과 같은 방식, AI 없이 */
-  async function sendPromo(patch: Promo) {
-    if (!planId || refineIndex === null) return;
-    const index = refineIndex;
-    setDrafts((prev) =>
-      prev.map((d, i) => (i === index ? { ...d, promo: { ...d.promo, ...patch } } : d)),
-    );
-    try {
-      await postJson(`/api/plans/${planId}/drafts/${index}/refine`, { promo: patch });
-    } catch {
-      // 조용히 — 다음 저장·제작 때 다시 시도된다
     }
   }
 
@@ -1005,7 +966,7 @@ function NewPlanScreen() {
                   messages.some((m) => m.role === "user") ? "" : "lg:justify-center",
                 ].join(" ")}
               >
-                {restored && <RestoreBanner />}
+                {restored && <RestoreBanner onNew={startNewPlan} />}
 
                 {messages.map((m, i) => (
                   <div key={i} className="flex flex-col gap-4">
@@ -1066,7 +1027,7 @@ function NewPlanScreen() {
                       setExtraOptions(addCustomAudience(a));
                       setPicked((prev) => (prev.includes(a) ? prev : [...prev, a]));
                     }}
-                    onSubmit={() => sendSelection(picked)}
+                    onSubmit={(t, p) => sendSelection(picked, t, p)}
                   />
                 )}
 
@@ -1101,8 +1062,6 @@ function NewPlanScreen() {
                       })
                     }
                     onApplySlideCount={(n) => void applyToDraft({ slideCount: n })}
-                    onTargeting={(patch) => void sendTargeting(patch)}
-                    onPromo={(patch) => void sendPromo(patch)}
                   />
                 )}
 
@@ -1488,11 +1447,22 @@ function ReadyActionBar({
    F11 「이어서 기획하기」와 다른 기능 — 그 라벨을 쓰지 않는다
    ============================================================ */
 
-function RestoreBanner() {
-  // 대화를 비우는 방법은 헤더의 [새 기획] 하나뿐 (08-31) — 배너는 정보만 전한다
+function RestoreBanner({ onNew }: { onNew: () => void }) {
+  /*
+    09-03 — 배너에 「새로 시작」을 붙였다. 원래는 정보만 전하고(08-31) 비우기는 헤더
+    [다시 시작]뿐이었는데, 막힌 세션이 자동 복원으로 계속 되살아나면 그 탈출구가
+    안 보여 답답하다는 실사용 피드백. 되돌리기(5초)는 startNewPlan이 그대로 제공한다.
+  */
   return (
-    <div role="status" className="flex items-center rounded-md bg-surface-muted px-3 py-2">
+    <div role="status" className="flex items-center gap-2 rounded-md bg-surface-muted px-3 py-2">
       <span className="text-[13px] text-sub">하던 기획을 이어서 열었어요</span>
+      <button
+        type="button"
+        onClick={onNew}
+        className="ml-auto shrink-0 rounded-pill border border-[#DCDCDC] bg-surface px-2.5 py-1 text-[13px] font-medium text-[#444444] transition-colors duration-200 hover:bg-[#E4E4E4]"
+      >
+        새로 시작
+      </button>
     </div>
   );
 }
@@ -1594,12 +1564,20 @@ function ProposalPicker({
   onSaveTopic: (next: string) => void;
   onToggle: (audience: string) => void;
   onAddOption: (audience: string) => void;
-  onSubmit: () => void;
+  onSubmit: (targeting: Targeting, promo: Promo) => void;
 }) {
   const [custom, setCustom] = useState("");
   // 「직접 쓰기」는 기본 접힘 — 하단 채팅창과 입력창이 두 개로 보이지 않게 (08-28)
   const [customOpen, setCustomOpen] = useState(false);
   const customInputRef = useRef<HTMLInputElement>(null);
+
+  /*
+    세부 대상·홍보 대상 (09-03) — **여기서 받는다.** 예전엔 다듬기(⑤)에 있었는데,
+    그러면 기획안이 이미 만들어진 뒤라 생성에는 못 썼다. 기본 접힘(선택) — 안 열어도 된다.
+  */
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [targeting, setTargeting] = useState<Targeting>({});
+  const [promo, setPromo] = useState<Promo>({});
 
   useEffect(() => {
     if (customOpen) customInputRef.current?.focus();
@@ -1685,11 +1663,45 @@ function ProposalPicker({
         )}
       </div>
 
+      {/*
+        누구에게 더 가까이 (09-03) — 연령·성별·말투·시간대 + 카드에 넣을 이름.
+        기본 접힘. 채우면 기획안 문구가 그 사람에 맞춰진다. 안 열어도 그대로 흐른다.
+      */}
+      <div className="mt-4 border-t border-line pt-3">
+        <button
+          type="button"
+          onClick={() => setDetailOpen((v) => !v)}
+          aria-expanded={detailOpen}
+          className="flex w-full items-center justify-between text-body font-semibold text-ink"
+        >
+          <span>
+            누구에게 더 가까이 <span className="text-label font-normal text-sub">· 선택</span>
+          </span>
+          {detailOpen ? <ChevronDown size={18} aria-hidden /> : <ChevronRight size={18} aria-hidden />}
+        </button>
+
+        {detailOpen && (
+          <div className="mt-2">
+            <p className="text-label text-sub">고르면 말투·단어가 그 사람에 맞춰져요. 안 골라도 돼요.</p>
+            <TargetingChips
+              targeting={targeting}
+              disabled={false}
+              onPick={(patch) => setTargeting((prev) => ({ ...prev, ...patch }))}
+            />
+            <PromoFields
+              promo={promo}
+              disabled={false}
+              onSave={(patch) => setPromo((prev) => ({ ...prev, ...patch }))}
+            />
+          </div>
+        )}
+      </div>
+
       {/* 라벨이 곧 안내다 — 0개면 AI가 정한다는 뜻, 고르면 몇 장이 나올지 약속 (08-28).
           N = 선택 대상 수 × 주제 수 — 현 흐름은 대화당 주제 1개라 대상 수와 같다 */}
       <button
         type="button"
-        onClick={onSubmit}
+        onClick={() => onSubmit(targeting, promo)}
         className="mt-5 flex h-11 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
       >
         {/*

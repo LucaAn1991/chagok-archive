@@ -5,6 +5,8 @@ import { getPlanningAI } from "@/lib/ai";
 import type { PlanningContext } from "@/lib/ai";
 import { verifyRequest } from "@/lib/server/request-auth";
 import { ndjson } from "@/lib/server/ndjson";
+import { parseTargeting, parsePromo } from "@/lib/plan/targeting";
+import type { Promo, Targeting } from "@/types";
 import { suffix로 } from "@/lib/josa";
 
 /**
@@ -76,7 +78,12 @@ export async function POST(
   const { planId } = await params;
 
   let text = "";
-  let selection: { audiences: string[]; purposes: string[] } | null = null;
+  let selection: {
+    audiences: string[];
+    purposes: string[];
+    targeting?: Targeting;
+    promo?: Promo;
+  } | null = null;
   let update: PlanUpdate | null = null;
   let resume = false;
   try {
@@ -87,6 +94,9 @@ export async function POST(
       selection = {
         audiences: parseStringArray(body.selection.audiences),
         purposes: parseStringArray(body.selection.purposes),
+        // ② 세부 대상·홍보 대상 — 기획안 생성에 먹인다 (09-03). 전부 선택이라 비어도 됨
+        targeting: parseTargeting(body.selection.targeting),
+        promo: parsePromo(body.selection.promo),
       };
     }
     update = parseUpdate(body?.update);
@@ -227,6 +237,14 @@ export async function POST(
         };
         await planRef.update({
           ...merged,
+          // ② 세부 대상·홍보 대상을 여기 한 번 저장한다 (09-03) — 기획안 생성이 이 값을 읽는다.
+          // 빈 객체면 안 쓴다(필드를 지우거나 비우지 않는다).
+          ...(selection.targeting && Object.keys(selection.targeting).length > 0
+            ? { targeting: selection.targeting }
+            : {}),
+          ...(selection.promo && Object.keys(selection.promo).length > 0
+            ? { promo: selection.promo }
+            : {}),
           seriesTitle: turn.seriesTitle ?? topic,
           messages: [
             ...planSnap.get("messages"),

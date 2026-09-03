@@ -4,6 +4,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { getPlanningAI } from "@/lib/ai";
 import { verifyRequest } from "@/lib/server/request-auth";
 import { ndjson } from "@/lib/server/ndjson";
+import { parseTargeting, parsePromo } from "@/lib/plan/targeting";
 import type { PlanDraft, PlanMessage, Targeting, Promo } from "@/types";
 
 /**
@@ -92,32 +93,6 @@ function parseApply(raw: unknown): ApplyPatch | null {
 }
 
 /** 홍보 대상을 받는다 (09-03). 아는 필드만. 빈 문자열은 «지움» */
-function parsePromo(raw: unknown): Promo | undefined {
-  if (!raw || typeof raw !== "object") return undefined;
-  const v = raw as Record<string, unknown>;
-  const out: Promo = {};
-  for (const k of ["brandName", "handle"] as const) {
-    const val = v[k];
-    if (typeof val === "string") out[k] = val.trim().slice(0, 40) || undefined;
-  }
-  return out;
-}
-
-/**
- * 세분화 대상을 받는다 (09-03). 아는 필드만 남긴다 — 임의 키를 draft에 펼치지 않는다.
- * 빈 문자열은 «지움»으로 본다(칩을 껐다는 뜻).
- */
-function parseTargeting(raw: unknown): Targeting | undefined {
-  if (!raw || typeof raw !== "object") return undefined;
-  const v = raw as Record<string, unknown>;
-  const out: Targeting = {};
-  for (const k of ["ageRange", "gender", "tone", "timeOfDay"] as const) {
-    const val = v[k];
-    if (typeof val === "string") out[k] = val.trim().slice(0, 24) || undefined;
-  }
-  return out;
-}
-
 /** 대화 기록에서 이 기획안 것을 가려내는 표시. 화면은 이걸 떼고 그린다 */
 function markerFor(index: number): string {
   return `[기획안${index + 1}] `;

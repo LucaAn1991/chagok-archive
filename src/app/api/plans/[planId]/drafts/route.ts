@@ -4,7 +4,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { getPlanningAI } from "@/lib/ai";
 import { AUDIENCES, AUDIENCE_DEFAULT, MAX_CARDS_PER_RUN } from "@/lib/audiences";
 import { verifyRequest } from "@/lib/server/request-auth";
-import type { PlanDraft } from "@/types";
+import type { PlanDraft, Promo, Targeting } from "@/types";
 
 /**
  * 대상별 기획안 — ③ 만들기 · ④ 고르기 (09-02).
@@ -81,9 +81,16 @@ export async function POST(
     const purposes: string[] = snap.get("purposes") ?? [];
     const intent: string = snap.get("intent") ?? "";
 
+    // ② 단계에서 받아둔 세부 대상·홍보 대상 (09-03) — 기획안 생성 프롬프트에 먹인다.
+    // 예전에는 다듬기(⑤)에서 받아 정작 생성에는 못 썼다. 없으면(undefined) 그대로 흐른다.
+    const targeting: Targeting | undefined = snap.get("targeting") ?? undefined;
+    const promo: Promo | undefined = snap.get("promo") ?? undefined;
+
     // **대상 하나당 독립 호출** — 지시가 정반대인 대상을 한 프롬프트에 섞지 않는다 (08-28)
     const made = await Promise.all(
-      targets.map((audience) => ai.generateCard({ topic, audience, purposes, intent })),
+      targets.map((audience) =>
+        ai.generateCard({ topic, audience, purposes, intent, targeting }),
+      ),
     );
 
     /*
@@ -99,6 +106,10 @@ export async function POST(
       extraNote: "",
       slideCount: null,
       chosen: true,
+      // 기획 전체 값을 각 기획안에 복사한다 (09-03) — 다듬기·제작이 draft만 보고도 동작하게.
+      // 비어 있으면 넣지 않는다(빈 객체를 Firestore에 쌓지 않는다).
+      ...(targeting && Object.keys(targeting).length > 0 ? { targeting } : {}),
+      ...(promo && Object.keys(promo).length > 0 ? { promo } : {}),
     }));
 
     await ref.update({ drafts });

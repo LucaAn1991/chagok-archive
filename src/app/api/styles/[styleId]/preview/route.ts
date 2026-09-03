@@ -33,6 +33,10 @@ const SAMPLE: Record<StyleId, { title: string; subtitle: string }> = {
   promo: { title: "50%", subtitle: "이번 주만" },
   pixel: { title: "가볍게 시작", subtitle: "부담 없이 한 장" },
   character: { title: "쉽게 설명할게요", subtitle: "한 장에 하나씩" },
+  neon: { title: "힙하게\n한마디", subtitle: "튀게 말합니다" },
+  festival: { title: "오늘 여기서 만나요", subtitle: "놓치면 아쉬운 소식" },
+  diary: { title: "올해의 다짐은?", subtitle: "천천히 적어봐요" },
+  moody: { title: "담담하게 건네는 말", subtitle: "차분히 남겨둡니다" },
 };
 
 /** 시안 템플릿은 바뀌지 않는 파일이라 오래 담아둬도 된다 */

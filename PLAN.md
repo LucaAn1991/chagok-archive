@@ -94,7 +94,10 @@ type Plan = {
 
   photoUrls: string[];            // 기획 단계에서 올린 사진. 카드에 주소만 물려준다 (F13 · 08-31)
   stockPhotos: StockPick[];       // 기획 단계에서 고른 추천 사진들 (09-01 · 09-02 여러 장). 안 골랐으면 []
-  styleId: StyleId | null;        // ③ 단계에서 고른 비주얼 스타일 6종. 안 골랐으면 null (09-02)
+  styleId: StyleId | null;        // ③ 단계에서 고른 비주얼 스타일 10종. 안 골랐으면 null (09-02 · 09-03 4종 추가)
+
+  targeting?: Targeting;          // ② 세부 대상(연령·성별·말투·시간대). 기획안 생성에 먹인다 (09-03). 전부 선택
+  promo?: Promo;                  // ② 홍보 상품·브랜드명 / 인스타 계정명 (09-03). 비어 있을 수 있다
 
   status: PlanStatus;             // 'draft' 대화 중 | 'confirmed' 확정되어 카드가 생성됨
   createdAt: Timestamp;           // TTV 측정 시작점 (PRD §5-3)
@@ -109,10 +112,9 @@ type PlanDraft = {
   intent: string;                 // 이 카드 하나의 기획의도. ⑤에서 수정 가능
   extraNote: string;              // ⑤에서 더한 «꼭 넣을 것» → card.extraNote로 그대로
   slideCount: number | null;      // ⑤에서 정한 장수(4~7). null이면 템플릿이 정한다
-  targeting?: Targeting;          // ⑤에서 좁힌 대상 (연령·성별·말투·시간대). 비어 있을 수 있다 (09-03)
-  promo?: Promo;                  // ⑤에서 받은 홍보 대상 (상품·브랜드명 / 인스타 계정명) (09-03)
+  targeting?: Targeting;          // ②의 plan.targeting을 생성 때 복사받는다 (09-03). 다듬기·제작이 draft만 보고 동작하게
+  promo?: Promo;                  // ②의 plan.promo를 복사받는다 (09-03)
   chosen: boolean;                // ④에서 골랐나
-  targeting?: Targeting;          // ⑤에서 좁힌 대상 (09-03)
 };
 
 /** 대상 세분화 — 전부 선택. 카피 말투·단어를 좁힌다 (09-03) */
@@ -169,8 +171,8 @@ type Card = {
   styleId: StyleId | null;        // 기획에서 물려받은 비주얼 스타일. 카드마다 다시 고르지 않는다 (09-02)
   extraNote: string;              // «이번에 꼭 넣을 내용» 자유 입력 (F13). 기획 ⑤에서도 채워진다 (09-02)
   slideCount: number | null;      // 카드 장수. 기획 ⑤에서 정하면 채워진다. null이면 템플릿이 정한다 (09-02)
-  targeting?: Targeting;          // 기획 ⑤에서 좁힌 대상. 제작 시 문구 생성에 쓴다 (09-03)
-  promo?: Promo;                  // 기획 ⑤에서 받은 홍보 대상. 브랜드 자리에 쓴다 (09-03)
+  targeting?: Targeting;          // 기획 ②에서 받은 세부 대상. 제작 시 문구 생성에 쓴다 (09-03)
+  promo?: Promo;                  // 기획 ②에서 받은 홍보 대상. 브랜드 자리에 쓴다 (09-03)
   templateVars: Record<string, string>; // 기록형의 그날 값. plan.templateVarNames와 짝을 이룬다
 
   // Slide 안 (09-02 추가)
@@ -693,6 +695,8 @@ Desktop  >= 1200    사이드바 240 · 패딩 32
 
 | 날짜 | 변경 내용 | 이유 | 관련 섹션 |
 |---|---|---|---|
+| 2026-09-03 | **시안 템플릿 4벌 추가 — 10종으로.** `StyleId`에 `neon`(네온)·`festival`(축제)·`diary`(다이어리)·`moody`(무드). `card-styles.ts`(색·글꼴·copyRules)·`TEMPLATE_SHEETS`(장별 role·slots·photoSlots)·`STYLE_ORDER`에 추가, PNG를 `templates/{styleId}/`에 넣고 `PREVIEW_VERSION` 3으로 | 팀이 준비한 시안(다운로드 「템플릿_7~10」)을 등록. 미리보기는 실제 PNG를 그대로 서빙, 색·글꼴 값은 폴백 렌더러·문구 규칙용. photoSlots는 시안 이미지를 보고 채웠다(festival 5·6장 사진 3·5, moody 대부분 1~2, diary 마무리 3) | §2-3 |
+| 2026-09-03 | **세부 대상·홍보 질문지를 다듬기(⑤) → 대상 선택(②)로 이동.** `Plan.targeting`·`Plan.promo` 신설(기획 하나에 한 벌). `generateCard`가 `targeting`을 받아 **기획안 생성 프롬프트에** 먹이고, 생성된 각 `PlanDraft`에 값을 복사. `messages`(selection 턴)가 저장, `drafts` 생성이 읽는다. 파싱 헬퍼를 `lib/plan/targeting.ts`로 공용화. 다듬기에선 읽기 전용 한 줄 요약만 | 질문지가 다듬기에 있으면 **기획안이 이미 만들어진 뒤**라 생성엔 못 쓰였다 — 원래 목적(«질문지로 프롬프트 퀄리티↑»)과 어긋났다. 연령·성별은 보통 브랜드 값이라 기획 하나에 하나면 된다(관계 대상별로 다르지 않다). 전부 선택·건너뛰기 가능은 그대로. 사용자 결정: 「기획 하나에 한 번」 | §2-2 · §3-1 · §6 |
 | 2026-09-03 | **제작 검증 제거 — 시안을 그대로 유지** — `buildFromTemplate`의 `generateSheet` 호출에 `verify:false`. 이제 그림만 나오면 시안 그대로 쓰고, 실패(모델·네트워크)일 때만 렌더러 폴백. 마음에 안 드는 장은 제작 후 「이 장만 다시 만들기」로 사용자가 고친다 | **「템플릿이 절반만 먹던」 근본 원인이었다.** 검증기가 멀쩡한 시안 결과(장식 A·B·VS, 살짝 어긋난 문구)까지 반려해 밋밋한 렌더러 폴백으로 떨어뜨렸다. 완벽을 자동으로 거르지 않고 사람에게 넘긴다 — 브랜드명 주입·슬롯 매핑으로 잔존 자리표시도 이미 줄였다. 실측: 계속 반려되던 감성 마무리 장이 이제 통과(시안 유지) | §2-3 · §6 |
 | 2026-09-03 | **`TemplateSheet.photoSlots` — 장별 사진틀 수** 신설. 6종 38장 전부 실제 시안 이미지를 보고 채웠다(promo 0 / photo-frame 전부 1 / serif-soft [1,1,3,1,1,1] 등). 결과 화면의 「사진 바꾸기」를 **사진틀이 있는 장에만** 보여준다 | slots(글자 자리)엔 사진 정보가 없어, 사진 없는 장(promo 세일·표지 등)에도 사진 교체가 떠서 올려도 안 바뀌는 헛수고가 있었다. ⚠️ **템플릿 추가 시 photoSlots를 반드시 시안 보고 적는다** — 빠뜨리면 사진 장인데 교체가 안 뜨고, 잘못 적으면 없는 장에 뜬다 | §2-3 |
 | 2026-09-03 | **홍보 상품·브랜드명 (`Promo`)** — `PlanDraft.promo`·`Card.promo`. 다듬기(⑤)에서 상품·브랜드명/인스타 계정명을 받아, 제작 시 브랜드 자리에 **정확히 그 이름을 못박아** 넣는다(`sheet-copy`가 «지어내지 마라»로). 우선순위 brandName → handle → 계정 닉네임(이메일 @앞) → 없으면 자리 비움. render route가 해석 | 브랜드명은 «회사»면 안 바뀌지만 «상품»이면 기획마다 다르다 — 계정에 박지 않고 기획에서 받는다. 넣을 이름이 없어 「BRAND NAME」이 남던 게 검증 반려·폴백의 원인이었다. 이제 채우거나 비워서 그 자리를 확실히 처리한다 | §2-2 · §6 |

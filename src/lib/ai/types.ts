@@ -122,6 +122,8 @@ export type PlanningAI = {
     audience: string;
     purposes: string[];
     intent: string; // plan 수준 기획의도 — 참고 맥락. 카드의 기획의도는 대상별로 만든다
+    // 기획 단계(②)에서 받은 세부 대상 — 연령·성별·말투·시간대. 기획안 문구를 그 사람에 맞춘다 (09-03)
+    targeting?: import("../../types/plan").Targeting;
   }): Promise<CardDraft>;
 
   /**

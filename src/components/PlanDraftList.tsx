@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Pencil, Loader2 } from "lucide-react";
-import type { DraftVariant, PlanDraft, Targeting, Promo } from "@/types";
+import type { DraftVariant, PlanDraft } from "@/types";
 
 /**
  * ③④⑤ — 대상별 기획안을 보여주고, 고르고, 다듬는다 (09-02).
@@ -39,8 +39,6 @@ export default function PlanDraftList({
   variantsLoading,
   onApplyVariant,
   onApplySlideCount,
-  onTargeting,
-  onPromo,
 }: {
   drafts: PlanDraft[];
   /** ③ 기획안을 만드는 중 */
@@ -59,8 +57,6 @@ export default function PlanDraftList({
   variantsLoading: boolean;
   onApplyVariant: (v: DraftVariant) => void;
   onApplySlideCount: (n: number) => void;
-  onTargeting: (patch: Targeting) => void;
-  onPromo: (patch: Promo) => void;
   onRetryLoad: () => void;
   onToggle: (index: number) => void;
   onOpenRefine: (index: number) => void;
@@ -121,8 +117,6 @@ export default function PlanDraftList({
         variantsLoading={variantsLoading}
         onApplyVariant={onApplyVariant}
         onApplySlideCount={onApplySlideCount}
-        onTargeting={onTargeting}
-        onPromo={onPromo}
         onClose={onCloseRefine}
         onSend={onSendRefine}
       />
@@ -241,99 +235,15 @@ function DraftCard({
 }
 
 /**
- * 세분화 한 줄 (09-03) — 라벨 + 칩 여러 개. 한 줄에 하나만 켜진다(단일 선택).
- * 켜진 칩을 다시 누르면 꺼진다 → «무관»으로 되돌림.
+ * 이 기획안에 적용된 세부 대상·홍보 대상을 한 줄로 요약한다 (09-03).
+ * ②에서 받은 값을 다듬기에서 읽기 전용으로 보여줄 때 쓴다. 아무것도 없으면 빈 문자열.
  */
-function TargetRow({
-  label,
-  options,
-  value,
-  disabled,
-  onPick,
-}: {
-  label: string;
-  options: string[];
-  value?: string;
-  disabled: boolean;
-  onPick: (value: string) => void;
-}) {
-  return (
-    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-      <span className="w-10 shrink-0 text-label text-sub">{label}</span>
-      {options.map((o) => {
-        const on = value === o;
-        return (
-          <button
-            key={o}
-            type="button"
-            disabled={disabled}
-            aria-pressed={on}
-            /* 켜진 걸 다시 누르면 끈다 — 빈 문자열이 서버에서 «지움»으로 읽힌다 */
-            onClick={() => onPick(on ? "" : o)}
-            className={[
-              "h-8 rounded-pill px-3 text-label font-semibold transition-colors duration-200 disabled:opacity-60",
-              on ? "bg-berry text-white" : "border border-line bg-surface text-ink hover:bg-surface-muted",
-            ].join(" ")}
-          >
-            {o}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-/**
- * 홍보 대상 입력 (09-03) — 상품·브랜드명 / 인스타 계정명.
- * 칸을 벗어날 때(blur) 저장한다 — 글자마다 저장하면 요청이 쏟아진다.
- */
-function PromoFields({
-  promo,
-  disabled,
-  onSave,
-}: {
-  promo?: Promo;
-  disabled: boolean;
-  onSave: (patch: Promo) => void;
-}) {
-  const [brandName, setBrandName] = useState(promo?.brandName ?? "");
-  const [handle, setHandle] = useState(promo?.handle ?? "");
-
-  return (
-    <div className="mt-4 border-t border-line pt-3">
-      <p className="text-label font-semibold text-sub">카드에 넣을 이름</p>
-      <div className="mt-2 flex flex-col gap-2">
-        <label className="flex items-center gap-2">
-          <span className="w-16 shrink-0 text-label text-sub">브랜드·상품</span>
-          <input
-            value={brandName}
-            disabled={disabled}
-            onChange={(e) => setBrandName(e.target.value)}
-            onBlur={() => brandName !== (promo?.brandName ?? "") && onSave({ brandName })}
-            placeholder="홍보하려면 입력"
-            className="h-9 flex-1 rounded-md border border-line bg-surface px-2.5 text-caption text-ink outline-none focus:border-berry placeholder:text-sub disabled:opacity-60"
-          />
-        </label>
-        <label className="flex items-center gap-2">
-          <span className="w-16 shrink-0 text-label text-sub">인스타</span>
-          <span className="flex h-9 flex-1 items-center rounded-md border border-line bg-surface pl-2.5 focus-within:border-berry">
-            <span className="text-caption text-sub">@</span>
-            <input
-              value={handle}
-              disabled={disabled}
-              onChange={(e) => setHandle(e.target.value.replace(/^@/, ""))}
-              onBlur={() => handle !== (promo?.handle ?? "") && onSave({ handle })}
-              placeholder="계정명"
-              className="h-full flex-1 bg-transparent px-1 text-caption text-ink outline-none placeholder:text-sub disabled:opacity-60"
-            />
-          </span>
-        </label>
-      </div>
-      <p className="mt-1.5 text-label text-sub">
-        비워두면 계정 닉네임이 들어가요.
-      </p>
-    </div>
-  );
+function targetingSummary(draft: PlanDraft): string {
+  const t = draft.targeting;
+  const bits = [t?.ageRange, t?.gender, t?.tone, t?.timeOfDay].filter(Boolean) as string[];
+  const brand = draft.promo?.brandName?.trim();
+  if (brand) bits.push(`\u2018${brand}\u2019 홍보`);
+  return bits.join(" · ");
 }
 
 function RefinePanel({
@@ -345,8 +255,6 @@ function RefinePanel({
   variantsLoading,
   onApplyVariant,
   onApplySlideCount,
-  onTargeting,
-  onPromo,
   onClose,
   onSend,
 }: {
@@ -358,8 +266,6 @@ function RefinePanel({
   variantsLoading: boolean;
   onApplyVariant: (v: DraftVariant) => void;
   onApplySlideCount: (n: number) => void;
-  onTargeting: (patch: Targeting) => void;
-  onPromo: (patch: Promo) => void;
   onClose: () => void;
   onSend: (text: string) => void;
 }) {
@@ -524,47 +430,15 @@ function RefinePanel({
         </div>
 
         {/*
-          대상 좁히기 (09-03) — 전부 선택이라 비워도 된다. 채우면 카피가 그 대상에 맞춰진다.
-          같은 칩을 한 번 더 누르면 꺼진다(무관으로 되돌림).
+          세부 대상·홍보 대상 (09-03) — **입력은 ②(대상 선택)로 옮겼다.** 여기선 «무엇이
+          적용됐는지»만 읽기 전용으로 보여준다. 다듬기에서 또 물으면 같은 질문이 두 번 된다.
+          아무것도 설정 안 했으면 이 줄은 그리지 않는다(막다른 빈칸을 주지 않는다).
         */}
-        <p className="mt-4 text-label font-semibold text-sub">누구에게 더 가까이</p>
-        <p className="mt-0.5 text-label text-sub">고르면 말투·단어가 그 사람에 맞춰져요. 안 골라도 돼요.</p>
-
-        <TargetRow
-          label="연령"
-          options={["10대", "20대", "30대", "40대", "50대", "60대+"]}
-          value={draft.targeting?.ageRange}
-          disabled={refining}
-          onPick={(v) => onTargeting({ ageRange: v })}
-        />
-        <TargetRow
-          label="성별"
-          options={["여성", "남성"]}
-          value={draft.targeting?.gender}
-          disabled={refining}
-          onPick={(v) => onTargeting({ gender: v })}
-        />
-        <TargetRow
-          label="말투"
-          options={["가볍게", "친근하게", "진지하게", "전문가처럼"]}
-          value={draft.targeting?.tone}
-          disabled={refining}
-          onPick={(v) => onTargeting({ tone: v })}
-        />
-        <TargetRow
-          label="시간대"
-          options={["아침", "점심", "저녁", "심야"]}
-          value={draft.targeting?.timeOfDay}
-          disabled={refining}
-          onPick={(v) => onTargeting({ timeOfDay: v })}
-        />
-
-        {/*
-          홍보 대상 (09-03) — 카드의 브랜드/상품 자리에 넣을 이름.
-          상품명은 기획마다 달라서 계정에 박지 않고 여기서 받는다.
-          비우면 인스타 계정명 → 그것도 비우면 계정 닉네임이 들어간다(서버가 채움).
-        */}
-        <PromoFields promo={draft.promo} disabled={refining} onSave={onPromo} />
+        {targetingSummary(draft) && (
+          <p className="mt-4 text-label text-sub">
+            <span className="font-semibold">이 기획안 대상</span> · {targetingSummary(draft)}
+          </p>
+        )}
       </div>
 
       {turns.length > 0 && (

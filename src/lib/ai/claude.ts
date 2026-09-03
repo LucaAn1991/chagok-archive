@@ -229,13 +229,15 @@ export const claudePlanningAI: PlanningAI = {
     };
   },
 
-  async generateCard({ topic, audience, purposes, intent }): Promise<CardDraft> {
+  async generateCard({ topic, audience, purposes, intent, targeting }): Promise<CardDraft> {
     const result = await callJson<{ title: string; shortTitle: string; intent: string }>({
       system: BASE_SYSTEM,
       user: [
         `주제: ${topic}`,
         `이 카드의 대상: ${audience}`,
         `대상별 지시: ${audiencePrompt(audience)}`,
+        // 세부 대상(연령·성별·말투·시간대) — 있으면 문구 말투·단어를 그 사람에 맞춘다 (09-03)
+        targetingPrompt(targeting),
         purposes.length ? `목적: ${purposes.join(", ")}` : "",
         intent ? `시리즈 기획의도(참고): ${intent}` : "",
         "",

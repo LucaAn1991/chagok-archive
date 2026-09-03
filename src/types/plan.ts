@@ -167,6 +167,19 @@ export type Plan = {
   recordDays: number | null; // 며칠치를 미리 깔지. @TODO: PRD §9 미결 5 — 3개월이면 90장
   templateVarNames: string[]; // 템플릿 변수 이름 목록. 카드 상세에서 입력칸이 자동 렌더링된다
 
+  /**
+   * 세부 대상·홍보 대상 (09-03) — **기획 단계 ②에서 한 번 받는다.**
+   *
+   * 예전에는 다듬기(⑤)에서 draft마다 받았는데, 그러면 기획안이 «이미 만들어진 뒤»라
+   * 정작 기획안 생성에는 안 쓰였다. ②로 옮겨 여기 한 곳에 두고, 기획안을 만들 때
+   * (`generateCard`) 먹인다. 연령·성별은 보통 브랜드 값이라 기획 하나에 하나면 된다.
+   *
+   * 만들어진 각 기획안(`PlanDraft`)에도 이 값을 복사해 둔다 — 다듬기·제작이 draft만
+   * 보고도 동작하게. 전부 선택이라 비어 있을 수 있다.
+   */
+  targeting?: Targeting;
+  promo?: Promo;
+
   status: PlanStatus; // 'draft' 대화 중 | 'confirmed' 확정되어 카드가 생성됨
   createdAt: Timestamp; // TTV 측정 시작점 (PRD §5-3)
   confirmedAt: Timestamp | null;
