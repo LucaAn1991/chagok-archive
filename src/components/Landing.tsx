@@ -12,9 +12,10 @@ import { AI_DISCLOSURE } from "@/lib/ai-disclosure";
  */
 
 const SAMPLES = [
-  { src: "/landing/sample-1.webp", alt: "카드뉴스 표지 — 아침 공복 유산소의 진실" },
-  { src: "/landing/sample-2.webp", alt: "사진이 들어간 카드뉴스 본문 슬라이드" },
-  { src: "/landing/sample-3.webp", alt: "번호 목록형 카드뉴스 슬라이드" },
+  { src: "/landing/sample-1.webp", alt: "카드뉴스 표지 — 첫 등산 사진, 사진 두 장을 얹은 무드 스타일" },
+  { src: "/landing/sample-2.webp", alt: "감성 스타일 카드 — 일월오봉도 텀블러 소개" },
+  { src: "/landing/sample-3.webp", alt: "사진이 들어간 본문 슬라이드 — 텀블러" },
+  { src: "/landing/sample-4.webp", alt: "도트 스타일 카드 — 오늘의 질문" },
 ];
 
 const STEPS = [
@@ -99,7 +100,7 @@ export default function Landing() {
           </p>
         </div>
 
-        {/* 실제 산출물 — 렌더러가 만든 카드뉴스를 비스듬히 겹쳐서 */}
+        {/* 실제 산출물 — 렌더러가 만든 카드뉴스를 비스듬히 겹쳐서 (09-03 실제 4장으로) */}
         <div className="mt-12 flex items-center justify-center">
           {SAMPLES.map((s, i) => (
             // eslint-disable-next-line @next/next/no-img-element
@@ -109,9 +110,13 @@ export default function Landing() {
               alt={s.alt}
               width={224}
               height={224}
+              /* 겹쳐서 부채꼴로 — 4장이라 서로 밀어 넣어 폭을 잡는다(모바일 가로 넘침 금지) */
               className={[
-                "w-[132px] rounded-lg border border-line shadow-sm md:w-[224px]",
-                i === 0 ? "-rotate-6" : i === 1 ? "z-10 -my-2 md:-mx-4" : "rotate-6",
+                "w-[104px] rounded-lg border border-line bg-surface shadow-sm md:w-[204px]",
+                i === 0 ? "z-0 -rotate-6" : "-ml-6 md:-ml-10",
+                i === 1 ? "z-10 -rotate-2 md:-my-2" : "",
+                i === 2 ? "z-20 rotate-2" : "",
+                i === 3 ? "z-10 rotate-6" : "",
               ].join(" ")}
             />
           ))}
@@ -182,7 +187,7 @@ export default function Landing() {
           ))}
         </div>
         <p className="mt-4 text-caption text-sub">
-          실제로 차곡이 만든 카드뉴스예요 — 이 예시에서는 8장 중 3장.
+          실제로 차곡이 만든 카드뉴스예요 — 스타일이 다른 네 장.
         </p>
       </section>
 

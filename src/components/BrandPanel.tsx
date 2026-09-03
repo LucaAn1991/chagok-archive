@@ -8,19 +8,22 @@ import Image from "next/image";
  * 인증 화면(로그인·회원가입·재설정) 왼쪽의 브랜드 패널.
  * Desktop(>=1200)에서만 보인다 — 좁으면 통째로 사라진다 (DESIGN.md ✕22).
  *
- * 슬라이드 3장 = 차곡의 실제 사용 흐름 한 편 (08-28 재구성 확정):
+ * 슬라이드 3장 = 차곡의 실제 사용 흐름 한 편 (08-28 재구성 · 09-03 실제 산출물로 갱신):
  *   ① 아이디어 → 기획   ② 기획 → 캘린더 배치   ③ 오늘의 카드 → 제작
- * 같은 콘텐츠(«퇴근 후, 요즘의 저녁» · Lifestyle 데모)가 세 장에 걸쳐
- * 이어진다 — 슬라이드 2 썸네일과 3의 게시물 사진이 같은 이유다.
+ * 같은 콘텐츠(«첫 등산 사진 기록»)가 세 장에 걸쳐 이어진다 — 슬라이드 2 썸네일과
+ * 3의 결과물이 **실제로 차곡이 만든 카드**(무드 템플릿, `/landing/sample-1.webp`)다.
+ * 손으로 그린 목업 게시물을 지웠다 — 랜딩과 같은 실제 산출물을 쓴다 (09-03).
  * 자동 업로드·자동 발행처럼 보이는 표현은 쓰지 않는다.
  *
- * 헤드라인·서브는 PRD §5-1 확정 카피. 슬라이드 카피는 08-28 확정본.
- * 게시물 목업 안 색·문구는 콘텐츠 세계 영역(브랜드 토큰 예외 — 08-28 확정).
+ * 헤드라인·서브는 PRD §5-1 확정 카피. 슬라이드 main/sub 카피는 08-28 확정본(그대로).
+ * 목업 안 데모 내용은 콘텐츠 세계 영역(브랜드 토큰 예외) — 실제 흐름에 맞춰 09-03 갱신.
+ * ① 기획 목업은 현재 흐름(대상 + 세부 대상: 연령·말투)을 반영한다.
  * 로고는 실제 아트워크를 쓴다 (08-31) — `components/Logo.tsx`.
  */
 
-const EVENING_PHOTO = "/onboarding-samples/evening.jpg";
-const CARD_TITLE = "퇴근 후, 요즘의 저녁"; // 슬라이드 2·3을 잇는 같은 카드 제목
+// 실제로 차곡이 만든 카드 (랜딩 sample-1과 같은 무드 템플릿 · 첫 등산 사진 기록)
+const REAL_CARD = "/landing/sample-1.webp";
+const CARD_TITLE = "첫 등산 사진 기록"; // 슬라이드 2·3을 잇는 같은 카드 제목
 
 const SLIDES = [
   {
@@ -151,15 +154,15 @@ function FeatureCarousel() {
 
 /* ── 미니 목업 — 한 콘텐츠가 기획 → 일정 → 제작으로 이어진다 ── */
 
-/** ① 막연한 말 → 차곡이 정리한 기획. 화살표 없이 흐름으로만 */
+/** ① 막연한 말 → 차곡이 정리한 기획. 현재 흐름(대상 + 세부 대상: 연령·말투)을 담는다 */
 function PlanMockup() {
   return (
     <div className="flex flex-col gap-2">
       <div className="max-w-[82%] self-start rounded-lg rounded-bl-sm bg-surface p-3">
         <p className="text-body leading-[1.55] text-ink">
-          요즘 퇴근하고 나면 시간이 그냥 가는 것 같아요.
+          요즘 등산 다니는데 사진만 쌓이고,
           <br />
-          평범한 일상도 좀 기록해보고 싶어요.
+          기록으로는 안 남더라고요.
         </p>
       </div>
 
@@ -169,9 +172,9 @@ function PlanMockup() {
         <p className="text-caption font-bold text-berry-dark">차곡이 정리했어요 ✦</p>
         <div className="mt-2 flex flex-col gap-1.5">
           {[
-            ["주제", "퇴근 후 나만의 시간"],
-            ["대상", "일상을 기록하고 싶은 직장인"],
-            ["기획 의도", "공감 + 일상 기록"],
+            ["주제", "첫 등산 사진 기록"],
+            ["대상", "일상을 기록하는 직장인"],
+            ["세부 대상", "30대 · 담담하게"],
           ].map(([label, value]) => (
             <div key={label} className="flex items-center gap-2">
               <span className="shrink-0 rounded-sm bg-berry-tint px-1.5 py-0.5 text-caption text-berry-dark">
@@ -209,10 +212,10 @@ function CalendarMockup() {
         </div>
       </div>
 
-      {/* 27일에 배치된, 슬라이드 ①에서 만든 그 콘텐츠 */}
+      {/* 27일에 배치된, 슬라이드 ①에서 만든 그 콘텐츠 — 실제 카드 썸네일 */}
       <div className="flex items-center gap-3 rounded-lg bg-surface p-3">
         <span className="relative block size-12 shrink-0 overflow-hidden rounded-sm">
-          <Image src={EVENING_PHOTO} alt="" fill sizes="48px" className="object-cover" />
+          <Image src={REAL_CARD} alt="" fill sizes="48px" className="object-cover" />
         </span>
         <span className="min-w-0">
           <span className="block truncate text-body font-semibold text-ink">{CARD_TITLE}</span>
@@ -223,7 +226,7 @@ function CalendarMockup() {
   );
 }
 
-/** ③ 오늘의 카드를 열어 실제 게시물로 — 결과물이 가장 크게 보인다 */
+/** ③ 오늘의 카드를 열어 실제 카드뉴스로 — 결과물(실제 산출물)이 가장 크게 보인다 */
 function CreateMockup() {
   return (
     <div className="relative flex items-start gap-3">
@@ -232,31 +235,21 @@ function CreateMockup() {
         <div className="rounded-lg bg-surface p-3">
           <p className="text-caption text-sub">오늘의 카드</p>
           <p className="mt-1 text-body font-semibold text-ink">{CARD_TITLE}</p>
-          <p className="mt-0.5 text-caption text-sub">일상을 기록하고 싶은 직장인</p>
+          <p className="mt-0.5 text-caption text-sub">일상을 기록하는 직장인</p>
         </div>
         <div className="rounded-lg bg-surface p-3">
           <p className="text-caption font-semibold text-berry-dark">캡션 초안</p>
           <p className="mt-1 text-caption leading-[1.6] text-ink">
-            퇴근하면 그냥 누워버리기 바빴는데, 요즘은 30분이라도 나가보려고 한다…
+            갤러리에만 쌓여 있던 등산 사진, 오늘 한 장으로 기록을 시작한다…
           </p>
         </div>
       </div>
 
-      {/* 오른쪽 — 완성된 게시물 (온보딩 Warm Lifestyle 문법, 4:5) */}
-      <div className="w-[40%] shrink-0">
-        <div className="flex aspect-[4/5] flex-col overflow-hidden rounded-md bg-[#F6F0E7] p-2">
-          <span className="relative block flex-1 overflow-hidden">
-            <Image src={EVENING_PHOTO} alt="" fill sizes="240px" className="object-cover" />
-          </span>
-          <span className="flex flex-col gap-0.5 px-1 pb-0.5 pt-2">
-            <span className="text-[11px] font-semibold text-[#3F362E]">
-              별거 없지만,
-              <br />
-              요즘의 저녁
-            </span>
-            <span className="text-[8px] tracking-[0.2em] text-[#A08D7C]">퇴근 · 산책 · 기록</span>
-          </span>
-        </div>
+      {/* 오른쪽 — 실제로 차곡이 만든 카드 (무드 템플릿, 정사각) */}
+      <div className="w-[42%] shrink-0">
+        <span className="relative block aspect-square overflow-hidden rounded-md border border-line shadow-sm">
+          <Image src={REAL_CARD} alt="" fill sizes="240px" className="object-cover" />
+        </span>
       </div>
     </div>
   );
