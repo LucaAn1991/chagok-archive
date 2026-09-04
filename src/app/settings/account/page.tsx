@@ -10,9 +10,10 @@ import {
   updatePassword,
   type User as AuthUser,
 } from "firebase/auth";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { Check, LogOut } from "lucide-react";
-import { auth } from "@/lib/firebase/client";
-import AppSidebar from "@/components/AppSidebar";
+import { auth, db } from "@/lib/firebase/client";
+import AppTopNav from "@/components/AppTopNav";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import InlineAlert from "@/components/InlineAlert";
 import PageHeader from "@/components/PageHeader";
@@ -36,6 +37,9 @@ import PasswordInput from "@/components/PasswordInput";
 /** 회원가입과 같은 규칙을 쓴다 — 여기만 느슨하면 우회로가 된다 */
 const MIN_PASSWORD = 8;
 
+/** 닉네임 최대 길이 (09-04). `firestore.rules`의 검증과 **같은 값이어야 한다** */
+const MAX_NICKNAME = 20;
+
 export default function AccountSettingsPage() {
   const router = useRouter();
 
@@ -50,6 +54,13 @@ export default function AccountSettingsPage() {
 
   const [signingOut, setSigningOut] = useState(false);
 
+  /* 닉네임 (09-04) — 프로필 메뉴에 쓰인다. 비우면 이메일 앞부분으로 돌아간다 */
+  const [nickname, setNickname] = useState("");
+  const [savedNickname, setSavedNickname] = useState("");
+  const [savingNickname, setSavingNickname] = useState(false);
+  const [nicknameDone, setNicknameDone] = useState(false);
+  const [nicknameError, setNicknameError] = useState<string | null>(null);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       if (!u) {
@@ -58,9 +69,40 @@ export default function AccountSettingsPage() {
       }
       setUser(u);
       setLoading(false);
+      /*
+        닉네임을 못 읽어도 화면은 뜬다 — 이 화면의 존재 이유는 로그아웃이라
+        (위 주석) 부수적인 값 하나 때문에 막히면 안 된다.
+      */
+      void getDoc(doc(db, "users", u.uid))
+        .then((snap) => {
+          const saved = (snap.data()?.nickname as string | undefined) ?? "";
+          setNickname(saved);
+          setSavedNickname(saved);
+        })
+        .catch(() => {});
     });
     return unsubscribe;
   }, [router]);
+
+  /** 닉네임 저장 — 공백만 남으면 지운 것으로 본다 */
+  async function saveNickname() {
+    if (!user) return;
+    const value = nickname.trim().slice(0, MAX_NICKNAME);
+
+    setSavingNickname(true);
+    setNicknameError(null);
+    setNicknameDone(false);
+    try {
+      await updateDoc(doc(db, "users", user.uid), { nickname: value || null });
+      setNickname(value);
+      setSavedNickname(value);
+      setNicknameDone(true);
+    } catch {
+      setNicknameError("닉네임을 저장하지 못했어요. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setSavingNickname(false);
+    }
+  }
 
   async function changePassword() {
     if (!user?.email) return;
@@ -107,8 +149,8 @@ export default function AccountSettingsPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-1">
-        <AppSidebar />
+      <div className="flex flex-1 flex-col">
+        <AppTopNav />
         <div className="flex min-w-0 flex-1 flex-col">
           <main className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
             <div aria-hidden className="flex animate-pulse flex-col gap-4">
@@ -124,8 +166,8 @@ export default function AccountSettingsPage() {
   }
 
   return (
-    <div className="flex flex-1">
-      <AppSidebar />
+    <div className="flex flex-1 flex-col">
+      <AppTopNav />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <main className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
@@ -144,6 +186,66 @@ export default function AccountSettingsPage() {
             <section className="flex flex-col gap-1 rounded-lg border border-line bg-surface p-6">
               <span className="text-label font-semibold text-sub">이메일</span>
               <p className="text-body text-ink">{user?.email ?? "—"}</p>
+            </section>
+
+            {/*
+              닉네임 (09-04) — 프로필 메뉴에 뜨는 이름.
+              **필수가 아니다.** 비워두면 이메일 앞부분을 쓴다 — 빈칸을 강요하지
+              않는다 (DESIGN §1). 그래서 「저장」은 값이 바뀌었을 때만 나온다.
+            */}
+            <section className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-6">
+              <div className="flex flex-col gap-1">
+                <h2 className="text-body font-semibold text-ink">닉네임</h2>
+                <p className="text-caption text-sub">
+                  프로필 메뉴에 이 이름이 보여요. 비워두면 이메일 앞부분(
+                  {user?.email?.split("@")[0] ?? "—"})을 써요.
+                </p>
+              </div>
+
+              <input
+                type="text"
+                value={nickname}
+                maxLength={MAX_NICKNAME}
+                onChange={(e) => {
+                  setNickname(e.target.value);
+                  setNicknameDone(false);
+                }}
+                placeholder="예: 홍길동"
+                aria-label="닉네임"
+                className="h-11 w-full max-w-[320px] rounded-md border border-line bg-surface px-3
+                           text-body text-ink outline-none focus:border-berry placeholder:text-sub"
+              />
+
+              {nicknameError && <InlineAlert>{nicknameError}</InlineAlert>}
+
+              {nickname.trim() !== savedNickname ? (
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void saveNickname()}
+                    disabled={savingNickname}
+                    className="h-11 rounded-md bg-berry px-5 text-body font-semibold text-white
+                               transition-colors duration-200 hover:bg-berry-dark
+                               disabled:bg-surface-muted disabled:text-sub"
+                  >
+                    {savingNickname ? "저장하는 중···" : "저장"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNickname(savedNickname)}
+                    className="text-body text-sub transition-colors duration-200 hover:text-ink"
+                  >
+                    되돌리기
+                  </button>
+                </div>
+              ) : (
+                nicknameDone && (
+                  <p className="flex items-center gap-1.5 text-body text-ink">
+                    <Check size={16} aria-hidden className="text-berry" />
+                    저장했어요.
+                  </p>
+                )
+              )}
             </section>
 
             {/* 비밀번호 변경 */}

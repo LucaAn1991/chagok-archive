@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Landing from "@/components/Landing";
 import { useRouter } from "next/navigation";
-import { LogoSymbol } from "@/components/Logo";
 import { onAuthStateChanged, signOut, type User as AuthUser } from "firebase/auth";
 import {
   collection,
@@ -16,14 +15,13 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
-import { ArrowUp, ChevronRight, CircleUserRound } from "lucide-react";
+import { ArrowUp, ChevronRight } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
-import AppSidebar from "@/components/AppSidebar";
+import AppTopNav from "@/components/AppTopNav";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import FeaturedContentCard from "@/components/FeaturedContentCard";
 import TodayCardRail from "@/components/TodayCardRail";
 import PageHeader from "@/components/PageHeader";
-import StatusBadge from "@/components/StatusBadge";
 import { formatMonthDayWeekday } from "@/lib/format";
 import { greetingFor, kstToday } from "@/lib/greetings";
 import { isConsentCurrent } from "@/lib/legal/consent-client";
@@ -126,8 +124,8 @@ type DatedCard = Card & { scheduledDate: string };
 
 /*
  * 카드 네 갈래 (09-01) — 날짜 유무·시점으로 나눠 홈에서 자리를 달리 준다:
- *   A  이번 주 (월~일)      → 중앙 펼침 「이번 주 콘텐츠」
- *   B  다음 주 이후          → 하단 접힘 «9월에 올릴 콘텐츠 2개»
+ *   A  이번 주 (월~일)      → 「앞으로 올릴 콘텐츠」의 첫 탭 (기본)
+ *   B  다음 주 이후          → 같은 섹션의 «N월에 올릴 콘텐츠» 탭 (09-04에 합침)
  *   C  날짜 없음             → 하단 접힘 «언젠가 올릴 콘텐츠 25개» + [날짜 정해주기]
  *   D  과거인데 아직 안 올림  → 진입 시 다음 발행일로 자동 이월 (경고 없이 조용히)
  */
@@ -281,26 +279,14 @@ function Home({ uid }: { uid: string }) {
   }, [uid, router, reloadKey]);
 
   return (
-    <div className="flex flex-1">
-      <AppSidebar />
+    <div className="flex flex-1 flex-col">
+      <AppTopNav />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* 모바일 — 프로필은 상단 우측 (DESIGN.md §4) */}
-        <header className="flex h-14 items-center justify-between px-4 md:hidden">
-          <span className="flex items-center gap-2">
-            <LogoSymbol size={20} />
-            <span className="text-title font-bold text-ink">차곡</span>
-          </span>
-          {/* @TODO: 프로필 메뉴(설정 · 로그아웃) 팝업 — 지금은 설정으로 바로 이동 */}
-          <Link
-            href="/settings/content"
-            aria-label="프로필"
-            className="flex h-11 w-11 items-center justify-center rounded-md text-sub"
-          >
-            <CircleUserRound size={22} aria-hidden />
-          </Link>
-        </header>
-
+        {/*
+          09-04 — 모바일 전용 로고·프로필 줄이 여기 있었다. 상단 바(`AppTopNav`)가
+          모든 폭에서 같은 것을 그리게 되면서 두 줄이 겹쳐 지웠다.
+        */}
         {/* 홈 최대 폭 960 (DESIGN.md §4) · 하단 탭에 가리지 않게 모바일만 여유 패딩 */}
         <main className="mx-auto w-full max-w-[960px] flex-1 px-4 py-3 pb-20 md:p-6 md:pb-8 min-[1200px]:p-8">
           {state.phase === "loading" && <HomeSkeleton />}
@@ -506,8 +492,9 @@ function HomeReady({
         같은 카드가 위아래로 두 번 나와서, 오늘 3장인데 «하나만 보인다»고 읽혔다.
         헤드라인이 이미 그 카드를 말하고 있으므로 목록에서 또 셀 이유가 없다.
       */}
-      <WeekSection
+      <UpcomingSection
         weekCards={weekCards}
+        futureCards={futureCards}
         excludeIds={
           situation === "A"
             ? todayCards.map((c) => c.id)
@@ -516,7 +503,6 @@ function HomeReady({
               : []
         }
       />
-      <CollapsedFuture cards={futureCards} />
       {situation !== "E" && (
         <CollapsedSomeday
           cards={somedayCards}
@@ -661,76 +647,109 @@ function DateGroupedList({ cards, todayKey }: { cards: DatedCard[]; todayKey: st
 }
 
 /**
- * A — 이번 주 콘텐츠 (09-01 개편). 이번 주 날짜가 붙은, 아직 안 올린 카드만.
- * 부제 숫자 = 아래 목록에 실제로 보이는 카드 수 — 날짜 없는 카드는 절대 섞지 않는다.
+ * A·B — 앞으로 올릴 콘텐츠 (09-04에 둘을 한 섹션으로 합쳤다).
+ *
+ * 예전엔 A(이번 주)만 펼쳐져 있고 B(다음 달)는 **작은 회색 접힌 한 줄**이었다.
+ * 있는 줄도 모르고 지나가는 자리였다 — 기획 화면의 세부 질문지와 같은 문제.
+ * 탭으로 나란히 놓고 **개수를 탭에 박아**, 안 열어도 저쪽에 몇 개 있는지 보이게 했다.
+ *
+ * **기본은 언제나 「이번 주」다.** 홈의 존재 이유가 「지금 뭘 해야 하나」라서,
+ * 둘을 나란히 두더라도 무게까지 같게 두지는 않는다. 이번 주가 비었을 때만
+ * 다음 달이 첫 탭이 된다.
+ *
+ * **한쪽이 비면 탭을 그리지 않는다** — 탭이 하나뿐인 토글은 토글이 아니다.
  */
-function WeekSection({
+function UpcomingSection({
   weekCards,
+  futureCards,
   excludeIds,
 }: {
   weekCards: DatedCard[];
+  /** 다음 주 이후 카드 (B) — 전부 넘겨주면 여기서 «첫 달»만 골라 쓴다 */
+  futureCards: DatedCard[];
   /** 위에서 이미 보여준 카드들 — 목록에 또 넣지 않는다 (09-03) */
   excludeIds?: string[];
 }) {
+  const [picked, setPicked] = useState<"week" | "month">("week");
+
   const todayKey = toDateKey(new Date());
   // 「올릴」 목록 — 이미 올린 카드는 접는다. 이미 만들어둔 카드(올리기만 남음)는 들어온다
   const shown = new Set(excludeIds ?? []);
-  const remaining = weekCards.filter((c) => c.status !== "published" && !shown.has(c.id));
-  if (remaining.length === 0) return null;
+  const week = weekCards.filter((c) => c.status !== "published" && !shown.has(c.id));
+
+  /*
+    **탭 이름이 곧 목록의 범위 약속이다** (09-04).
+
+    예전 코드는 「9월에 올릴 콘텐츠 2개」라고 세어놓고 펼치면 10월 카드까지
+    그렸다 — 숫자와 목록이 어긋났다. 「9월」이라고 적었으면 9월만 보여준다.
+    그 너머는 「전체보기 → 캘린더」가 맡는다.
+  */
+  const firstMonth =
+    futureCards.length > 0 ? Number(futureCards[0].scheduledDate.split("-")[1]) : null;
+  const month =
+    firstMonth === null
+      ? []
+      : futureCards.filter((c) => Number(c.scheduledDate.split("-")[1]) === firstMonth);
+
+  const tabs = [
+    week.length > 0
+      ? { key: "week" as const, label: "이번 주 콘텐츠", cards: week, today: todayKey }
+      : null,
+    month.length > 0
+      ? { key: "month" as const, label: `${firstMonth}월에 올릴 콘텐츠`, cards: month, today: "" }
+      : null,
+  ].filter((t) => t !== null);
+
+  if (tabs.length === 0) return null;
+  const active = tabs.find((t) => t.key === picked) ?? tabs[0];
 
   return (
     <section className="border-y border-line py-2.5">
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-title font-bold text-ink">이번 주 콘텐츠</h2>
+      <div className="flex items-baseline justify-between gap-3">
+        {tabs.length === 1 ? (
+          <h2 className="text-title font-bold text-ink">{active.label}</h2>
+        ) : (
+          <div role="tablist" aria-label="앞으로 올릴 콘텐츠" className="flex min-w-0 gap-1">
+            {tabs.map((tab) => {
+              const on = tab.key === active.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={on}
+                  onClick={() => setPicked(tab.key)}
+                  className={[
+                    "flex h-9 items-center gap-1.5 rounded-md px-2.5 transition-colors duration-200",
+                    on
+                      ? "bg-berry-light font-bold text-berry-dark"
+                      : "text-sub hover:bg-surface-muted hover:text-ink",
+                  ].join(" ")}
+                >
+                  <span className="truncate text-body">{tab.label}</span>
+                  <span className="text-caption font-semibold">{tab.cards.length}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* 배정 카드 전체 목록은 캘린더가 담당 — 새 페이지를 만들지 않는다 */}
         <Link
           href="/calendar"
-          className="text-caption font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
+          className="shrink-0 text-caption font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
         >
           전체보기
         </Link>
       </div>
-      <p className="mt-0.5 text-caption text-sub">{remaining.length}개 남아있어요</p>
+
+      {tabs.length === 1 && (
+        <p className="mt-0.5 text-caption text-sub">{active.cards.length}개 남아있어요</p>
+      )}
 
       <div className="mt-2">
-        <DateGroupedList cards={remaining} todayKey={todayKey} />
+        <DateGroupedList cards={active.cards} todayKey={active.today} />
       </div>
-    </section>
-  );
-}
-
-/**
- * B — 다음 주 이후 카드. 접힌 한 줄 «9월에 올릴 콘텐츠 2개», 펼치면 목록 (09-01).
- */
-function CollapsedFuture({ cards }: { cards: DatedCard[] }) {
-  const [open, setOpen] = useState(false);
-  if (cards.length === 0) return null;
-
-  const firstMonth = Number(cards[0].scheduledDate.split("-")[1]);
-  const countInMonth = cards.filter(
-    (c) => Number(c.scheduledDate.split("-")[1]) === firstMonth,
-  ).length;
-
-  return (
-    <section>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="flex items-center gap-1 text-body text-sub transition-colors duration-200 hover:text-ink"
-      >
-        <ChevronRight
-          size={16}
-          aria-hidden
-          className={`transition-transform duration-200 ${open ? "rotate-90" : ""}`}
-        />
-        {firstMonth}월에 올릴 콘텐츠 {countInMonth}개
-      </button>
-      {open && (
-        <div className="mt-2">
-          <DateGroupedList cards={cards} todayKey="" />
-        </div>
-      )}
     </section>
   );
 }

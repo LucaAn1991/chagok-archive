@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
-import AppSidebar from "@/components/AppSidebar";
+import AppTopNav from "@/components/AppTopNav";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import PageHeader from "@/components/PageHeader";
 import PlanTabs from "@/components/PlanTabs";
@@ -147,8 +147,8 @@ export default function PlanHistoryPage() {
   }, [router, reloadKey]);
 
   return (
-    <div className="flex flex-1">
-      <AppSidebar />
+    <div className="flex flex-1 flex-col">
+      <AppTopNav />
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* 컨테이너 값은 새 기획(plan/new)과 동일 — 탭 전환 시 헤더가 좌우로 튀지 않게 (09-01) */}

@@ -7,7 +7,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { Check } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
-import AppSidebar from "@/components/AppSidebar";
+import AppTopNav from "@/components/AppTopNav";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import InlineAlert from "@/components/InlineAlert";
 import PageHeader from "@/components/PageHeader";
@@ -194,8 +194,8 @@ export default function ContentSettingsPage() {
 
   if (phase === "loading") {
     return (
-      <div className="flex flex-1">
-        <AppSidebar />
+      <div className="flex flex-1 flex-col">
+        <AppTopNav />
         <div className="flex min-w-0 flex-1 flex-col">
           <main className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
             <div aria-hidden className="flex animate-pulse flex-col gap-4">
@@ -212,8 +212,8 @@ export default function ContentSettingsPage() {
 
   if (phase === "error") {
     return (
-      <div className="flex flex-1">
-        <AppSidebar />
+      <div className="flex flex-1 flex-col">
+        <AppTopNav />
         <div className="flex min-w-0 flex-1 flex-col">
           <main className="mx-auto flex w-full max-w-[960px] flex-1 flex-col items-center justify-center gap-3 p-4">
             <h1 className="text-h3 font-bold text-ink">설정을 불러오지 못했어요</h1>
@@ -232,8 +232,8 @@ export default function ContentSettingsPage() {
   }
 
   return (
-    <div className="flex flex-1">
-      <AppSidebar />
+    <div className="flex flex-1 flex-col">
+      <AppTopNav />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <main className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">

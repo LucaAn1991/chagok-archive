@@ -8,7 +8,7 @@ import { ArrowUp, Check, ChevronLeft, ChevronRight, Pencil, Plus, X } from "luci
 import { auth, db } from "@/lib/firebase/client";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/draft";
 import { addCustomAudience, loadCustomAudiences } from "@/lib/custom-audiences";
-import AppSidebar from "@/components/AppSidebar";
+import AppTopNav from "@/components/AppTopNav";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import AIChatBubble, { SystemEventLine } from "@/components/AIChatBubble";
 import {
@@ -925,7 +925,6 @@ function NewPlanScreen() {
     void runTurn({ kind: "update", patch });
   }
 
-  const summaryStarted = summary.topic !== "";
   const summaryProps = {
     summary,
     onSave: saveSummaryPatch,
@@ -946,8 +945,8 @@ function NewPlanScreen() {
   };
 
   return (
-    <div className="flex flex-1">
-      <AppSidebar />
+    <div className="flex flex-1 flex-col">
+      <AppTopNav />
 
       <div className="flex min-w-0 flex-1 flex-col lg:h-dvh lg:overflow-hidden">
         {/* 간격은 --plan-gap 하나로 관리 (08-31) — 바깥 좌우 여백 = 열 사이 간격 */}

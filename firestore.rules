@@ -32,10 +32,16 @@ service cloud.firestore {
       // 설정(활동 분야·빈도·말투·피할 표현)만 클라이언트가 고칠 수 있다.
       // onboardedAt은 라우트 가드의 근거라 클라이언트가 임의로 못 쓴다 (§7 메모)
       // brand(내 스타일)도 서버만 — 색 형식·폰트 값을 검증해야 한다 (08-31, §7 ⑩)
+      // nickname은 클라이언트가 쓴다 — 다만 길이·타입은 여기서 막는다 (09-04).
+      // 서버를 안 거치는 유일한 «자유 입력»이라, 규칙이 유일한 방어선이다.
       allow update: if isOwner(uid)
         && !changedKeys().hasAny(
           ['uid', 'email', 'onboardedAt', 'createdAt', 'brand'].toSet()
-        );
+        )
+        && (!('nickname' in request.resource.data)
+            || request.resource.data.nickname == null
+            || (request.resource.data.nickname is string
+                && request.resource.data.nickname.size() <= 20));
 
       // 탈퇴는 서버가 처리한다 (DELETE /api/users/me)
       allow delete: if false;

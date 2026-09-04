@@ -6,7 +6,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
-import AppSidebar from "@/components/AppSidebar";
+import AppTopNav from "@/components/AppTopNav";
 import PageHeader from "@/components/PageHeader";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import StatusBadge from "@/components/StatusBadge";
@@ -83,8 +83,8 @@ function PlanResultScreen() {
   }, [planId, router, reloadKey]);
 
   return (
-    <div className="flex flex-1">
-      <AppSidebar />
+    <div className="flex flex-1 flex-col">
+      <AppTopNav />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <main className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">

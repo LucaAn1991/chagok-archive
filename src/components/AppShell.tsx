@@ -1,8 +1,8 @@
-import AppSidebar from "@/components/AppSidebar";
+import AppTopNav from "@/components/AppTopNav";
 import MobileBottomNav from "@/components/MobileBottomNav";
 
 /**
- * 로그인 후 화면의 공통 껍데기 — 사이드바 + 본문 + 모바일 하단 탭.
+ * 로그인 후 화면의 공통 껍데기 — 상단 바 + 본문 + 모바일 하단 탭 (09-04에 사이드바에서 이동).
  *
  * 화면마다 이 세 줄을 다시 쓰면 한 곳만 빠져도 그 화면에서 내비게이션이 사라진다.
  * 실제로 카드 상세·재료 추가·제작 결과 세 화면이 그렇게 빠져 있었다 (08-31 통일).
@@ -34,16 +34,14 @@ export default function AppShell({
   width?: keyof typeof MAX_WIDTH;
 }) {
   return (
-    <div className="flex flex-1">
-      <AppSidebar />
+    <div className="flex min-w-0 flex-1 flex-col">
+      <AppTopNav />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <main
-          className={`mx-auto w-full flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8 ${MAX_WIDTH[width]}`}
-        >
-          {children}
-        </main>
-      </div>
+      <main
+        className={`mx-auto w-full flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8 ${MAX_WIDTH[width]}`}
+      >
+        {children}
+      </main>
 
       <MobileBottomNav />
     </div>
