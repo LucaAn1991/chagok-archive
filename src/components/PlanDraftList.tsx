@@ -240,7 +240,12 @@ function DraftCard({
  */
 function targetingSummary(draft: PlanDraft): string {
   const t = draft.targeting;
-  const bits = [t?.ageRange, t?.gender, t?.tone, t?.timeOfDay].filter(Boolean) as string[];
+  /* 연령·성별은 복수다 (09-04) — 옛 문서의 문자열 하나도 그대로 읽힌다 */
+  const listed = (v: string[] | string | undefined) =>
+    v ? (Array.isArray(v) ? v : [v]).filter(Boolean).join("·") : "";
+  const bits = [listed(t?.ageRange), listed(t?.gender), t?.tone, t?.timeOfDay].filter(
+    Boolean,
+  ) as string[];
   const brand = draft.promo?.brandName?.trim();
   if (brand) bits.push(`\u2018${brand}\u2019 홍보`);
   return bits.join(" · ");

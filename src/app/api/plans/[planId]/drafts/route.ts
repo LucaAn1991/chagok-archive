@@ -4,6 +4,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { getPlanningAI } from "@/lib/ai";
 import { AUDIENCES, AUDIENCE_DEFAULT, MAX_CARDS_PER_RUN } from "@/lib/audiences";
 import { verifyRequest } from "@/lib/server/request-auth";
+import { parseTargeting } from "@/lib/plan/targeting";
 import type { PlanDraft, Promo, Targeting } from "@/types";
 
 /**
@@ -83,7 +84,9 @@ export async function POST(
 
     // ② 단계에서 받아둔 세부 대상·홍보 대상 (09-03) — 기획안 생성 프롬프트에 먹인다.
     // 예전에는 다듬기(⑤)에서 받아 정작 생성에는 못 썼다. 없으면(undefined) 그대로 흐른다.
-    const targeting: Targeting | undefined = snap.get("targeting") ?? undefined;
+    // 09-04: 연령·성별이 복수가 됐다. 09-03에 저장된 문서엔 문자열 하나가 들어 있어
+    // 여기서 한 번 정규화한다 — 그래야 옛 기획의 대상이 배열을 기대하는 쪽에서 안 샌다.
+    const targeting: Targeting | undefined = parseTargeting(snap.get("targeting"));
     const promo: Promo | undefined = snap.get("promo") ?? undefined;
 
     // **대상 하나당 독립 호출** — 지시가 정반대인 대상을 한 프롬프트에 섞지 않는다 (08-28)

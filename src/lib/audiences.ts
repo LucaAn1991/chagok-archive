@@ -67,11 +67,23 @@ export function audiencePrompt(label: string): string {
  */
 import type { Targeting } from "@/types";
 
+/**
+ * 칩 여러 개를 한 마디로 (09-04) — `["20대","30대"]` → `20대·30대`.
+ * **문자열 하나도 받는다** — 09-03에 저장된 문서를 Firestore에서 그대로 읽어
+ * 넘기는 자리가 있어서, 배열만 가정하면 옛 기획의 대상이 조용히 사라진다.
+ */
+function joinChoices(v: string[] | string | undefined): string {
+  if (!v) return "";
+  return (Array.isArray(v) ? v : [v]).filter(Boolean).join("·");
+}
+
 export function targetingPrompt(t: Targeting | undefined | null): string {
   if (!t) return "";
   const bits: string[] = [];
-  if (t.ageRange) bits.push(`이 사람은 ${t.ageRange}다`);
-  if (t.gender) bits.push(`성별은 ${t.gender}`);
+  const age = joinChoices(t.ageRange);
+  const gender = joinChoices(t.gender);
+  if (age) bits.push(`이 사람은 ${age}다`);
+  if (gender) bits.push(`성별은 ${gender}`);
   if (t.tone) bits.push(`말은 ${t.tone} 건넨다`);
   if (bits.length === 0 && !t.timeOfDay) return "";
   const lines = [

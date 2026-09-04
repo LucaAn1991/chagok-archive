@@ -29,64 +29,82 @@ export function TargetingChips({
 }) {
   return (
     <div>
+      {/* 연령·성별은 여러 개 (09-04) — 20·30대를 함께 겨냥하는 경우가 흔하다 */}
       <TargetRow
         label="연령"
         options={AGE_OPTIONS}
-        value={targeting?.ageRange}
+        values={targeting?.ageRange ?? []}
         disabled={disabled}
-        onPick={(v) => onPick({ ageRange: v })}
+        onToggle={(v) => onPick({ ageRange: toggleChoice(targeting?.ageRange, v) })}
       />
       <TargetRow
         label="성별"
         options={GENDER_OPTIONS}
-        value={targeting?.gender}
+        values={targeting?.gender ?? []}
         disabled={disabled}
-        onPick={(v) => onPick({ gender: v })}
+        onToggle={(v) => onPick({ gender: toggleChoice(targeting?.gender, v) })}
       />
+      {/* 말투·시간대는 하나만 — 「가볍게」와 「진지하게」가 같이 켜지면 프롬프트가 흐려진다 */}
       <TargetRow
         label="말투"
         options={TONE_OPTIONS}
-        value={targeting?.tone}
+        values={targeting?.tone ? [targeting.tone] : []}
         disabled={disabled}
-        onPick={(v) => onPick({ tone: v })}
+        onToggle={(v) => onPick({ tone: targeting?.tone === v ? undefined : v })}
       />
       <TargetRow
         label="시간대"
         options={TIME_OPTIONS}
-        value={targeting?.timeOfDay}
+        values={targeting?.timeOfDay ? [targeting.timeOfDay] : []}
         disabled={disabled}
-        onPick={(v) => onPick({ timeOfDay: v })}
+        onToggle={(v) => onPick({ timeOfDay: targeting?.timeOfDay === v ? undefined : v })}
       />
     </div>
   );
 }
 
+/**
+ * 켜져 있으면 빼고, 없으면 더한다 (09-04).
+ * 다 빼면 `undefined` — «비움 = 무관»이라는 기존 규칙 그대로다.
+ */
+function toggleChoice(list: string[] | undefined, value: string): string[] | undefined {
+  const current = list ?? [];
+  const next = current.includes(value)
+    ? current.filter((v) => v !== value)
+    : [...current, value];
+  return next.length ? next : undefined;
+}
+
+/**
+ * 칩 한 줄. 켜진 값을 배열로 받아, 단일·복수 줄을 같은 코드로 그린다 (09-04).
+ * 단일 줄은 부모가 «누르면 갈아끼운다»로 `onToggle`을 구현한다.
+ */
 function TargetRow({
   label,
   options,
-  value,
+  values,
   disabled,
-  onPick,
+  onToggle,
 }: {
   label: string;
   options: string[];
-  value?: string;
+  values: string[];
   disabled: boolean;
-  onPick: (value: string) => void;
+  onToggle: (value: string) => void;
 }) {
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1.5">
       <span className="w-10 shrink-0 text-label text-sub">{label}</span>
       {options.map((o) => {
-        const on = value === o;
+        const on = values.includes(o);
         return (
           <button
             key={o}
             type="button"
             disabled={disabled}
             aria-pressed={on}
-            /* 켜진 걸 다시 누르면 끈다 — 빈 문자열이 «지움»으로 읽힌다 */
-            onClick={() => onPick(on ? "" : o)}
+            /* 켜진 걸 다시 누르면 끈다 */
+            onClick={() => onToggle(o)}
             className={[
               "h-8 rounded-pill px-3 text-label font-semibold transition-colors duration-200 disabled:opacity-60",
               on ? "bg-berry text-white" : "border border-line bg-surface text-ink hover:bg-surface-muted",

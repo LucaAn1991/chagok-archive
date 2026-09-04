@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
-import { ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Pencil, Plus, X } from "lucide-react";
+import { ArrowUp, Check, ChevronLeft, ChevronRight, Pencil, Plus, X } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/draft";
 import { addCustomAudience, loadCustomAudiences } from "@/lib/custom-audiences";
@@ -21,6 +21,7 @@ import PlanPhotoPicker from "@/components/PlanPhotoPicker";
 import PlanDraftList, { type RefineTurn } from "@/components/PlanDraftList";
 import { TargetingChips, PromoFields } from "@/components/TargetingFields";
 import PageHeader from "@/components/PageHeader";
+import InlineAlert from "@/components/InlineAlert";
 import {
   CARD_STYLES,
   DEFAULT_STYLE_ID,
@@ -1665,52 +1666,88 @@ function ProposalPicker({
 
       {/*
         누구에게 더 가까이 (09-03) — 연령·성별·말투·시간대 + 카드에 넣을 이름.
-        기본 접힘. 채우면 기획안 문구가 그 사람에 맞춰진다. 안 열어도 그대로 흐른다.
+
+        **버튼 뒤로 옮겼다** (09-04). 09-03엔 접힌 아코디언이었는데 머리글이 작아
+        있는 줄도 모르고 지나갔다. 「더 상세히 다듬기」와 「차곡이 정해줄게요」를
+        나란히 놓으면 갈림길 자체가 안내가 된다 — 질문을 하나 더 세우지 않으면서
+        (「빈칸 안 주기」·TTV) 원하는 사람은 확실히 찾아 들어간다.
       */}
-      <div className="mt-4 border-t border-line pt-3">
-        <button
-          type="button"
-          onClick={() => setDetailOpen((v) => !v)}
-          aria-expanded={detailOpen}
-          className="flex w-full items-center justify-between text-body font-semibold text-ink"
-        >
-          <span>
-            누구에게 더 가까이 <span className="text-label font-normal text-sub">· 선택</span>
-          </span>
-          {detailOpen ? <ChevronDown size={18} aria-hidden /> : <ChevronRight size={18} aria-hidden />}
-        </button>
+      {detailOpen && (
+        <div className="mt-4 border-t border-line pt-3">
+          <p className="text-label text-sub">
+            고르면 말투·단어가 그 사람에 맞춰져요. 연령·성별은 여러 개 고를 수 있어요.
+          </p>
+          <TargetingChips
+            targeting={targeting}
+            disabled={false}
+            onPick={(patch) => setTargeting((prev) => ({ ...prev, ...patch }))}
+          />
+          <PromoFields
+            promo={promo}
+            disabled={false}
+            onSave={(patch) => setPromo((prev) => ({ ...prev, ...patch }))}
+          />
+        </div>
+      )}
 
-        {detailOpen && (
-          <div className="mt-2">
-            <p className="text-label text-sub">고르면 말투·단어가 그 사람에 맞춰져요. 안 골라도 돼요.</p>
-            <TargetingChips
-              targeting={targeting}
-              disabled={false}
-              onPick={(patch) => setTargeting((prev) => ({ ...prev, ...patch }))}
-            />
-            <PromoFields
-              promo={promo}
-              disabled={false}
-              onSave={(patch) => setPromo((prev) => ({ ...prev, ...patch }))}
-            />
-          </div>
-        )}
-      </div>
+      {/*
+        대상을 하나도 안 고른 상태 (09-04). **막지는 않는다** — 0개는 «차곡이 정해준다»는
+        뜻으로 설계된 정상 경로다(08-28). 다만 고르는 걸 잊은 사람과 일부러 맡기는 사람이
+        같은 화면을 보고 있어서, 무슨 일이 일어날지만 말해준다.
+      */}
+      {picked.length === 0 && (
+        <div className="mt-4">
+          <InlineAlert>아직 대상을 고르지 않았어요. 이대로 진행하면 차곡이 대신 정해요.</InlineAlert>
+        </div>
+      )}
 
-      {/* 라벨이 곧 안내다 — 0개면 AI가 정한다는 뜻, 고르면 몇 장이 나올지 약속 (08-28).
-          N = 선택 대상 수 × 주제 수 — 현 흐름은 대화당 주제 1개라 대상 수와 같다 */}
-      <button
-        type="button"
-        onClick={() => onSubmit(targeting, promo)}
-        className="mt-5 flex h-11 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
-      >
-        {/*
-          09-02 — 「카드 N장 만들기」였는데, 이제 여기서 카드가 나오지 않는다.
-          기획안을 먼저 보여주고 고르게 하는 단계(③④⑤)가 사이에 생겼다.
-          버튼이 약속한 것과 다음 화면이 어긋나면 그게 곧 «속았다»는 인상이 된다.
-        */}
-        {picked.length === 0 ? "차곡이 정해줄게요" : `이 ${picked.length}명에게 어떻게 말할지 보기`}
-      </button>
+      {/*
+        09-02 — 「카드 N장 만들기」였는데, 이제 여기서 카드가 나오지 않는다.
+        기획안을 먼저 보여주고 고르게 하는 단계(③④⑤)가 사이에 생겼다.
+        버튼이 약속한 것과 다음 화면이 어긋나면 그게 곧 «속았다»는 인상이 된다.
+      */}
+      {detailOpen ? (
+        <>
+          <button
+            type="button"
+            onClick={() => onSubmit(targeting, promo)}
+            className="mt-5 flex h-11 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+          >
+            {picked.length === 0
+              ? "이대로 기획안 보기"
+              : `이 ${picked.length}명에게 어떻게 말할지 보기`}
+          </button>
+          {/* 되돌아갈 길 — 열고 보니 필요 없더라도 갈림길로 돌아올 수 있어야 한다 */}
+          <button
+            type="button"
+            onClick={() => setDetailOpen(false)}
+            className="mt-2 flex h-9 w-full items-center justify-center rounded-md text-label text-sub transition-colors duration-200 hover:bg-surface-muted hover:text-ink"
+          >
+            상세 설정 접기
+          </button>
+        </>
+      ) : (
+        /*
+          솔리드는 하나만 (DESIGN §7) — 둘 다 진하면 서로 경쟁해 «무엇이 기본인지»가
+          사라진다. 빠른 길인 「차곡이 정해줄게요」를 솔리드로 두고, 상세는 아웃라인.
+        */
+        <div className="mt-5 flex gap-2">
+          <button
+            type="button"
+            onClick={() => setDetailOpen(true)}
+            className="flex h-11 flex-1 items-center justify-center rounded-md border-2 border-berry bg-surface text-body font-semibold text-berry transition-colors duration-200 hover:bg-berry-light hover:text-berry-dark"
+          >
+            더 상세히 다듬기
+          </button>
+          <button
+            type="button"
+            onClick={() => onSubmit(targeting, promo)}
+            className="flex h-11 flex-1 items-center justify-center rounded-md bg-berry text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+          >
+            차곡이 정해줄게요
+          </button>
+        </div>
+      )}
     </div>
   );
 }
