@@ -251,6 +251,9 @@ function NewPlanScreen() {
   */
   const [stockOptions, setStockOptions] = useState<StockPick[]>([]);
   const [stockLoading, setStockLoading] = useState(false);
+  /* 「다른 사진 보기」 (09-04) — 누를 때마다 다음 묶음. 5까지 가면 처음으로 돈다 */
+  const [stockPage, setStockPage] = useState(1);
+  const [stockRefreshing, setStockRefreshing] = useState(false);
   /*
     고른 추천 사진들 (09-02 — 한 장에서 여러 장으로).
     카드뉴스가 4~7장인데 사진이 하나뿐이면 같은 그림이 계속 나온다.
@@ -473,6 +476,42 @@ function NewPlanScreen() {
       alive = false;
     };
   }, [ready, planId]);
+
+  /*
+    다른 사진 보기 (09-04) — 같은 검색어의 다음 묶음으로 갈아끼운다.
+
+    **고른 사진은 남긴다.** 그대로 갈아치우면 방금 고른 사진이 화면에서 사라지는데,
+    선택 자체는 살아 있어서 «어디 갔지»가 된다. 고른 것을 앞에 두고 나머지만 바꾼다.
+    실패하면 조용히 원래 목록을 둔다 — 사진은 «있으면 쓰는» 재료다 (DESIGN §12).
+  */
+  const refreshStock = useCallback(async () => {
+    if (!planId || stockRefreshing) return;
+    const next = stockPage >= 5 ? 1 : stockPage + 1;
+    setStockRefreshing(true);
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/plans/${planId}/stock?page=${next}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { photos?: StockPick[] };
+      const photos = data.photos ?? [];
+      if (photos.length === 0) return; // 빈손이면 보던 것을 그대로 둔다
+      setStockPage(next);
+      setStockOptions((prev) => {
+        const chosen = selectedStocks.map((p) => p.imageUrl);
+        const kept = prev.filter((p) => chosen.includes(p.imageUrl));
+        const fresh = photos.filter((p) => !chosen.includes(p.imageUrl));
+        return [...kept, ...fresh];
+      });
+    } catch {
+      // 그대로 둔다
+    } finally {
+      setStockRefreshing(false);
+    }
+  }, [planId, stockPage, stockRefreshing, selectedStocks]);
 
   async function runTurn(payload: TurnPayload) {
     setSending(true);
@@ -896,6 +935,8 @@ function NewPlanScreen() {
     photos: {
       stockOptions,
       stockLoading,
+      stockRefreshing,
+      onRefreshStock: () => void refreshStock(),
       selectedStockUrls: selectedStocks.map((p) => p.imageUrl),
       userPhotos,
       onSelectStock: pickStock,
@@ -1347,8 +1388,20 @@ function PlanBox({
       {/* 사진 — 내 사진 + 추천 5, 한 줄 3개 × 2줄. 가로 스크롤 없음 (§2) */}
       <PlanPhotoPicker wrap {...photos} />
 
-      {/* 버튼 — 박스 맨 아래, 안쪽 폭 전체 (§2) */}
-      <div className="mt-4">
+      {/*
+        버튼 — 박스 맨 아래, 안쪽 폭 전체 (§2).
+
+        **바닥에 붙여둔다** (09-04). 이 박스는 자체 스크롤(`overflow-y-auto`)인데
+        버튼이 그냥 마지막 자식이라, 사진 그리드가 길어지면 화면 밖으로 밀려
+        «사진에 가려 안 보이는» 상태가 됐다. 다음 걸음이 안 보이면 거기서 멈춘다.
+
+        `-mx-5 -mb-5`로 박스의 `p-5`를 상쇄해 안쪽 폭을 꽉 채우고, 불투명한
+        `bg-surface`와 윗선으로 뒤에 흐르는 사진과 경계를 만든다.
+        **고정은 lg부터다.** 모바일에선 이 박스가 자체 스크롤이 아니라 페이지째 흐르는데,
+        그때 `sticky bottom-0`은 화면 바닥 = 하단 네비(`fixed`) 자리에 붙어 버튼이
+        네비 뒤로 들어간다. 모바일은 원래대로 사진 아래에 이어서 둔다.
+      */}
+      <div className="-mx-5 -mb-5 mt-4 border-t border-line bg-surface px-5 pb-5 pt-3 lg:sticky lg:bottom-0">
         <ReadyActionBar
           onConfirm={onConfirm}
           confirming={confirming}

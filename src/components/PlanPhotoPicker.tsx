@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { Check, ImagePlus, X } from "lucide-react";
+import { Check, ImagePlus, RefreshCw, X } from "lucide-react";
 import type { StockPick } from "@/types";
 
 /**
@@ -30,6 +30,10 @@ type Props = {
   stockOptions: StockPick[];
   /** 추천을 불러오는 중 — 빈 자리 대신 뼈대를 보여준다 */
   stockLoading: boolean;
+  /** 「다른 사진 보기」로 다음 묶음을 받아오는 중 (09-04) */
+  stockRefreshing?: boolean;
+  /** 다음 묶음 요청. 없으면 버튼을 안 그린다 (모바일 펼침 등 좁은 자리) */
+  onRefreshStock?: () => void;
   /** 고른 추천 사진들의 주소 (09-02 — 여러 장) */
   selectedStockUrls: string[];
   userPhotos: string[]; // Object URL 미리보기
@@ -43,6 +47,8 @@ export default function PlanPhotoPicker({
   hideIntro,
   stockOptions,
   stockLoading,
+  stockRefreshing,
+  onRefreshStock,
   selectedStockUrls,
   userPhotos,
   onSelectStock,
@@ -178,6 +184,32 @@ export default function PlanPhotoPicker({
             );
           })}
       </div>
+
+      {/*
+        다른 사진 보기 (09-04) — 같은 주제로 다음 묶음을 받아온다.
+
+        마음에 드는 게 없을 때 「내 사진」을 올리는 것 말고는 길이 없었다.
+        추천이 아예 없을 때(`noStock`)는 안 그린다 — 눌러도 또 빈손이라
+        «되는 것처럼 보이는 버튼»만 남는다.
+        **고른 사진은 그대로 남는다**는 것을 문구로 미리 말해준다.
+      */}
+      {onRefreshStock && !noStock && (
+        <button
+          type="button"
+          onClick={onRefreshStock}
+          disabled={stockLoading || stockRefreshing}
+          className="mt-2 flex h-9 items-center gap-1.5 rounded-md px-2 text-caption font-semibold
+                     text-berry-dark transition-colors duration-200 hover:bg-surface-muted
+                     disabled:text-sub"
+        >
+          <RefreshCw
+            size={14}
+            aria-hidden
+            className={stockRefreshing ? "animate-spin" : undefined}
+          />
+          {stockRefreshing ? "다른 사진을 찾는 중···" : "다른 사진 보기"}
+        </button>
+      )}
 
       {noStock && !hideIntro && (
         <p className="mt-1 text-caption text-sub">

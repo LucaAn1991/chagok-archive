@@ -63,11 +63,12 @@ export type StockPhoto = {
  *
  * 던지지 않는다 — 스톡은 «있으면 좋은» 것이라 실패해도 카드 생성이 멈추면 안 된다.
  */
-async function search(query: string): Promise<StockPhoto[]> {
+async function search(query: string, page = 1): Promise<StockPhoto[]> {
   const key = process.env.PEXELS_API_KEY;
   if (!key || !query.trim()) return [];
 
-  const url = `${SEARCH_URL}?query=${encodeURIComponent(query)}&per_page=${PER_PAGE}&orientation=${ORIENTATION}`;
+  // page — 「다른 사진 보기」(09-04)가 다음 묶음을 받아오는 데 쓴다. 기본 1
+  const url = `${SEARCH_URL}?query=${encodeURIComponent(query)}&per_page=${PER_PAGE}&orientation=${ORIENTATION}&page=${page}`;
 
   try {
     const res = await fetch(url, { headers: { Authorization: key } });
@@ -98,8 +99,8 @@ async function search(query: string): Promise<StockPhoto[]> {
  *
  * 던지지 않는다. 키가 없거나 실패하면 빈 배열 — 그때 화면은 「내 사진」만 보여준다.
  */
-export async function searchStockPhotos(query: string): Promise<StockPhoto[]> {
-  return search(query);
+export async function searchStockPhotos(query: string, page = 1): Promise<StockPhoto[]> {
+  return search(query, page);
 }
 
 /**

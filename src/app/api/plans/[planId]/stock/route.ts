@@ -27,6 +27,9 @@ import type { Plan } from "@/types";
  */
 const MAX_CANDIDATES = 12;
 
+/** 「다른 사진 보기」로 넘어갈 수 있는 페이지 한도 — 그 뒤로는 결과가 주제에서 멀어진다 */
+const MAX_PAGE = 5;
+
 export async function GET(
   req: NextRequest,
   ctx: RouteContext<"/api/plans/[planId]/stock">,
@@ -50,7 +53,18 @@ export async function GET(
   const query = await toStockQuery(plan.topic);
   if (!query) return NextResponse.json({ photos: [] });
 
-  const found = await searchStockPhotos(query);
+  /*
+    「다른 사진 보기」 (09-04) — 같은 검색어의 다음 묶음을 준다.
+
+    **검색어를 새로 만들지 않는다.** 주제가 그대로인데 Claude를 다시 부르면
+    비슷한 말이 나올 뿐이고, 사용자가 화면에서 기다리는 자리에 호출만 하나 는다.
+    Pexels 쪽 페이지를 넘기는 편이 «다른 사진»이라는 목적에 곧바로 닿는다.
+    범위를 넘는 값은 1로 — 손으로 주소를 고쳐도 빈손이 되지 않게.
+  */
+  const asked = Number(req.nextUrl.searchParams.get("page"));
+  const page = Number.isInteger(asked) && asked >= 1 && asked <= MAX_PAGE ? asked : 1;
+
+  const found = await searchStockPhotos(query, page);
   const photos = found.slice(0, MAX_CANDIDATES).map((p) => ({
     imageUrl: p.imageUrl,
     photographer: p.photographer,
