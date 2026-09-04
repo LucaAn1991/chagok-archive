@@ -482,6 +482,16 @@ function CalendarView({ uid }: { uid: string }) {
     setPublishDate(todayKey);
   }
 
+  /*
+    고른 날짜가 예정일과 다른가 (09-04). 확정하면 `confirmPublish`가 예정일을
+    올린 날로 **옮기므로**, 조용히 지나가지 않고 한 번 짚어준다.
+  */
+  const publishMovesDate =
+    publishTarget !== null &&
+    publishDate !== "" &&
+    publishTarget.scheduledDate !== undefined &&
+    publishTarget.scheduledDate !== publishDate;
+
   const pendingCard =
     pendingMove && state.phase === "ready"
       ? (state.cards.find((c) => c.id === pendingMove.cardId) ?? null)
@@ -960,6 +970,21 @@ function CalendarView({ uid }: { uid: string }) {
               onChange={(e) => setPublishDate(e.target.value)}
               className="h-11 rounded-md border border-line bg-surface px-3 text-body text-ink"
             />
+            {/*
+              예정일과 다른 날을 골랐을 때만 나온다 (09-04). 기록만 되는 게 아니라
+              캘린더의 자리까지 옮겨지므로, 무엇이 바뀌는지 눌러 확정하기 전에 보여준다.
+            */}
+            {publishMovesDate && publishTarget.scheduledDate !== undefined && (
+              <p className="break-keep rounded-md bg-surface-muted p-3 text-caption text-ink">
+                예정일은{" "}
+                <span className="font-semibold">
+                  {formatDayLabel(publishTarget.scheduledDate)}
+                </span>
+                였어요.{" "}
+                <span className="font-semibold">{formatDayLabel(publishDate)}</span>에 올린 것이
+                맞다면, 캘린더에서도 이 콘텐츠가 그날로 옮겨집니다.
+              </p>
+            )}
             <div className="flex gap-2">
               <button
                 type="button"
@@ -974,7 +999,7 @@ function CalendarView({ uid }: { uid: string }) {
                 onClick={() => void confirmPublish()}
                 className="h-11 flex-1 rounded-md bg-berry text-body font-semibold text-white hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
               >
-                기록하기
+                {publishMovesDate ? "그날 올린 게 맞아요" : "기록하기"}
               </button>
             </div>
           </div>
@@ -1767,9 +1792,18 @@ function DayPanel({
                     **누른 그 카드를 짚어준다** (09-03). 하루에 카드가 둘이면
                     창을 열었을 때 어느 것을 눌렀는지 알 수 없었다.
                     카드가 하나뿐이면 강조가 의미 없으므로 걸지 않는다.
+
+                    **면은 칠하지 않는다** (09-04) — `bg-berry-tint`(#F0E6EA)가
+                    「올렸어요」 hover의 `berry-light`(#F2DCE5) · 「버리기」 hover의
+                    `surface-muted`(#F6F2F4)와 거의 같은 색이라, 짚인 카드 위에서만
+                    호버가 안 먹는 것처럼 보였다. 테두리·링만으로 충분히 짚인다.
+
+                    **링은 안쪽에 그린다**(`ring-inset`, 09-04) — 카드를 좌우로
+                    늘어놓는 `overflow-x-auto` 줄이 상자 밖 2px를 잘라내서, 맨 앞
+                    카드가 짚였을 때 왼쪽 테두리가 세로로 잘려 보였다.
                   */
                   card.id === highlightId && cards.length > 1
-                    ? "border-berry bg-berry-tint ring-2 ring-berry"
+                    ? "border-berry ring-2 ring-inset ring-berry"
                     : "border-line",
                 ].join(" ")}
               >
