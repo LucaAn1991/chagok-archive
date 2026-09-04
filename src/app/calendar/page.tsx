@@ -129,8 +129,11 @@ function isUploadDayOf(uploadDays: number[] | null, dateKey: string): boolean | 
 }
 
 /**
- * 과도기 방어 (08-31 상태 개편) — 옛 코드가 쓴 'crafted'는 pending으로 읽는다.
- * 팀원 브랜치가 개편 커밋을 pull하면 더는 생기지 않는다. @TODO: 정착 후 제거
+ * 옛 데이터 방어 (08-31 상태 개편) — 옛 코드가 쓴 'crafted'는 pending으로 읽는다.
+ *
+ * 09-04 정정: 「팀원 브랜치가 pull하면 없어진다」고 적혀 있었지만, 새로 쓰이지 않을
+ * 뿐 **08-31 이전에 저장된 문서에는 남아 있다.** 지우려면 코드가 아니라 그 문서들을
+ * 먼저 손봐야 한다 — 그전까지 이 함수를 없애면 옛 카드의 상태가 깨진다.
  */
 function normalizeCard(data: Omit<Card, "id">, id: string): Card {
   const status = (data.status as string) === "crafted" ? "pending" : data.status;
@@ -469,12 +472,54 @@ function CalendarView({ uid }: { uid: string }) {
       setTimeout(() => setNotice(null), 3000);
       return;
     }
+    /*
+      **이미 올린 콘텐츠는 못 옮긴다** (09-04).
+
+      `published`의 날짜는 «올리기로 한 날»이 아니라 «실제로 올린 날»이다
+      (`publishedAt`과 짝을 이룬다 — 「올렸어요」가 그날로 맞춰 적어 넣는다).
+      그걸 끌어다 옮기면 기록이 사실과 어긋나고, 발행률 집계의 근거가 흔들린다.
+      끌기 자체를 막아뒀지만(아래 `draggable`), 여기가 마지막 방어선이다.
+    */
+    if (moving.status === "published") {
+      setNotice("이미 올린 콘텐츠는 날짜를 옮길 수 없어요.");
+      setTimeout(() => setNotice(null), 3000);
+      return;
+    }
     if ((byDate.get(dateKey) ?? []).length > 0) {
       setPendingMove({ cardId, toDate: dateKey });
     } else {
       void moveCard(cardId, dateKey);
     }
   }
+
+  /*
+    겹친 창 중 **맨 위**가 무엇인가 (09-04).
+
+    셋 다 `DayModal` 위에 뜰 수 있다. 순서는 뜨는 순서가 아니라 «더 앞선 결정»이
+    위에 오도록 고정한다 — 이동 확인 > 올린 날짜 > 버리기 확인.
+    실제로 둘이 동시에 뜨는 흐름은 없지만, 순서를 정해두면 나중에 하나가 더
+    늘어도 규칙이 흔들리지 않는다.
+  */
+  const topDialog: "move" | "publish" | "discard" | null = pendingMove
+    ? "move"
+    : publishTarget
+      ? "publish"
+      : discardTarget
+        ? "discard"
+        : null;
+
+  /* 맨 위 창이 Esc를 받는다 — 뒤에 가린 창이 대신 닫히던 문제 (09-04) */
+  useEffect(() => {
+    if (!topDialog) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (topDialog === "move") setPendingMove(null);
+      else if (topDialog === "publish") setPublishTarget(null);
+      else setDiscardTarget(null);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [topDialog]);
 
   /** 올렸어요 다이얼로그 열기 — 기본값은 오늘 */
   function openPublish(card: Card) {
@@ -817,6 +862,7 @@ function CalendarView({ uid }: { uid: string }) {
           todayKey={todayKey}
           highlightId={selectedCardId}
           restDay={isUploadDayOf(uploadDays, selectedDate) === false}
+          keysEnabled={topDialog === null}
           onPublish={openPublish}
           onDiscard={setDiscardTarget}
           onMove={(step) => {
@@ -1139,11 +1185,13 @@ function DayCell({
       <span className="mt-1 hidden flex-col gap-1 md:flex">
         {cards.slice(0, maxDesktop).map((card) => {
           const cardOn = card.id === selectedCardId;
+          /* 올린 콘텐츠는 날짜가 «기록»이라 끌어 옮기지 못한다 (09-04) */
+          const movable = card.status !== "published";
           return (
           <button
             key={card.id}
             type="button"
-            draggable
+            draggable={movable}
             aria-pressed={cardOn}
             onClick={(e) => {
               // 칸 선택으로 흘러가되, 어느 카드를 눌렀는지도 남긴다 (09-03)
@@ -1151,6 +1199,10 @@ function DayCell({
               onSelectCard?.(card.id);
             }}
             onDragStart={(e) => {
+              if (!movable) {
+                e.preventDefault();
+                return;
+              }
               e.dataTransfer.setData("text/card-id", card.id);
               onDragStartCard(card.id);
             }}
@@ -1556,10 +1608,19 @@ function WeekColumn({
             card={card}
             variant="tile"
             onClick={onSelect}
-            onDragStart={(e) => {
-              e.dataTransfer.setData("text/card-id", card.id);
-              onDragStartCard(card.id);
-            }}
+            /*
+              올린 콘텐츠는 `onDragStart`를 주지 않는다 (09-04) — CardTile이
+              `draggable={onDragStart != null}`이라 끌기와 `cursor-grab`이 함께 꺼진다.
+              «끌 수 있어 보이는데 안 되는» 상태를 만들지 않는 게 요점이다.
+            */
+            onDragStart={
+              card.status === "published"
+                ? undefined
+                : (e) => {
+                    e.dataTransfer.setData("text/card-id", card.id);
+                    onDragStartCard(card.id);
+                  }
+            }
             onDragEnd={() => onDragStartCard(null)}
           />
         ))
@@ -1587,6 +1648,7 @@ function DayModal({
   todayKey,
   highlightId,
   restDay,
+  keysEnabled,
   onPublish,
   onDiscard,
   onMove,
@@ -1601,6 +1663,8 @@ function DayModal({
   onPublish: (card: Card) => void;
   /** 버리기 — 확인은 부르는 쪽이 받는다 (09-03) */
   onDiscard: (card: Card) => void;
+  /** 이 창이 맨 위인가 (09-04) — 아니면 Esc·화살표를 받지 않는다 */
+  keysEnabled: boolean;
   /** 하루 앞뒤로 옮긴다 */
   onMove: (step: number) => void;
   onClose: () => void;
@@ -1611,7 +1675,16 @@ function DayModal({
     boxRef.current?.focus(); // 화살표·Esc가 바로 먹게
   }, []);
 
+  /*
+    **위에 창이 겹쳐 있으면 키를 받지 않는다** (09-04).
+
+    이 창의 Esc·화살표는 `window` 리스너다. 여기서 「올렸어요」를 누르면 그 위에
+    날짜 확인 창이 뜨는데, 그 창엔 리스너가 없어서 Esc가 **뒤에 가린 이 창**을
+    닫아버렸다. 화살표도 마찬가지로, 앞 창을 열어둔 채 뒤 날짜가 넘어갔다.
+    맨 위 창이 키를 갖는다 — 부모가 `keysEnabled`로 알려준다.
+  */
   useEffect(() => {
+    if (!keysEnabled) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
       else if (e.key === "ArrowLeft") onMove(-1);
@@ -1619,7 +1692,7 @@ function DayModal({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onMove, onClose]);
+  }, [keysEnabled, onMove, onClose]);
 
   const dow = DAY_HEADS[parseDateKey(dateKey).getDay()];
 
