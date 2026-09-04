@@ -64,13 +64,11 @@ async function cutout(file: string): Promise<{ before: number; after: number }> 
     push(W - 1, y);
   }
 
-  let cleared = 0;
   while (stack.length > 0) {
     const i = stack.pop()!;
     const x = i % W;
     const y = (i / W) | 0;
     data[i * C + 3] = 0; // 알파를 0으로 — 색은 건드리지 않는다
-    cleared++;
     push(x + 1, y);
     push(x - 1, y);
     push(x, y + 1);
@@ -124,7 +122,6 @@ async function cutout(file: string): Promise<{ before: number; after: number }> 
     // 두 톤이 섞였고(체크무늬) 부스러기가 아닐 때만 지운다
     if (hi - lo > 8 && region.length > 200) {
       for (const i of region) data[i * C + 3] = 0;
-      cleared += region.length;
     }
   }
 

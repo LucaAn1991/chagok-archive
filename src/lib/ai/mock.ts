@@ -1,6 +1,6 @@
 import "server-only";
 
-import { AUDIENCES, AUDIENCE_DEFAULT, MAX_CARDS_PER_RUN, audiencePrompt } from "@/lib/audiences";
+import { AUDIENCES, AUDIENCE_DEFAULT, audiencePrompt } from "@/lib/audiences";
 import { suffix을 } from "@/lib/josa";
 import type {
   CardDraft,

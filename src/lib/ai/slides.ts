@@ -34,9 +34,9 @@ import type { ToneKey, User } from "../../types/user";
  *
  * ANTHROPIC_API_KEY가 없으면 목 모드 — 「(개발용 샘플)」 표시가 붙는다.
  *
- * @TODO: 실제 Claude 호출 구현 — src/lib/ai/caption.ts의 TODO와 동일 조건.
- *   슬라이드 장수(5~8)·레이아웃 배치도 AI가 내용에 맞게 정하게 한다.
- *   visualPreferences는 buildPreferenceDirective()로 프롬프트에 반영 (08-31).
+ * **실구현은 끝났다** (09-04에 주석 정정). 장수도 레이아웃도 AI가 내용을 보고 정한다
+ * (시안 구성이 이미 잡힌 경우엔 그 순서를 그대로 따르게 지시한다).
+ * 말투·취향·피할 표현 반영은 `caption.ts`와 같은 방식이다.
  */
 
 export type SlidesInput = {

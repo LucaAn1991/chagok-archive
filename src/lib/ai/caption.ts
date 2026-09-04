@@ -14,14 +14,13 @@ import type { ToneKey, User } from "../../types/user";
  * 고정된 샘플 캡션을 반환해 UI·저장·에러 처리를 키 없이 개발할 수 있다.
  * 목 데이터에는 「(개발용 샘플)」 표시를 넣어 실제 생성물과 혼동되지 않게 한다.
  *
- * @TODO: 실제 Claude 호출 구현 — API 키 충전 후.
- *   - 모델: claude-opus-5 (PLAN.md §9 확정) · @anthropic-ai/sdk
- *   - 구조화 출력: client.messages.parse + zodOutputFormat — **zod 설치 승인 필요**
- *   - user.tone을 말투 지시로, avoidExpressions를 금지 목록으로 프롬프트에 반영
- *   - visualPreferences는 buildPreferenceDirective()로 지시문을 만들어 시스템
- *     프롬프트에 넣는다 (src/lib/ai/preferences.ts — 취향의 문구 톤 반영, 08-31)
- *   - 실패 시 자동 1회 재시도 (PRD §5-7)
- *   - 1턴 5초 제약: effort 'low' + 스트리밍 검토, p50/p95 실측 (PLAN §9)
+ * **실구현은 끝났다** (09-04에 주석 정정). 키가 있으면 `callJson`으로 Claude를 부른다:
+ * 말투(`toneDirective`) · 게시물 취향(`buildPreferenceDirective`) · 피할 표현을
+ * 시스템 프롬프트에 싣고, 재시도와 거부 처리는 `ai/client.ts`가 맡는다.
+ * 노력 수준은 `medium` — 결과물로 남는 글이라 대화 턴보다 한 단계 위다 (PLAN §9).
+ *
+ * 구조화 출력은 zod 대신 `obj`/`STR` 스키마 헬퍼를 쓴다 — 의존성을 늘리지 않으려고
+ * 고른 것이지 미구현이 아니다.
  */
 
 export type CaptionInput = {
