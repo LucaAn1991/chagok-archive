@@ -372,7 +372,12 @@ function HomeReady({
 
   return (
     <div className="flex flex-col gap-4 md:gap-8">
-      <PageHeader />
+      {/*
+        홈은 최상위 화면이라 뒤로가기를 그리지 않는다 (09-04).
+        `isRoot`가 바로 이 상황을 위해 있었는데(09-02 신설) 홈에만 안 붙어 있었다 —
+        로그인을 거쳐 들어오면 좌상단에 화살표가 생기고, 눌러봐야 로그인 화면으로 나갔다.
+      */}
+      <PageHeader isRoot />
       {/*
         인사 한 줄 + 오늘 날짜 — 이모지 없음, KST 고정 9구간 (09-01, lib/greetings.ts)
 
