@@ -36,12 +36,23 @@ import { assetDataUris } from "./asset-files";
  * ⚠️ 다만 unblock도 전역이다. 앞으로 `next/image`로 **외부 도메인 이미지를
  * 최적화**하게 되면(`images.remotePatterns` 설정) 그 경로에도 SVG가 열린다.
  * 그때는 렌더링을 별도 프로세스로 떼거나 SVG→PNG 변환기를 따로 두어야 한다.
+ *
+ * ⚠️⚠️ **매번 부른다 — 한 번만 하고 캐시하면 안 된다** (09-04).
+ *
+ * 예전엔 `svgUnblocked` 플래그로 첫 호출에만 열었다. 그런데 Next의 이미지
+ * 최적화기는 **자기가 sharp를 처음 쓰는 순간** block을 건다 — 그 시점이 우리
+ * unblock보다 **뒤일 수 있다.** 그러면 SVG는 다시 닫히는데 플래그는 이미 true라
+ * 영영 다시 열리지 않고, 그때부터 이 프로세스의 모든 렌더가 죽는다.
+ *
+ * 실측 09-04: 카드 하나에서 시안 생성이 성공한 장(Storage PNG를 그대로 내보냄)은
+ * 멀쩡한데 렌더러로 물러선 장만 502가 났다. 결과 화면은 그 장에서 멈춰
+ * **표지 한 장만** 보였다. 원인 메시지는 「Input buffer contains unsupported
+ * image format」 하나뿐이라 사진 문제로 오해하기 쉽다.
+ *
+ * unblock은 libvips 전역 플래그를 세우는 값싼 호출이라 매번 해도 된다.
  */
-let svgUnblocked = false;
-function ensureSvgLoaderAllowed(): void {
-  if (svgUnblocked) return;
+export function ensureSvgLoaderAllowed(): void {
   sharp.unblock({ operation: ["VipsForeignLoadSvg"] });
-  svgUnblocked = true;
 }
 
 export async function renderSlidePng(content: SlideContent): Promise<Buffer> {

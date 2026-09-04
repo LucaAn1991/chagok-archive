@@ -2,6 +2,7 @@ import "server-only";
 
 import satori from "satori";
 import sharp from "sharp";
+import { ensureSvgLoaderAllowed } from "./render-slide";
 import type { ReactNode } from "react";
 import { loadCardFonts } from "./fonts";
 import { buildLayout, type SlideContent } from "./layouts";
@@ -55,6 +56,11 @@ export async function measureHitBoxes(
     height: SLIDE_SIZE,
     fonts,
   });
+  /*
+    여기도 satori SVG를 sharp에 먹인다 — 렌더러와 **같은 이유로** SVG 로더를 연다
+    (09-04). 지금까지는 같은 프로세스에서 렌더러가 먼저 열어둔 덕에 우연히 돌았다.
+  */
+  ensureSvgLoaderAllowed();
   const { data } = await sharp(Buffer.from(svg))
     // `nearest`로 줄인다 — 색을 섞으면 경계에서 다른 색이 만들어져 상자가 번진다
     .resize(SCAN_SIZE, SCAN_SIZE, { kernel: "nearest" })

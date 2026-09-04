@@ -160,6 +160,7 @@ export default function CardResultPage() {
     try {
       const base = safeFileName(card.shortTitle || card.title);
       for (const [i, url] of slideUrls.entries()) {
+        if (!url) continue; // 못 받은 장 (09-04) — 빈 파일을 만들지 않는다
         const a = document.createElement("a");
         a.href = url;
         a.download = `차곡_${base}_${String(i + 1).padStart(2, "0")}.png`;
@@ -170,7 +171,9 @@ export default function CardResultPage() {
         await new Promise((r) => setTimeout(r, 250));
       }
       // AI 생성 사실은 「다운로드 단계에서 최소 1회」 알려야 한다 (lib/ai-disclosure.ts)
-      showToast(`이미지 ${slideUrls.length}장을 저장했어요. ${AI_DISCLOSURE.downloadToast}`);
+      showToast(
+        `이미지 ${slideUrls.filter(Boolean).length}장을 저장했어요. ${AI_DISCLOSURE.downloadToast}`,
+      );
     } finally {
       setDownloading(false);
     }
@@ -416,12 +419,50 @@ async function readRender(
       setSlideUrls([]);
       stale.forEach((u) => URL.revokeObjectURL(u));
 
+      /*
+        **한 장이 실패해도 나머지를 계속 받는다** (09-04).
+
+        예전엔 `fetchSlideImage`가 던지는 예외를 여기서 안 잡아, 한 장이 502면
+        루프가 통째로 끝났다. 뒤 장들은 멀쩡한데 요청조차 안 갔고, 화면은
+        받아둔 것만 그리므로 **표지 한 장만** 남았다 — 실제로 겪은 사고다
+        (원인은 `render-slide.ts`의 SVG 로더 재차단이었다).
+
+        실패한 자리는 빈 문자열로 **자리를 지킨다.** 그래야 뒤 장들의 순서가
+        앞당겨지지 않는다 — 3번이 2번 자리에 그려지면 더 나쁜 고장이다.
+      */
       for (let order = 0; order < slideCount; order++) {
-        const url = await fetchSlideImage(order, token, fresh);
+        let url = "";
+        try {
+          url = await fetchSlideImage(order, token, fresh);
+        } catch {
+          // 이 장만 못 받았다 — 화면이 「받지 못했어요」 자리를 그린다
+        }
         setSlideUrls((prev) => [...prev, url]);
       }
     },
     [fetchSlideImage],
+  );
+
+  /**
+   * 못 받은 장 하나만 다시 받는다 (09-04).
+   * 카드를 통째로 다시 만들 일이 아니다 — 그림은 이미 있고 받아오기만 실패한 것이다.
+   */
+  const retrySlideImage = useCallback(
+    async (order: number) => {
+      const user = userRef.current;
+      if (!user) return;
+      try {
+        const url = await fetchSlideImage(order, await user.getIdToken(), true);
+        setSlideUrls((prev) => {
+          const next = [...prev];
+          next[order] = url;
+          return next;
+        });
+      } catch {
+        showToast("아직 불러오지 못했어요. 잠시 후 다시 시도해주세요.");
+      }
+    },
+    [fetchSlideImage, showToast],
   );
 
   /** 캡션 + 슬라이드 구성 생성 → 이미지 로드 */
@@ -703,6 +744,28 @@ async function readRender(
                         </button>
                       ))}
                   </div>
+                ) : slideUrls.length > i ? (
+                  /*
+                    이 장만 못 받았다 (09-04). 예전엔 여기도 깜빡이는 자리였는데,
+                    영영 오지 않을 그림을 기다리는 것처럼 보였다 — 무엇이 잘못됐고
+                    무엇을 할 수 있는지 말해준다.
+                  */
+                  <div
+                    key={slide.order}
+                    className="flex aspect-square w-72 shrink-0 flex-col items-center justify-center
+                               gap-2 rounded-lg border border-line bg-surface px-4 text-center"
+                  >
+                    <p className="text-caption text-ink">{i + 1}번째 장을 불러오지 못했어요.</p>
+                    <button
+                      type="button"
+                      onClick={() => void retrySlideImage(i)}
+                      className="flex h-9 items-center justify-center rounded-md border-2 border-berry
+                                 bg-surface px-4 text-caption font-semibold text-berry
+                                 transition-colors duration-200 hover:bg-berry-light hover:text-berry-dark"
+                    >
+                      다시 시도
+                    </button>
+                  </div>
                 ) : (
                   <div
                     key={slide.order}
@@ -741,7 +804,7 @@ async function readRender(
                   className="h-11 rounded-md bg-berry px-5 text-body font-semibold text-white
                              hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
                 >
-                  {downloading ? "···" : `이미지 ${slideUrls.length}장 저장`}
+                  {downloading ? "···" : `이미지 ${slideUrls.filter(Boolean).length}장 저장`}
                 </button>
                 <p className="text-caption text-sub">
                   저장한 이미지를 인스타그램에 직접 올려주세요.
