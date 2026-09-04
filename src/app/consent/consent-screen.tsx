@@ -138,7 +138,7 @@ export default function ConsentScreen({ termsMd }: { termsMd: string }) {
         <button
           type="button"
           onClick={() => setMode("first")}
-          className="mt-4 flex h-11 items-center justify-center rounded-md border-2 border-berry bg-surface px-6 text-body font-semibold text-berry transition-colors duration-200 hover:bg-berry-tint"
+          className="mt-4 flex h-11 items-center justify-center rounded-md border-2 border-berry bg-surface px-6 text-body font-semibold text-berry transition-colors duration-200 hover:bg-berry-tint hover:text-berry-dark"
         >
           돌아가기
         </button>

@@ -106,7 +106,7 @@ function PlanResultScreen() {
                   setState({ phase: "loading" });
                   setReloadKey((k) => k + 1);
                 }}
-                className="mt-6 flex h-11 items-center justify-center rounded-md border-2 border-berry bg-surface px-6 text-body font-semibold text-berry transition-colors duration-200 hover:bg-berry-tint"
+                className="mt-6 flex h-11 items-center justify-center rounded-md border-2 border-berry bg-surface px-6 text-body font-semibold text-berry transition-colors duration-200 hover:bg-berry-tint hover:text-berry-dark"
               >
                 다시 시도
               </button>

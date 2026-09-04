@@ -898,11 +898,11 @@ function CalendarView({ uid }: { uid: string }) {
           aria-modal="true"
           aria-labelledby="discard-title"
           onClick={() => setDiscardTarget(null)}
-          className="fixed inset-0 z-60 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
+          className="overlay-in fixed inset-0 z-60 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="flex w-full max-w-[400px] flex-col gap-4 rounded-xl bg-surface p-6 shadow-lg"
+            className="modal-in flex w-full max-w-[400px] flex-col gap-4 rounded-xl bg-surface p-6 shadow-modal"
           >
             <h2 id="discard-title" className="text-title font-bold text-ink">
               이 카드를 버릴까요?
@@ -943,11 +943,11 @@ function CalendarView({ uid }: { uid: string }) {
           aria-modal="true"
           aria-labelledby="move-title"
           onClick={() => setPendingMove(null)}
-          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
+          className="overlay-in fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="flex w-full max-w-[400px] flex-col gap-4 rounded-xl bg-surface p-6 shadow-lg"
+            className="modal-in flex w-full max-w-[400px] flex-col gap-4 rounded-xl bg-surface p-6 shadow-modal"
           >
             <h2 id="move-title" className="text-title font-bold text-ink">
               이 날에는 이미 카드가 있어요
@@ -991,11 +991,11 @@ function CalendarView({ uid }: { uid: string }) {
           aria-modal="true"
           aria-labelledby="publish-title"
           onClick={() => setPublishTarget(null)}
-          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
+          className="overlay-in fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="flex w-full max-w-[400px] flex-col gap-4 rounded-xl bg-surface p-6 shadow-lg"
+            className="modal-in flex w-full max-w-[400px] flex-col gap-4 rounded-xl bg-surface p-6 shadow-modal"
           >
             <h2 id="publish-title" className="text-title font-bold text-ink">
               언제 올리셨어요?
@@ -1701,7 +1701,7 @@ function DayModal({
       role="dialog"
       aria-modal="true"
       aria-label={`${Number(dateKey.slice(5, 7))}월 ${Number(dateKey.slice(8, 10))}일 콘텐츠`}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
+      className="overlay-in fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
       onClick={onClose}
     >
       <div
@@ -1709,7 +1709,7 @@ function DayModal({
         tabIndex={-1}
         data-focus-ring="none"
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-full w-full max-w-[620px] flex-col overflow-hidden rounded-lg bg-surface outline-none"
+        className="modal-in flex max-h-full w-full max-w-[620px] flex-col overflow-hidden rounded-lg bg-surface outline-none shadow-modal"
       >
         <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
           <h2 className="min-w-0 truncate text-body font-bold text-ink">

@@ -371,11 +371,11 @@ export default function CardDetailPage() {
             aria-modal="true"
             aria-labelledby="ig-preview-title"
             onClick={() => setPreviewIndex(null)}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
+            className="overlay-in fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
           >
             <div
               onClick={(e) => e.stopPropagation()}
-              className="flex max-h-[92vh] w-full max-w-[400px] flex-col overflow-hidden rounded-xl bg-surface shadow-lg"
+              className="modal-in flex max-h-[92vh] w-full max-w-[400px] flex-col overflow-hidden rounded-xl bg-surface shadow-modal"
             >
               {/* 제목 바 — 이게 뭘 하는 화면인지 먼저 (09-01) */}
               <div className="flex items-center justify-between border-b border-line py-2 pl-4 pr-2">
@@ -479,9 +479,9 @@ export default function CardDetailPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="discard-title"
-            className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
+            className="overlay-in fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
           >
-            <div className="flex w-full max-w-[400px] flex-col gap-4 rounded-xl bg-surface p-6 shadow-lg">
+            <div className="modal-in flex w-full max-w-[400px] flex-col gap-4 rounded-xl bg-surface p-6 shadow-modal">
               <h2 id="discard-title" className="text-title font-bold text-ink">
                 이 카드를 버릴까요?
               </h2>

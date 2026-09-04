@@ -55,11 +55,11 @@ export default function SlideRemakePanel({
       aria-labelledby="remake-title"
       /* 바깥을 눌러도 닫힌다 — 만드는 중에는 안 닫는다 */
       onClick={() => { if (!busy) onClose(); }}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/60 p-4 sm:items-center"
+      className="overlay-in fixed inset-0 z-50 flex items-end justify-center bg-ink/60 p-4 sm:items-center"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-full w-full max-w-[440px] flex-col gap-3 overflow-y-auto rounded-lg bg-surface p-5"
+        className="modal-in flex max-h-full w-full max-w-[440px] flex-col gap-3 overflow-y-auto rounded-lg bg-surface p-5 shadow-modal"
       >
       <div className="flex items-start justify-between gap-2">
         <div>

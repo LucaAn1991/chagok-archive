@@ -653,7 +653,7 @@ async function readRender(
         )}
 
         {phase === "error" ? (
-          <div className="flex flex-col items-start gap-3 rounded-lg border border-line bg-surface p-6">
+          <div className="flex flex-col items-start gap-3 rounded-lg bg-surface p-6 shadow-e1">
             <p className="text-body text-ink">{errorMessage}</p>
             <button
               type="button"
@@ -716,7 +716,7 @@ async function readRender(
                     <img
                       src={slideUrls[i]}
                       alt={`슬라이드 ${i + 1}`}
-                      className="aspect-square w-72 rounded-lg border border-line bg-surface object-cover"
+                      className="aspect-square w-72 rounded-lg bg-surface object-cover shadow-e1"
                     />
 
                     {/*
@@ -729,9 +729,9 @@ async function readRender(
                         type="button"
                         onClick={() => setEditOrder(slide.order)}
                         disabled={regenSlide !== null}
-                        className="flex h-9 w-72 items-center justify-center rounded-md border border-dashed
-                                   border-line px-3 text-caption text-sub transition-colors duration-200
-                                   hover:border-berry hover:text-ink disabled:opacity-50"
+                        className="flex h-9 w-72 items-center justify-center rounded-md bg-surface-muted px-3
+                                   text-caption font-semibold text-sub transition-colors duration-200
+                                   hover:bg-berry-light hover:text-berry-dark disabled:opacity-50"
                       >
                         이 장만 다시 만들기
                       </button>
@@ -818,7 +818,7 @@ async function readRender(
 
       {/* 캡션 편집 */}
       {phase === "ready" && captionDraft && (
-        <section aria-label="캡션" className="flex flex-col gap-4 rounded-lg border border-line bg-surface p-6">
+        <section aria-label="캡션" className="flex flex-col gap-4 rounded-lg bg-surface p-6 shadow-e1">
           {/*
             텍스트에는 메타데이터를 실을 수 없다 — 이미지처럼 파일 안에 숨겨둘 자리가
             없으므로 캡션은 화면에 대놓고 표시한다 (lib/ai-disclosure.ts).

@@ -25,8 +25,9 @@ export default function FeaturedContentCard({
   ctaLabel: string; // 제작하기 · 미리 제작하기
   ctaHref: string;
 }) {
+  /* DESIGN.md §4 — 홈 대표 카드는 단독으로 선다: 테두리 대신 깊이 (09-04) */
   return (
-    <section className="rounded-lg border border-line bg-surface p-4 md:p-6">
+    <section className="rounded-lg bg-surface p-4 shadow-e1 md:p-6">
       <StatusBadge status={card.status} />
 
       <div className="mt-3 flex items-start gap-4 md:mt-4">

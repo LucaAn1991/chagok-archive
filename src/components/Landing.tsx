@@ -67,7 +67,8 @@ export default function Landing() {
 
       {/* 1. 히어로 — 3초 메시지 (08-27 확정 카피) */}
       <section className="mx-auto w-full max-w-[960px] px-4 pb-16 pt-10 text-center md:pt-16">
-        <h1 className="break-keep text-h1 font-bold leading-snug text-ink md:text-display">
+        {/* DESIGN.md §3 — Display는 800 (09-04 개정) */}
+        <h1 className="break-keep text-h1 font-bold leading-snug text-ink md:text-display md:font-extrabold">
           생각을 정리하면,
           <br />
           콘텐츠가 차곡차곡
@@ -154,9 +155,10 @@ export default function Landing() {
       <section className="border-t border-line bg-surface">
         <div className="mx-auto w-full max-w-[960px] px-4 py-16">
           <h2 className="text-center text-h3 font-bold text-ink">차곡은 이렇게 일해요</h2>
-          <div className="mt-10 grid gap-6 md:grid-cols-3">
+          {/* DESIGN.md §4 — 단독으로 서는 카드는 테두리를 빼고 깊이로 세운다 (09-04) */}
+          <div className="stagger mt-10 grid gap-6 md:grid-cols-3">
             {STEPS.map((s) => (
-              <div key={s.step} className="rounded-xl border border-line bg-surface p-6">
+              <div key={s.step} className="card-raise rounded-xl bg-surface p-6">
                 <span className="flex size-8 items-center justify-center rounded-pill bg-berry-light text-body font-bold text-berry-dark">
                   {s.step}
                 </span>

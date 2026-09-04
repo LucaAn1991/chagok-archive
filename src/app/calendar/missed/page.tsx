@@ -435,11 +435,11 @@ function MissedView({ uid }: { uid: string }) {
           aria-modal="true"
           aria-labelledby="discard-title"
           onClick={() => setDiscardTarget(null)}
-          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
+          className="overlay-in fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="flex w-full max-w-[400px] flex-col gap-4 rounded-xl bg-surface p-6 shadow-lg"
+            className="modal-in flex w-full max-w-[400px] flex-col gap-4 rounded-xl bg-surface p-6 shadow-modal"
           >
             <h2 id="discard-title" className="text-title font-bold text-ink">
               이 카드를 버릴까요?

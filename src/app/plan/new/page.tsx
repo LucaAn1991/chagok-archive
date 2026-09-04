@@ -1156,7 +1156,7 @@ function NewPlanScreen() {
                     <button
                       type="button"
                       onClick={() => void runTurn(failed)}
-                      className="flex h-11 items-center justify-center rounded-md border-2 border-berry bg-surface px-5 text-body font-semibold text-berry transition-colors duration-200 hover:bg-berry-tint"
+                      className="flex h-11 items-center justify-center rounded-md border-2 border-berry bg-surface px-5 text-body font-semibold text-berry transition-colors duration-200 hover:bg-berry-tint hover:text-berry-dark"
                     >
                       다시 보내기
                     </button>
@@ -2101,7 +2101,7 @@ function TemplateModal({
       role="dialog"
       aria-modal="true"
       aria-label={`${CARD_STYLES[styleId].label} 템플릿 자세히 보기`}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
+      className="overlay-in fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
       onClick={onClose}
     >
       <div
@@ -2110,7 +2110,7 @@ function TemplateModal({
         data-focus-ring="none"
         /* 바깥을 누르면 닫히는데, 안쪽 클릭까지 올라가면 그림을 눌러도 닫힌다 */
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-full w-full max-w-[520px] flex-col overflow-y-auto rounded-lg bg-surface p-4 outline-none"
+        className="modal-in flex max-h-full w-full max-w-[520px] flex-col overflow-y-auto rounded-lg bg-surface p-4 outline-none shadow-modal"
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">

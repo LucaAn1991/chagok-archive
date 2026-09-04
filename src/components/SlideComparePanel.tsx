@@ -30,9 +30,9 @@ export default function SlideComparePanel({
       role="dialog"
       aria-modal="true"
       aria-label="다시 만든 그림 고르기"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
+      className="overlay-in fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
     >
-      <div className="flex max-h-full w-full max-w-[720px] flex-col overflow-y-auto rounded-lg bg-surface p-4">
+      <div className="modal-in flex max-h-full w-full max-w-[720px] flex-col overflow-y-auto rounded-lg bg-surface p-4 shadow-modal">
         <p className="text-body font-bold text-ink">어느 쪽으로 할까요?</p>
         <p className="mt-0.5 text-caption text-sub">둘을 비교해서 골라주세요. 고르기 전엔 아무것도 안 바뀌어요.</p>
 

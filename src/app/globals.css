@@ -29,7 +29,7 @@
   --berry-dark:    #914868;  /* hover · 연한 분홍 면 위의 글자 */
   --berry-light:   #F2DCE5;  /* 칩 배경 · 연한 강조 면 */
   --berry-tint:    #F0E6EA;  /* berry-light보다 더 연한 면 */
-  --purple:        #806FA6;  /* AI 포인트 · 보조 강조 */
+  --purple:        #7A68A0;  /* AI 포인트 · 보조 강조. 09-04 — 옛 #806FA6은 흰 배경 4.43:1(AA 미달) */
   --coral:         #F28A72;  /* 장식 전용 — 텍스트 금지 (대비 2.43:1) */
 
   /* Surface */
@@ -40,7 +40,7 @@
 
   /* Text */
   --ink:           #2D292B;
-  --sub:           #746F72;
+  --sub:           #6F6A6D;  /* 09-04 — surface-muted 위 4.44:1(AA 미달)이라 한 단계 어둡게 */
 
   /* 카드 상태 — 명도 계단식 (진할수록 완료에 가깝다). 08-31 crafted 제거로 4색 */
   --st-planned:    #C9B2E0;  /* 제작 대기 — 라벤더(빈 링으로 그려도 보이게). 09-03 */
@@ -52,7 +52,7 @@
   --warn:          #A6472F;
 
   /* 그라데이션 — 3곳에서만 (✦ · 생성 완료 · 기획 카드 테두리) — DESIGN.md §2 */
-  --grad: linear-gradient(135deg, #806FA6, #A85578, #F28A72);
+  --grad: linear-gradient(135deg, #7A68A0, #A85578, #F28A72);
 
   /* DESIGN.md §4 — Radius */
   --r-sm:   8px;
@@ -60,6 +60,20 @@
   --r-lg:  16px;
   --r-xl:  20px;
   --r-pill: 999px;
+
+  /*
+    DESIGN.md §4 Border · Shadow — 깊이 1단계 (09-04 개정)
+
+    옛 규칙은 「카드에 그림자를 쓰지 않는다」였다. 근거는 «썸네일이 쌓이면 그림자가
+    겹쳐 탁해진다»였는데, 그 근거는 **격자에서만 성립한다.**
+
+    ⚠️ **테두리와 그림자를 겹치지 않는다.**
+    격자로 반복되는 것(캘린더 칸·리스트 행)은 테두리, 단독으로 서는 카드는 --e-1.
+    둘 다 두르면 09-03 이전의 «흰 상자 한 가지»로 되돌아간다.
+  */
+  --e-1:     0 1px 2px rgba(45, 41, 43, 0.04), 0 2px 8px rgba(45, 41, 43, 0.04);
+  --e-2:     0 4px 16px rgba(45, 41, 43, 0.08);
+  --e-modal: 0 12px 40px rgba(45, 41, 43, 0.14);
 
   /*
     다크 모드를 정의하지 않았다(DESIGN.md §18).
@@ -102,25 +116,41 @@
   --radius-xl:   var(--r-xl);
   --radius-pill: var(--r-pill);
 
-  /* DESIGN.md §3 — 타이포 스케일 */
-  --text-display:               2.25rem;  /* 36 */
+  /* DESIGN.md §4 — 깊이. `shadow-e1` · `shadow-e2` · `shadow-modal`로 나온다 */
+  --shadow-e1:    var(--e-1);
+  --shadow-e2:    var(--e-2);
+  --shadow-modal: var(--e-modal);
+
+  /*
+    DESIGN.md §3 — 타이포 스케일 `[개정 — 09-04 기준선 한 단계 상향]`
+
+    옛 스케일은 Body 14 / Caption 12였고, 실제 화면에서 타이포 사용의 89%가
+    14px 이하에 몰려 있었다(512곳 중 456곳). Label만 12를 유지하되 굵기를
+    700으로 올려 작아도 읽히게 한다 — DESIGN.md §3.
+  */
+  --text-display:               2.5rem;   /* 40 */
   --text-display--line-height:  1.25;
-  --text-h1:                    1.875rem; /* 30 */
+  --text-h1:                    2rem;     /* 32 */
   --text-h1--line-height:       1.30;
-  --text-h2:                    1.5rem;   /* 24 */
+  --text-h2:                    1.625rem; /* 26 */
   --text-h2--line-height:       1.35;
-  --text-h3:                    1.25rem;  /* 20 */
+  --text-h3:                    1.3125rem;/* 21 */
   --text-h3--line-height:       1.40;
   --text-title:                 1.125rem; /* 18 */
   --text-title--line-height:    1.45;
-  --text-body-l:                1rem;     /* 16 */
+  --text-body-l:                1.0625rem;/* 17 */
   --text-body-l--line-height:   1.60;
-  --text-body:                  0.875rem; /* 14 — 본문 최소치 */
+  --text-body:                  0.9375rem;/* 15 — 본문 최소치 */
   --text-body--line-height:     1.60;
-  --text-caption:               0.75rem;  /* 12 */
+  --text-caption:               0.8125rem;/* 13 */
   --text-caption--line-height:  1.50;
-  --text-label:                 0.75rem;  /* 12 */
+  --text-label:                 0.75rem;  /* 12 — 굵기 700으로 받친다 */
   --text-label--line-height:    1.40;
+  /*
+    Label만 크기를 안 올렸다(12 유지). 대신 굵기를 토큰에 얹어서, 굵기를 따로
+    안 적은 자리도 700으로 나오게 한다 — DESIGN.md §3 「Label 12 / 700」.
+  */
+  --text-label--font-weight:    700;
 
   /* 폴백 스택은 layout.tsx의 localFont가 이 변수 안에 함께 넣어준다 */
   --font-sans: var(--font-nanum-square-neo), -apple-system,
@@ -149,7 +179,7 @@ body {
     본문이 지나치게 얇게 나오므로 여기서 400을 못박는다.
   */
   font-weight: 400;
-  /* DESIGN.md §3 — 본문 기본값 Body 14 / 1.60 */
+  /* DESIGN.md §3 — 본문 기본값 Body 15 / 1.60 (09-04 개정) */
   font-size: var(--text-body);
   line-height: 1.6;
 }
@@ -233,4 +263,85 @@ select:focus-visible:not([data-focus-ring="none"]) {
 }
 @media (prefers-reduced-motion: reduce) {
   .loader-run, .loader-track { animation: none; }
+}
+
+
+/* ============================================================
+   DESIGN.md §14 모션 — 09-04 개정으로 허용된 3종
+
+   전부 «정보 변화를 이해시키는» 용도다. 브랜드 표현이 아니다.
+   금지 목록(bounce · 과장된 scale · 긴 로딩 애니메이션)은 그대로다.
+
+   ⚠️ prefers-reduced-motion에서는 **끈다.** 느리게 하는 것이 아니라
+   최종 상태만 그린다 — 파일 맨 아래 미디어 쿼리가 셋을 한꺼번에 막는다.
+   ============================================================ */
+
+/*
+  ① 카드 hover — translateY(-1px) + 깊이 --e-1 → --e-2 · 150ms
+
+  §4의 「테두리와 그림자를 겹치지 않는다」를 따르는 **단독 카드에만** 쓴다.
+  캘린더 칸처럼 격자로 반복되는 것에는 붙이지 않는다 — 칸마다 들썩인다.
+*/
+.card-raise {
+  box-shadow: var(--e-1);
+  transition:
+    box-shadow 150ms ease-out,
+    transform 150ms ease-out;
+}
+.card-raise:hover {
+  box-shadow: var(--e-2);
+  transform: translateY(-1px);
+}
+
+/*
+  ② 리스트 · 그리드 진입 stagger — 항목당 30ms · 최대 8개
+
+  9번째부터는 지연을 주지 않는다. 20장짜리 목록에 30ms씩 쌓으면
+  마지막 항목이 600ms 뒤에 나타나 «느린 화면»이 된다.
+  부모에 .stagger를 걸고 자식이 자동으로 순번을 받는다.
+*/
+@keyframes stagger-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+.stagger > * {
+  animation: stagger-in 200ms ease-out both;
+}
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 30ms; }
+.stagger > *:nth-child(3) { animation-delay: 60ms; }
+.stagger > *:nth-child(4) { animation-delay: 90ms; }
+.stagger > *:nth-child(5) { animation-delay: 120ms; }
+.stagger > *:nth-child(6) { animation-delay: 150ms; }
+.stagger > *:nth-child(7) { animation-delay: 180ms; }
+.stagger > *:nth-child(n + 8) { animation-delay: 210ms; }
+
+/*
+  ③ 모달 진입 — fade + scale(0.98 → 1) · 200ms
+
+  뒤 배경(overlay)은 fade만 한다. 배경까지 커지면 화면이 출렁인다.
+*/
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.modal-in   { animation: modal-in 200ms ease-out both; }
+.overlay-in { animation: overlay-in 200ms ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .card-raise {
+    transition: box-shadow 150ms ease-out;
+  }
+  .card-raise:hover {
+    transform: none;
+  }
+  .stagger > *,
+  .modal-in,
+  .overlay-in {
+    animation: none;
+  }
 }

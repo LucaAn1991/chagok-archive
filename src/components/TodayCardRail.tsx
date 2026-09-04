@@ -31,7 +31,7 @@ export default function TodayCardRail({ cards }: { cards: Card[] }) {
       {cards.map((card) => (
           <article
             key={card.id}
-            className="flex w-[236px] shrink-0 snap-start flex-col overflow-hidden rounded-lg border border-line bg-surface sm:w-[268px]"
+            className="card-raise flex w-[236px] shrink-0 snap-start flex-col overflow-hidden rounded-lg bg-surface sm:w-[268px]"
           >
             {/* 완성된 첫 장 > 올린 사진 > 스톡 > 안내 (CardThumb) */}
             <CardThumb card={card} className="aspect-[4/3] w-full" />

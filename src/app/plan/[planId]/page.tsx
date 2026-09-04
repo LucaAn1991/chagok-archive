@@ -96,7 +96,7 @@ export default function PlanDetailPage() {
               <p className="text-body-l text-ink">기획을 찾을 수 없어요.</p>
               <Link
                 href="/plan/history"
-                className="mt-6 flex h-11 items-center justify-center rounded-md border-2 border-berry bg-surface px-6 text-body font-semibold text-berry transition-colors duration-200 hover:bg-berry-tint"
+                className="mt-6 flex h-11 items-center justify-center rounded-md border-2 border-berry bg-surface px-6 text-body font-semibold text-berry transition-colors duration-200 hover:bg-berry-tint hover:text-berry-dark"
               >
                 지난 기획 목록으로
               </Link>
@@ -112,7 +112,7 @@ export default function PlanDetailPage() {
                   setState({ phase: "loading" });
                   setReloadKey((k) => k + 1);
                 }}
-                className="mt-6 flex h-11 items-center justify-center rounded-md border-2 border-berry bg-surface px-6 text-body font-semibold text-berry transition-colors duration-200 hover:bg-berry-tint"
+                className="mt-6 flex h-11 items-center justify-center rounded-md border-2 border-berry bg-surface px-6 text-body font-semibold text-berry transition-colors duration-200 hover:bg-berry-tint hover:text-berry-dark"
               >
                 다시 시도
               </button>

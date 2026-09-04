@@ -67,7 +67,7 @@ export default function PlanDraftList({
 }) {
   if (loading) {
     return (
-      <div className="rounded-lg border border-line bg-surface p-4">
+      <div className="rounded-lg bg-surface p-4 shadow-e1">
         <h2 className="text-body font-bold text-ink">기획안을 만들고 있어요</h2>
         <p className="mt-1 text-caption text-sub">
           고른 대상마다 하나씩, 어떻게 말을 걸지 정리하는 중이에요.
@@ -84,12 +84,12 @@ export default function PlanDraftList({
 
   if (error) {
     return (
-      <div className="rounded-lg border border-line bg-surface p-4">
+      <div className="rounded-lg bg-surface p-4 shadow-e1">
         <p className="text-body text-ink">{error}</p>
         <button
           type="button"
           onClick={onRetryLoad}
-          className="mt-3 flex h-11 items-center justify-center rounded-md border-2 border-berry bg-surface px-5 text-body font-semibold text-berry transition-colors duration-200 hover:bg-berry-tint"
+          className="mt-3 flex h-11 items-center justify-center rounded-md border-2 border-berry bg-surface px-5 text-body font-semibold text-berry transition-colors duration-200 hover:bg-berry-tint hover:text-berry-dark"
         >
           다시 만들기
         </button>
@@ -126,13 +126,13 @@ export default function PlanDraftList({
   const chosenCount = drafts.filter((d) => d.chosen).length;
 
   return (
-    <div className="rounded-lg border border-line bg-surface p-4">
+    <div className="rounded-lg bg-surface p-4 shadow-e1">
       <h2 className="text-body font-bold text-ink">이렇게 만들어 볼게요</h2>
       <p className="mt-1 text-caption text-sub">
         대상마다 하나씩 준비했어요. 만들 것만 남기고, 더 손보고 싶으면 「다듬기」를 눌러주세요.
       </p>
 
-      <ul className="mt-4 flex flex-col gap-2">
+      <ul className="stagger mt-4 flex flex-col gap-2">
         {drafts.map((d, i) => (
           <li key={`${d.audience}-${i}`}>
             <DraftCard
@@ -305,7 +305,7 @@ function RefinePanel({
   }
 
   return (
-    <div className="rounded-lg border border-line bg-surface p-4">
+    <div className="rounded-lg bg-surface p-4 shadow-e1">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-label font-semibold text-sub">{draft.audience}</p>
