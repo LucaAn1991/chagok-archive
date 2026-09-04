@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImagePlus, X } from "lucide-react";
 
 /**
@@ -12,6 +12,12 @@ import { ImagePlus, X } from "lucide-react";
  *   ② 「이렇게 바꿔줘」 자유 지시 — gpt-image-2가 어길 수 있어 **기대치를 낮춰** 둔다
  *
  * 자리 수는 시안이 정하므로 **줄을 늘리거나 지우지 못한다.** 각 줄의 내용만 고친다.
+ *
+ * **모달로 띄운다** (09-04). 예전엔 카드 아래에 펼쳐지는 패널이었는데, 그 줄이
+ * 좌우 스크롤(`overflow-x-auto`)이라 폭이 288px로 묶이고 옆 카드에 가려졌다.
+ * 고칠 줄이 네댓이면 한 화면에 안 들어와 무엇을 고치는 중인지 놓치기 쉬웠다.
+ * 「그림 고르기」(`SlideComparePanel`)와 같은 껍데기를 쓴다 — 이어지는 두 걸음이라
+ * 생김새가 같아야 한다.
  */
 export default function SlideRemakePanel({
   lines,
@@ -36,19 +42,48 @@ export default function SlideRemakePanel({
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  /* Esc로 닫는다 — 만드는 중(busy)에는 막는다. 20초짜리 작업을 실수로 놓치지 않게 */
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !busy) onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [busy, onClose]);
+
   return (
-    <div className="flex w-72 flex-col gap-3 rounded-lg border border-line bg-surface p-3">
-      <div className="flex items-center justify-between">
-        <p className="text-caption font-semibold text-ink">이 장 문구</p>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="remake-title"
+      /* 바깥을 눌러도 닫힌다 — 만드는 중에는 안 닫는다 */
+      onClick={() => { if (!busy) onClose(); }}
+      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/60 p-4 sm:items-center"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-full w-full max-w-[440px] flex-col gap-3 overflow-y-auto rounded-lg bg-surface p-5"
+      >
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h2 id="remake-title" className="text-body font-bold text-ink">이 장만 다시 만들기</h2>
+          <p className="mt-0.5 text-caption text-sub">
+            문구를 고쳐 다시 구워요. 고른 뒤에 바꿀지 정할 수 있어요.
+          </p>
+        </div>
         <button
           type="button"
           onClick={onClose}
           disabled={busy}
-          className="text-caption text-sub transition-colors duration-200 hover:text-ink disabled:opacity-50"
+          aria-label="닫기"
+          className="flex size-9 shrink-0 items-center justify-center rounded-md text-sub
+                     transition-colors duration-200 hover:bg-surface-muted hover:text-ink disabled:opacity-50"
         >
-          닫기
+          <X size={16} aria-hidden />
         </button>
       </div>
+
+      <p className="text-caption font-semibold text-ink">이 장 문구</p>
 
       {/* 줄별 입력 — 줄 수는 시안이 정하므로 고정. 내용만 고친다 */}
       <div className="flex flex-col gap-1.5">
@@ -156,6 +191,7 @@ export default function SlideRemakePanel({
       >
         {busy ? "만드는 중··· (20초쯤 걸려요)" : "이 문구로 다시 만들기"}
       </button>
+      </div>
     </div>
   );
 }

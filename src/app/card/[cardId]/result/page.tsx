@@ -609,6 +609,12 @@ async function readRender(
   const inputClass =
     "w-full rounded-md border border-line bg-surface px-3 py-2 text-body text-ink";
 
+  /* 지금 고치고 있는 장 (09-04) — 편집이 모달로 나오면서 map 바깥에서도 필요해졌다 */
+  const editSlide =
+    editOrder !== null && card
+      ? (card.slides.find((sl) => sl.order === editOrder) ?? null)
+      : null;
+
   return (
     <AppShell width={960}>
       <PageHeader fallbackHref={`/card/${cardId}`} backLabel="돌아가기" />
@@ -714,35 +720,23 @@ async function readRender(
                       className="aspect-square w-72 rounded-lg border border-line bg-surface object-cover"
                     />
 
-                    {canRemake &&
-                      (editOrder === slide.order ? (
-                        <SlideRemakePanel
-                          lines={slide.sheetLines ?? []}
-                          busy={regenSlide === slide.order}
-                          /* 이 장에 사진틀이 있을 때만 사진 바꾸기를 연다 (09-03) */
-                          allowPhoto={
-                            (card?.styleId
-                              ? (TEMPLATE_SHEETS[card.styleId]?.[slide.sheetIndex ?? -1]?.photoSlots ?? 0)
-                              : 0) > 0
-                          }
-                          onUploadPhoto={uploadSlidePhoto}
-                          onApply={(lines, request, photoUrl) =>
-                            void regenerateSlide(slide.order, lines, request, photoUrl)
-                          }
-                          onClose={() => setEditOrder(null)}
-                        />
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setEditOrder(slide.order)}
-                          disabled={regenSlide !== null}
-                          className="flex h-9 w-72 items-center justify-center rounded-md border border-dashed
-                                     border-line px-3 text-caption text-sub transition-colors duration-200
-                                     hover:border-berry hover:text-ink disabled:opacity-50"
-                        >
-                          이 장만 다시 만들기
-                        </button>
-                      ))}
+                    {/*
+                      **버튼만 둔다** (09-04). 예전엔 이 자리에서 편집 패널이 펼쳐졌는데,
+                      이 줄이 좌우 스크롤이라 폭이 카드 하나(288px)로 묶이고 옆 카드에
+                      가렸다. 편집은 아래 모달에서 한다.
+                    */}
+                    {canRemake && (
+                      <button
+                        type="button"
+                        onClick={() => setEditOrder(slide.order)}
+                        disabled={regenSlide !== null}
+                        className="flex h-9 w-72 items-center justify-center rounded-md border border-dashed
+                                   border-line px-3 text-caption text-sub transition-colors duration-200
+                                   hover:border-berry hover:text-ink disabled:opacity-50"
+                      >
+                        이 장만 다시 만들기
+                      </button>
+                    )}
                   </div>
                 ) : slideUrls.length > i ? (
                   /*
@@ -942,6 +936,28 @@ async function readRender(
       {/* 제작 대기 — 달리는 캐릭터 오버레이 (09-03) */}
       {phase === "generating" && (
         <GeneratingOverlay total={build.total} done={build.done} elapsed={elapsed} />
+      )}
+
+      {/*
+        이 장만 다시 만들기 (09-04) — 카드 아래 패널에서 모달로 옮겼다.
+        `preview`(그림 고르기)와 이어지는 두 걸음이라 같은 자리에 둔다.
+      */}
+      {editSlide && (
+        <SlideRemakePanel
+          lines={editSlide.sheetLines ?? []}
+          busy={regenSlide === editSlide.order}
+          /* 이 장에 사진틀이 있을 때만 사진 바꾸기를 연다 (09-03) */
+          allowPhoto={
+            (card?.styleId
+              ? (TEMPLATE_SHEETS[card.styleId]?.[editSlide.sheetIndex ?? -1]?.photoSlots ?? 0)
+              : 0) > 0
+          }
+          onUploadPhoto={uploadSlidePhoto}
+          onApply={(lines, request, photoUrl) =>
+            void regenerateSlide(editSlide.order, lines, request, photoUrl)
+          }
+          onClose={() => setEditOrder(null)}
+        />
       )}
 
       {/*
