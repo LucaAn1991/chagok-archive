@@ -37,8 +37,26 @@ const EDIT_URL = "https://gptproto.com/api/v3/openai/gpt-image-2/image-edit";
 const QUALITY = process.env.IMAGE_QUALITY ?? "low";
 
 /** 1~3초를 권장한다(문서). 더 조이면 429가 난다 */
-const POLL_MS = 2500;
+const POLL_BASE_MS = 2500;
 const TIMEOUT_MS = 6 * 60 * 1000;
+
+/**
+ * 지금 이 프로세스가 굽고 있는 장 수 (09-04).
+ *
+ * **폴링도 요청으로 센다.** 7장을 동시에 구우면 2.5초마다 7번 물어보니 분당 168회다 —
+ * 제출(장당 1회)보다 이쪽이 분당 한도를 훨씬 크게 밀어올린다. 실측(09-04): 한 판에서
+ * 5장이 **같은 밀리초에** 튕겼고 그중 하나가 429였다.
+ *
+ * 그래서 동시에 굽는 장이 많을수록 간격을 벌린다. 혼자면 2.5초 그대로다.
+ */
+let inFlight = 0;
+
+function pollInterval(): number {
+  return POLL_BASE_MS * Math.max(1, Math.ceil(inFlight / 2));
+}
+
+/** 429는 «잠시 뒤면 되는» 실패다 — 바로 포기하지 않는다 (09-04) */
+const MAX_SUBMIT_TRIES = 3;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -82,23 +100,44 @@ export async function editImage(input: {
   const key = process.env.GPTPROTO_API_KEY;
   if (!key) return { ok: false, reason: "GPTPROTO_API_KEY가 없습니다." };
 
-  let submit: Response;
+  inFlight++;
   try {
-    submit = await fetch(EDIT_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        images: [input.sourceUrl, ...(input.photoUrls ?? [])].slice(0, 16),
-        prompt: input.prompt,
-        n: 1,
-        quality: QUALITY,
-        size: "1024x1024",
-        response_format: "url",
-      }),
-      signal: input.signal,
-    });
-  } catch (e) {
-    return { ok: false, reason: `접수 실패: ${e instanceof Error ? e.message : e}` };
+    return await run();
+  } finally {
+    inFlight--;
+  }
+
+  async function run(): Promise<EditResult> {
+  let submit: Response;
+  /*
+    429(분당 한도)는 기다리면 풀리는 실패다 — 한 번에 포기하면 그 장이 통째로
+    밋밋한 렌더러로 떨어진다. 물러났다가 다시 낸다 (09-04).
+    지터를 섞는 이유 — 같이 튕긴 장들이 **동시에** 다시 몰려오면 또 429다.
+  */
+  for (let attempt = 1; ; attempt++) {
+    try {
+      submit = await fetch(EDIT_URL, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          images: [input.sourceUrl, ...(input.photoUrls ?? [])].slice(0, 16),
+          prompt: input.prompt,
+          n: 1,
+          quality: QUALITY,
+          size: "1024x1024",
+          response_format: "url",
+        }),
+        signal: input.signal,
+      });
+    } catch (e) {
+      return { ok: false, reason: `접수 실패: ${e instanceof Error ? e.message : e}` };
+    }
+
+    if (submit.status !== 429 || attempt >= MAX_SUBMIT_TRIES) break;
+    await submit.text().catch(() => ""); // 연결을 비워준다
+    const wait = 5000 * attempt + Math.random() * 3000;
+    console.warn(`[imagegen] 429 — ${Math.round(wait / 1000)}초 뒤 다시 냅니다 (${attempt}/${MAX_SUBMIT_TRIES - 1})`);
+    await sleep(wait);
   }
 
   if (!submit.ok) {
@@ -114,7 +153,7 @@ export async function editImage(input: {
   const started = Date.now();
   for (;;) {
     if (Date.now() - started > TIMEOUT_MS) return { ok: false, reason: "시간 초과" };
-    await sleep(POLL_MS);
+    await sleep(pollInterval());
 
     let body: Envelope | null;
     try {
@@ -122,6 +161,11 @@ export async function editImage(input: {
         headers: { Authorization: `Bearer ${key}` },
         signal: input.signal,
       });
+      /*
+        조회가 429면 **포기하지 않는다** (09-04) — 그림은 서버에서 잘 만들어지고 있는데
+        우리가 너무 자주 물어본 것뿐이다. 여기서 반환하면 멀쩡한 장을 버리게 된다.
+      */
+      if (res.status === 429) continue;
       if (!res.ok) return { ok: false, reason: `조회 실패 HTTP ${res.status}` };
       body = (await res.json()) as Envelope;
     } catch (e) {
@@ -144,5 +188,6 @@ export async function editImage(input: {
     } catch (e) {
       return { ok: false, reason: `내려받기 실패: ${e instanceof Error ? e.message : e}` };
     }
+  }
   }
 }

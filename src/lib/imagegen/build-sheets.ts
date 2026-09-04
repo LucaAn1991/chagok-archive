@@ -4,6 +4,21 @@ import { planSheetCopy } from "../ai/sheet-copy";
 import { planPhotoPlacement } from "../ai/photo-plan";
 import { TEMPLATE_SHEETS } from "../render/template-sheets";
 import { generateSheet, isImageGenConfigured } from "./index";
+
+/** 장마다 접수를 늦추는 간격 — 분당 요청 한도를 피한다 (09-04) */
+const STAGGER_MS = Number(process.env.IMAGE_STAGGER_MS ?? 1500);
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * 다시 해보면 될 실패인가 (09-04).
+ * 한도(429)·일시 거절은 몰려서 튕긴 것이라 잠깐 뒤엔 대개 통과한다.
+ * 프롬프트 자체가 문제라면 다시 해도 같으므로 굳이 2분을 더 쓰지 않는다.
+ */
+function isTransient(reason: string | undefined): boolean {
+  if (!reason) return false;
+  return /429|rate limit|rpm|safety system|timeout|시간 초과|접수 실패|조회 실패/i.test(reason);
+}
 import { storeSlideImage } from "./store";
 import type { LayoutId, Slide, StyleId } from "../../types/card";
 import type { ToneKey } from "../../types/user";
@@ -193,10 +208,16 @@ export async function buildFromTemplate(input: BuildInput): Promise<BuildResult>
 
     `generateSheets`를 쓰지 않고 여기서 직접 펼치는 이유 — 한 장이 끝날 때마다
     알려야 하는데, 묶어서 기다리면 전부 끝난 뒤에야 한 번에 알게 된다.
+
+    **다만 «같은 순간에» 던지지는 않는다** (09-04). 6~7장을 한꺼번에 접수하면
+    분당 요청 한도에 걸려 묶음째 튕긴다 — 실측에서 5장이 같은 밀리초에 실패했고
+    그중 하나가 429였다. 장마다 조금씩 늦춰 접수하면 동시성은 그대로 두면서
+    한도만 피한다. 총 시간은 `(장수-1) × STAGGER_MS`만 늘어난다 (6장이면 7.5초).
   */
   const results = await Promise.all(
-    plan.sheets.map((s, order) =>
-      generateSheet({
+    plan.sheets.map(async (s, order) => {
+      await sleep(order * STAGGER_MS);
+      return generateSheet({
         styleId: input.styleId,
         index: s.index,
         lines: s.lines,
@@ -214,9 +235,45 @@ export async function buildFromTemplate(input: BuildInput): Promise<BuildResult>
       }).then((r) => {
         input.onProgress?.({ type: "sheet", order, ok: r.ok });
         return r;
-      }),
-    ),
+      });
+    }),
   );
+
+  /*
+    **한 번 더 해본다** (09-04). 위에서 실패한 장 중 «한도·일시 거절»로 보이는 것은
+    그때 몰려서 튕긴 것이라, 잠깐 뒤에는 대개 된다. 여기서 회수하지 않으면 그 장은
+    밋밋한 렌더러로 굳는다.
+
+    되돌릴 수 있는 실패만, 최대 3장만, 한 번만 — 실패한 장이 많을 때 재시도로
+    또 2분을 태우면 사용자가 기다리는 시간이 배가 된다.
+  */
+  const retryable = results
+    .map((r, order) => ({ r, order }))
+    .filter(({ r }) => !r.ok && isTransient(r.reason))
+    .slice(0, 3);
+
+  if (retryable.length > 0) {
+    console.warn(`[buildFromTemplate] ${retryable.length}장 재시도`);
+    await sleep(4000);
+    await Promise.all(
+      retryable.map(async ({ order }, i) => {
+        await sleep(i * STAGGER_MS);
+        const again = await generateSheet({
+          styleId: input.styleId,
+          index: plan.sheets[order].index,
+          lines: plan.sheets[order].lines,
+          photos: photosFor(order),
+          photoDirection: plan.photoDirection || undefined,
+          accent: input.accent,
+          verify: false,
+        });
+        if (again.ok) {
+          results[order] = again;
+          input.onProgress?.({ type: "sheet", order, ok: true });
+        }
+      }),
+    );
+  }
 
   const slides: Slide[] = [];
   let generated = 0;
