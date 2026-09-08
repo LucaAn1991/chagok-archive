@@ -37,7 +37,7 @@ export default function AppShell({
     <div className="flex min-w-0 flex-1 flex-col">
       <AppTopNav />
 
-      <main
+      <main id="main" tabIndex={-1}
         className={`mx-auto w-full flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8 ${MAX_WIDTH[width]}`}
       >
         {children}

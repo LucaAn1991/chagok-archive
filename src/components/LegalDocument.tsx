@@ -25,7 +25,7 @@ export default function LegalDocument({ docId, title }: { docId: LegalDocId; tit
   );
 
   return (
-    <main className="mx-auto w-full max-w-[720px] flex-1 px-4 pb-16 pt-3 md:px-6 md:pt-4">
+    <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[720px] flex-1 px-4 pb-16 pt-3 md:px-6 md:pt-4">
       {/* 공통 헤더 재사용 — [←] + 제목. 새 탭으로 열려 기록이 없으면 화살표는 안 그려진다 */}
       <PageHeader title={title} />
 

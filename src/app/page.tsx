@@ -21,7 +21,6 @@ import AppTopNav from "@/components/AppTopNav";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import FeaturedContentCard from "@/components/FeaturedContentCard";
 import TodayCardRail from "@/components/TodayCardRail";
-import PageHeader from "@/components/PageHeader";
 import { formatMonthDayWeekday } from "@/lib/format";
 import { greetingFor, kstToday } from "@/lib/greetings";
 import { isConsentCurrent } from "@/lib/legal/consent-client";
@@ -303,7 +302,7 @@ function Home({ uid }: { uid: string }) {
           모든 폭에서 같은 것을 그리게 되면서 두 줄이 겹쳐 지웠다.
         */}
         {/* 홈 최대 폭 960 (DESIGN.md §4) · 하단 탭에 가리지 않게 모바일만 여유 패딩 */}
-        <main className="mx-auto w-full max-w-[960px] flex-1 px-4 py-3 pb-20 md:p-6 md:pb-8 min-[1200px]:p-8">
+        <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[960px] flex-1 px-4 py-3 pb-20 md:p-6 md:pb-8 min-[1200px]:p-8">
           {state.phase === "loading" && <HomeSkeleton />}
           {state.phase === "error" && (
             <HomeError
@@ -323,6 +322,12 @@ function Home({ uid }: { uid: string }) {
     </div>
   );
 }
+
+/**
+ * 오늘 카드가 여러 장일 때, 첫 장 아래 가로 줄에 곁들이는 최대 장수 (DESIGN §9).
+ * 첫 장까지 합쳐 5장. 넘치는 것은 아래 「이번 주 콘텐츠」 목록이 받는다.
+ */
+const TODAY_RAIL_MAX = 4;
 
 /** 상대일 표기 — 내일 / 모레 / «9월 5일에» (요일 없이) */
 function relativeDayLabel(dateKey: string, todayKey: string): string {
@@ -390,11 +395,13 @@ function HomeReady({
   return (
     <div className="flex flex-col gap-4 md:gap-8">
       {/*
-        홈은 최상위 화면이라 뒤로가기를 그리지 않는다 (09-04).
-        `isRoot`가 바로 이 상황을 위해 있었는데(09-02 신설) 홈에만 안 붙어 있었다 —
-        로그인을 거쳐 들어오면 좌상단에 화살표가 생기고, 눌러봐야 로그인 화면으로 나갔다.
+        홈은 최상위 화면이라 뒤로가기도 화면 제목도 없다 (09-04).
+
+        **09-08 — `<PageHeader isRoot />`를 지웠다.** `isRoot`면 화살표가 없고
+        `title`·`action`도 안 넘기니 `PageHeader`는 `return null`이었다 —
+        아무것도 그리지 않는 컴포넌트를 마운트만 하고 있었다.
+        `isRoot`는 다른 화면에서 계속 쓰이므로 `PageHeader` 쪽은 그대로 둔다.
       */}
-      <PageHeader isRoot />
       {/*
         인사 한 줄 + 오늘 날짜 — 이모지 없음, KST 고정 9구간 (09-01, lib/greetings.ts)
 
@@ -404,7 +411,7 @@ function HomeReady({
         인사는 그 하나가 아니다. 한 줄 메타로 내리고 자리를 아래에 넘긴다.
       */}
       <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <h1 className="text-body font-semibold text-sub">{greetingFor(now)}</h1>
+        <p className="text-body font-semibold text-sub">{greetingFor(now)}</p>
         <span className="text-caption text-sub">{formatMonthDayWeekday(kstToday(now))}</span>
       </header>
 
@@ -417,7 +424,7 @@ function HomeReady({
 
       {situation === "A" && todayCard && (
         <section>
-          <p className="break-keep text-h2 font-bold leading-snug text-ink">
+          <h1 className="break-keep text-h2 font-bold leading-snug text-ink">
             {/*
               여러 장이면 개수를 말한다 (09-03). 「콘텐츠에요!」만 있으면 큰 카드가
               하나뿐이라 «오늘 할 일이 하나»로 읽힌다 — 실제로 그렇게 읽혔다.
@@ -425,16 +432,27 @@ function HomeReady({
             {todayCards.length > 1
               ? `오늘 올릴 콘텐츠가 ${todayCards.length}개 있어요!`
               : "오늘 올릴 콘텐츠에요! 바로 제작해볼까요?"}
-          </p>
-          <div className="mt-3 md:mt-4">
-            {todayCards.length > 1 ? (
-              <TodayCardRail cards={todayCards} />
-            ) : (
-              <FeaturedContentCard
-                card={todayCard}
-                ctaLabel="제작하기"
-                ctaHref={`/card/${todayCard.id}/result`}
-              />
+          </h1>
+          {/*
+            **개수는 문장이 말하고, 무게는 첫 장이 가진다** (09-08, DESIGN §9 개정).
+
+            09-03엔 여러 장이면 가로 줄에 «동등한 카드»를 늘어놓았다. 오늘 7장이면
+            같은 크기·같은 색의 [제작하기]가 7개 서서, §0의 「주 버튼과 보조 버튼을
+            같은 크기로 두지 않는다」·§6의 「한 화면에 primary는 1개」·§9의
+            「하나를 정해서 보여준다」에 한꺼번에 걸렸다.
+
+            09-03이 실제로 고친 것은 **헤드라인**이었다(개수를 말해준다). 그 문장은
+            그대로 두고 무게만 나눈다 — 첫 장은 Featured + primary, 나머지는 곁들임.
+          */}
+          <div className="mt-3 flex flex-col gap-3 md:mt-4">
+            <FeaturedContentCard
+              card={todayCard}
+              ctaLabel="제작하기"
+              ctaHref={`/card/${todayCard.id}/result`}
+            />
+            {/* 곁들임은 최대 4장 — 첫 장까지 5장. 넘치는 것은 아래 목록이 받는다 */}
+            {todayCards.length > 1 && (
+              <TodayCardRail cards={todayCards.slice(1, 1 + TODAY_RAIL_MAX)} />
             )}
           </div>
         </section>
@@ -442,9 +460,9 @@ function HomeReady({
 
       {situation === "B" && (
         <section>
-          <p className="break-keep text-h2 font-bold leading-snug text-ink">
+          <h1 className="break-keep text-h2 font-bold leading-snug text-ink">
             오늘 발행일이에요! 오늘은 어떤 콘텐츠를 올리고 싶으세요?
-          </p>
+          </h1>
           <div className="mt-4">
             <OneLineIdeaInput />
           </div>
@@ -453,9 +471,9 @@ function HomeReady({
 
       {situation === "C" && nextCard && (
         <section>
-          <p className={"break-keep text-h2 font-bold leading-snug text-ink"}>
+          <h1 className="break-keep text-h2 font-bold leading-snug text-ink">
             {relativeDayLabel(nextCard.scheduledDate, todayKey)} 올릴 콘텐츠에요!
-          </p>
+          </h1>
           <div className="mt-3 md:mt-4">
             <FeaturedContentCard
               card={nextCard}
@@ -469,9 +487,9 @@ function HomeReady({
       {situation === "E" && (
         /* 날짜 없는 카드가 그날의 주 행동 (§6) — 하단 C 줄은 이때 중앙으로 올라와 숨긴다 */
         <section>
-          <p className="break-keep text-h2 font-bold leading-snug text-ink">
+          <h1 className="break-keep text-h2 font-bold leading-snug text-ink">
             언젠가 올릴 콘텐츠가 {somedayCards.length}개 있어요. 날짜를 정해볼까요?
-          </p>
+          </h1>
           <div className="mt-4">
             <AssignDatesControl
               cards={somedayCards}
@@ -486,7 +504,7 @@ function HomeReady({
 
       {situation === "D" && (
         <section>
-          <p className="break-keep text-h2 font-bold leading-snug text-ink">요즘 올리고 싶은 거 있으세요? 여러 개여도 좋아요</p>
+          <h1 className="break-keep text-h2 font-bold leading-snug text-ink">요즘 올리고 싶은 거 있으세요? 여러 개여도 좋아요</h1>
           <div className="mt-4">
             <IdeaInput />
           </div>
@@ -518,8 +536,9 @@ function HomeReady({
         weekCards={weekCards}
         futureCards={futureCards}
         excludeIds={
+          /* 위에 실제로 보여준 것만 뺀다 — 상한(5장)을 넘긴 카드는 이 목록이 받는다 */
           situation === "A"
-            ? todayCards.map((c) => c.id)
+            ? todayCards.slice(0, 1 + TODAY_RAIL_MAX).map((c) => c.id)
             : nextCard
               ? [nextCard.id]
               : []
@@ -624,7 +643,7 @@ function CardRow({ card }: { card: Card }) {
     */
     <Link
       href={`/card/${card.id}`}
-      className="group -mx-2 flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5
+      className="group -mx-2 flex min-h-11 min-w-0 items-center gap-2 rounded-md px-2 py-1.5
                  transition-colors duration-200 hover:bg-berry-light"
     >
       <span
@@ -651,7 +670,7 @@ function DateGroupedList({ cards, todayKey }: { cards: DatedCard[]; todayKey: st
         <div key={group.dateKey} className="flex gap-3">
           <span
             className={[
-              "w-16 shrink-0 pt-1 text-caption",
+              "flex min-h-11 w-16 shrink-0 items-center self-start text-caption",
               group.dateKey === todayKey ? "font-semibold text-berry-dark" : "text-sub",
             ].join(" ")}
           >
@@ -727,7 +746,7 @@ function UpcomingSection({
 
   return (
     <section className="border-y border-line py-2.5">
-      <div className="flex items-baseline justify-between gap-3">
+      <div className="flex items-center justify-between gap-3">
         {tabs.length === 1 ? (
           <h2 className="text-title font-bold text-ink">{active.label}</h2>
         ) : (
@@ -742,7 +761,7 @@ function UpcomingSection({
                   aria-selected={on}
                   onClick={() => setPicked(tab.key)}
                   className={[
-                    "flex h-9 items-center gap-1.5 rounded-md px-2.5 transition-colors duration-200",
+                    "flex h-11 items-center gap-1.5 rounded-md px-2.5 transition-colors duration-200",
                     on
                       ? "bg-berry-light font-bold text-berry-dark"
                       : "text-sub hover:bg-surface-muted hover:text-ink",
@@ -759,7 +778,7 @@ function UpcomingSection({
         {/* 배정 카드 전체 목록은 캘린더가 담당 — 새 페이지를 만들지 않는다 */}
         <Link
           href="/calendar"
-          className="shrink-0 text-caption font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
+          className="flex h-11 shrink-0 items-center px-1 text-caption font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
         >
           전체보기
         </Link>
@@ -804,7 +823,7 @@ function CollapsedSomeday({
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
-          className="flex min-w-0 items-center gap-1 text-body text-sub transition-colors duration-200 hover:text-ink"
+          className="flex min-h-11 min-w-0 items-center gap-1 text-body text-sub transition-colors duration-200 hover:text-ink"
         >
           <ChevronRight
             size={16}
@@ -875,7 +894,7 @@ function AssignDatesControl({
         className={
           primary
             ? "flex h-11 items-center justify-center rounded-md bg-berry px-6 text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
-            : "shrink-0 text-caption font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
+            : "flex h-11 shrink-0 items-center text-caption font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
         }
       >
         날짜 정해주기
@@ -983,7 +1002,7 @@ function IdeaInput() {
 
 function FullPageLoading() {
   return (
-    <main className="flex flex-1 items-center justify-center p-4">
+    <main id="main" tabIndex={-1} className="flex flex-1 items-center justify-center p-4">
       <p className="text-body text-sub">불러오는 중...</p>
     </main>
   );

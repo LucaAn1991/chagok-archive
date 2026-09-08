@@ -8,10 +8,8 @@ import ProfileMenu from "@/components/ProfileMenu";
 
 /**
  * 상단 메뉴바 (09-04) — 사이드바(`AppSidebar`)를 대신한다.
- *
- * ⚠️ **DESIGN.md §4 표와 어긋난다.** 그 표는 태블릿 72px 레일 · 데스크톱 240px
- * 사이드바를 적어두고 있다. 사용자 결정으로 상단 바로 옮겼고, 문서는 사람이
- * 고치기로 했다 (09-04). 문서를 먼저 보고 오는 사람이 헷갈리지 않게 여기 남긴다.
+ * DESIGN.md §4 Breakpoints 표가 09-08에 이 구조로 갱신됐다 (그전까지 표에는
+ * 태블릿 72px 레일 · 데스크톱 240px 사이드바가 남아 있었다).
  *
  * **GNB 3개 고정은 그대로다** — 홈 · AI 기획 · 캘린더. 설정은 프로필 메뉴 안이다.
  *
@@ -42,7 +40,7 @@ export default function AppTopNav() {
         <Link
           href="/"
           aria-label="차곡 홈"
-          className="flex shrink-0 items-center gap-2.5 pr-2"
+          className="flex h-11 shrink-0 items-center gap-2.5 pr-2"
         >
           <LogoSymbol size={24} />
           <span className="text-title font-bold text-ink">차곡</span>

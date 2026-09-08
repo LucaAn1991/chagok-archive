@@ -950,7 +950,7 @@ function NewPlanScreen() {
 
       <div className="flex min-w-0 flex-1 flex-col lg:h-dvh lg:overflow-hidden">
         {/* 간격은 --plan-gap 하나로 관리 (08-31) — 바깥 좌우 여백 = 열 사이 간격 */}
-        <main className="mx-auto flex w-full max-w-[560px] flex-1 flex-col px-[var(--plan-gap)] pb-36 pt-3 [--plan-gap:1rem] md:[--plan-gap:1.5rem] lg:max-w-[1080px] lg:min-h-0 lg:pb-[var(--plan-gap)] lg:pt-4">
+        <main id="main" tabIndex={-1} className="mx-auto flex w-full max-w-[560px] flex-1 flex-col px-[var(--plan-gap)] pb-36 pt-3 [--plan-gap:1rem] md:[--plan-gap:1.5rem] lg:max-w-[1080px] lg:min-h-0 lg:pb-[var(--plan-gap)] lg:pt-4">
           {/* 헤더·탭 — 그대로 (지시 §0) */}
           {/* 헤더 — [←] 와 제목만. 칩은 탭 줄로 옮겼다 (08-31 확정) */}
           <header>

@@ -8,7 +8,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-3 p-4 text-center">
+    <main id="main" tabIndex={-1} className="flex flex-1 flex-col items-center justify-center gap-3 p-4 text-center">
       <h1 className="text-xl font-bold">문제가 생겼어요</h1>
       <p className="text-sm">
         잠시 후 다시 시도해 주세요.

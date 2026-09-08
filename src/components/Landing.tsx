@@ -53,7 +53,7 @@ const FAQS = [
 
 export default function Landing() {
   return (
-    <main className="flex flex-1 flex-col">
+    <main id="main" tabIndex={-1} className="flex flex-1 flex-col">
       {/* 상단 바 — 로고 + 로그인 */}
       <header className="mx-auto flex w-full max-w-[960px] items-center justify-between px-4 py-4">
         <LogoFull width={88} />

@@ -75,7 +75,7 @@ export default function LoginPage() {
   ].join(" ");
 
   return (
-    <main className="flex flex-1">
+    <main id="main" tabIndex={-1} className="flex flex-1">
       <BrandPanel />
 
       {/* 오른쪽 — 로그인 폼 */}

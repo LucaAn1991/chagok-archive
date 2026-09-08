@@ -162,7 +162,7 @@ export default function CalendarPage() {
 
   if (!uid) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
+      <main id="main" tabIndex={-1} className="flex min-h-screen items-center justify-center">
         <p className="text-body text-sub">불러오는 중…</p>
       </main>
     );

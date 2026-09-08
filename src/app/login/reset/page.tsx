@@ -61,7 +61,7 @@ export default function PasswordResetPage() {
   ].join(" ");
 
   return (
-    <main className="flex flex-1">
+    <main id="main" tabIndex={-1} className="flex flex-1">
       <BrandPanel />
 
       {/* 오른쪽 — 재설정 폼 또는 발송 완료 안내 */}

@@ -5,10 +5,12 @@
   색을 바꿔야 하면 DESIGN.md를 먼저 고치고 그 결과를 여기 옮긴다.
 
   나눔스퀘어 네오 — 네이버 나눔글꼴 라이선스 (상업적 사용 가능)
-  폰트 로딩은 layout.tsx의 next/font/local이 맡는다. 여기서는 그 결과로 생긴
-  CSS 변수(--font-nanum-square-neo)를 받아 쓰기만 한다.
+  09-08부터 `@font-face`를 fonts.css가 직접 선언한다(unicode-range 2분할).
+  next/font/local은 한 family에 여러 unicode-range를 못 물려서 걷어냈다.
 */
 @import "tailwindcss";
+/* 폰트 @font-face — scripts/subset-font.py가 만든다. 손으로 고치지 않는다 */
+@import "./fonts.css";
 
 /* ============================================================
    DESIGN.md §2 — 컬러 토큰
@@ -153,6 +155,7 @@
   --text-label--font-weight:    700;
 
   /* 폴백 스택은 layout.tsx의 localFont가 이 변수 안에 함께 넣어준다 */
+  --font-nanum-square-neo: "NanumSquareNeo";
   --font-sans: var(--font-nanum-square-neo), -apple-system,
                BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR',
                sans-serif;
@@ -339,9 +342,17 @@ select:focus-visible:not([data-focus-ring="none"]) {
   .card-raise:hover {
     transform: none;
   }
+  /*
+    Tailwind `animate-pulse`도 여기서 끈다 (09-08).
+    로딩 골격(`page.tsx`의 HomeSkeleton 등 6곳)이 `animate-pulse`로 깜빡이는데
+    위 목록에 빠져 있어서, 흔들림에 예민한 사용자 화면에서도 계속 뛰고 있었다.
+    유틸리티는 `@layer utilities` 안에 있고 이 규칙은 레이어 밖이라 여기가 이긴다 —
+    focus 링(§Base)이 쓰는 방식과 같다.
+  */
   .stagger > *,
   .modal-in,
-  .overlay-in {
+  .overlay-in,
+  .animate-pulse {
     animation: none;
   }
 }

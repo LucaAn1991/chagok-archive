@@ -144,7 +144,7 @@ export default function OnboardingPage() {
 
   if (phase === "loading") {
     return (
-      <main className="flex flex-1 items-center justify-center p-4">
+      <main id="main" tabIndex={-1} className="flex flex-1 items-center justify-center p-4">
         <p className="text-body text-sub">불러오는 중…</p>
       </main>
     );
@@ -153,7 +153,7 @@ export default function OnboardingPage() {
   const daily = frequency === 7;
 
   return (
-    <main className="flex flex-1 items-center justify-center p-4">
+    <main id="main" tabIndex={-1} className="flex flex-1 items-center justify-center p-4">
       <div className={step === 1 ? "w-full max-w-[560px]" : "w-full max-w-[1200px]"}>
         {step === 1 ? (
           <>

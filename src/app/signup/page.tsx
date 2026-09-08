@@ -117,7 +117,7 @@ export default function SignupPage() {
   ].join(" ");
 
   return (
-    <main className="flex flex-1">
+    <main id="main" tabIndex={-1} className="flex flex-1">
       <BrandPanel />
 
       {/* 오른쪽 — 회원가입 폼 */}

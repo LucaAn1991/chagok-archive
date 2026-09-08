@@ -123,7 +123,7 @@ export default function ConsentScreen({ termsMd }: { termsMd: string }) {
 
   if (mode === "checking") {
     return (
-      <main className="flex flex-1 items-center justify-center p-4">
+      <main id="main" tabIndex={-1} className="flex flex-1 items-center justify-center p-4">
         <p className="text-body text-sub">불러오는 중...</p>
       </main>
     );
@@ -132,7 +132,7 @@ export default function ConsentScreen({ termsMd }: { termsMd: string }) {
   // 만 14세 미만 분기 — 가입을 진행시키지 않는다
   if (mode === "under14") {
     return (
-      <main className="mx-auto flex w-full max-w-[480px] flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
+      <main id="main" tabIndex={-1} className="mx-auto flex w-full max-w-[480px] flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
         <h1 className="text-h3 font-bold text-ink">차곡은 만 14세 이상부터 이용할 수 있어요</h1>
         <p className="text-body text-sub">조금 더 자란 뒤에 다시 만나요.</p>
         <button
@@ -147,7 +147,7 @@ export default function ConsentScreen({ termsMd }: { termsMd: string }) {
   }
 
   return (
-    <main className="mx-auto w-full max-w-[480px] flex-1 px-4 pb-16 pt-10 md:pt-16">
+    <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[480px] flex-1 px-4 pb-16 pt-10 md:pt-16">
       {/* 뒤로가기 없음 — 이 화면은 건너뛸 수 없다 */}
       <h1 className="text-h3 font-bold leading-snug text-ink">
         차곡을 시작하기 전에

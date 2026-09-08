@@ -87,7 +87,7 @@ function PlanResultScreen() {
       <AppTopNav />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <main className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
+        <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
           <PageHeader fallbackHref="/plan/history" backLabel="지난 기획" />
 
           {state.phase === "loading" && (
