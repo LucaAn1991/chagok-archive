@@ -445,11 +445,7 @@ function HomeReady({
             그대로 두고 무게만 나눈다 — 첫 장은 Featured + primary, 나머지는 곁들임.
           */}
           <div className="mt-3 flex flex-col gap-3 md:mt-4">
-            <FeaturedContentCard
-              card={todayCard}
-              ctaLabel="제작하기"
-              ctaHref={`/card/${todayCard.id}/result`}
-            />
+            <FeaturedContentCard card={todayCard} ctaHref={`/card/${todayCard.id}/result`} />
             {/* 곁들임은 최대 4장 — 첫 장까지 5장. 넘치는 것은 아래 목록이 받는다 */}
             {todayCards.length > 1 && (
               <TodayCardRail cards={todayCards.slice(1, 1 + TODAY_RAIL_MAX)} />
@@ -475,11 +471,7 @@ function HomeReady({
             {relativeDayLabel(nextCard.scheduledDate, todayKey)} 올릴 콘텐츠에요!
           </h1>
           <div className="mt-3 md:mt-4">
-            <FeaturedContentCard
-              card={nextCard}
-              ctaLabel="미리 제작하기"
-              ctaHref={`/card/${nextCard.id}/result`}
-            />
+            <FeaturedContentCard ahead card={nextCard} ctaHref={`/card/${nextCard.id}/result`} />
           </div>
         </section>
       )}
@@ -746,19 +738,29 @@ function UpcomingSection({
 
   return (
     <section className="border-y border-line py-2.5">
-      <div className="flex items-center justify-between gap-3">
+      {/*
+        **좁은 폭에서는 링크가 아랫줄로 내려간다** (09-08). 「캘린더에서 보기」로 이름을
+        늘리면서 390px에서 한 줄에 다 들어가지 않게 됐다 — 탭을 줄여 글자를 자르는
+        대신 줄을 바꾼다. 탭 이름과 개수가 잘리면 이 줄이 하는 일이 사라진다.
+      */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         {tabs.length === 1 ? (
           <h2 className="text-title font-bold text-ink">{active.label}</h2>
         ) : (
-          <div role="tablist" aria-label="앞으로 올릴 콘텐츠" className="flex min-w-0 gap-1">
+          /*
+            **`role="tab"`을 뗐다** (09-08). `tablist`·`tab`만 있고 `tabpanel`도
+            `aria-controls`도 화살표 키 이동도 없어서, 보조기기에는 「탭이라고 주장하지만
+            탭처럼 굴지 않는 것」이었다. 실제 하는 일은 목록 필터 두 개를 켜고 끄는 것이라
+            **누름 상태를 가진 버튼**(`aria-pressed`)이 정확하다. 코드도 줄어든다.
+          */
+          <div role="group" aria-label="앞으로 올릴 콘텐츠" className="flex min-w-0 gap-1">
             {tabs.map((tab) => {
               const on = tab.key === active.key;
               return (
                 <button
                   key={tab.key}
                   type="button"
-                  role="tab"
-                  aria-selected={on}
+                  aria-pressed={on}
                   onClick={() => setPicked(tab.key)}
                   className={[
                     "flex h-11 items-center gap-1.5 rounded-md px-2.5 transition-colors duration-200",
@@ -775,18 +777,31 @@ function UpcomingSection({
           </div>
         )}
 
-        {/* 배정 카드 전체 목록은 캘린더가 담당 — 새 페이지를 만들지 않는다 */}
+        {/*
+          배정 카드 전체 목록은 캘린더가 담당 — 새 페이지를 만들지 않는다.
+          이름을 「전체보기」에서 바꿨다 (09-08) — «무엇의» 전체인지 말하지 않아서
+          누르기 전엔 어디로 가는지 알 수 없었다. 갈 곳을 그대로 적는다.
+        */}
         <Link
           href="/calendar"
-          className="flex h-11 shrink-0 items-center px-1 text-caption font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
+          className="ml-auto flex h-11 shrink-0 items-center px-1 text-caption font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
         >
-          전체보기
+          캘린더에서 보기
         </Link>
       </div>
 
+      {/* 「남아있다」는 밀린 일감처럼 읽힌다 — §1 Calm에 맞춰 세기만 한다 (09-08) */}
       {tabs.length === 1 && (
-        <p className="mt-0.5 text-caption text-sub">{active.cards.length}개 남아있어요</p>
+        <p className="mt-0.5 text-caption text-sub">{active.cards.length}개 있어요</p>
       )}
+
+      {/*
+        목록이 통째로 갈리는 것을 소리로도 알린다 (09-08). 버튼의 누름 상태는
+        바뀌었다고 읽히지만, **아래 목록이 다른 것으로 바뀐 사실**은 말해주지 않는다.
+      */}
+      <p role="status" className="sr-only">
+        {active.label} {active.cards.length}개
+      </p>
 
       <div className="mt-2">
         <DateGroupedList cards={active.cards} todayKey={active.today} />
@@ -1000,10 +1015,21 @@ function IdeaInput() {
    로딩 · 에러
    ============================================================ */
 
+/**
+ * Auth 판정 대기 — 로그인인지 아닌지 아직 모르는 아주 짧은 구간.
+ *
+ * **09-08 — 글자에서 골격으로 바꿨다.** 「불러오는 중...」 텍스트와 `HomeSkeleton`의
+ * 회색 골격, 같은 「로딩」에 두 가지 말투가 있었다. 골격 쪽을 남긴 이유는 ① 글자는
+ * 읽히는 순간 사라져서 깜빡임으로 보이고 ② 여기서 로그인이면 곧 홈 골격이 이어지므로
+ * 같은 언어로 말하는 편이 이어 붙는다. 로그아웃이면 랜딩이 덮는다.
+ */
 function FullPageLoading() {
   return (
-    <main id="main" tabIndex={-1} className="flex flex-1 items-center justify-center p-4">
-      <p className="text-body text-sub">불러오는 중...</p>
+    <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[960px] flex-1 p-4 md:p-6">
+      <div aria-hidden className="flex animate-pulse flex-col gap-4 pt-2">
+        <div className="h-7 w-56 rounded-sm bg-surface-muted" />
+        <div className="h-5 w-72 rounded-sm bg-surface-muted" />
+      </div>
     </main>
   );
 }

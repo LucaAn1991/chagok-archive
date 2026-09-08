@@ -4,7 +4,7 @@ import Link from "next/link";
 import StatusBadge from "@/components/StatusBadge";
 import CardThumb from "@/components/CardThumb";
 import { contentTypeForAudience } from "@/lib/audiences";
-import { audienceLine } from "@/lib/format";
+import { audienceLine, cardCtaLabel } from "@/lib/format";
 import type { Card } from "@/types";
 
 /**
@@ -18,13 +18,20 @@ import type { Card } from "@/types";
  */
 export default function FeaturedContentCard({
   card,
-  ctaLabel,
+  ahead,
   ctaHref,
 }: {
   card: Card;
-  ctaLabel: string; // 제작하기 · 미리 제작하기
+  /** 오늘이 아니라 «앞으로» 올릴 카드 — 라벨에 「미리」가 붙는다 (홈 C 분기) */
+  ahead?: boolean;
   ctaHref: string;
 }) {
+  /*
+    라벨을 **넘겨받지 않고 여기서 고른다** (09-08). 예전엔 부모가 "제작하기"를
+    통째로 넘겨서, 이미 만들어 둔 카드에도 「제작하기」라고 적혔다 — 바로 위
+    `StatusBadge`는 「업로드 대기」라고 말하는데. 규칙은 `cardCtaLabel` 하나뿐이다.
+  */
+  const ctaLabel = cardCtaLabel(card.status, ahead);
   /* DESIGN.md §4 — 홈 대표 카드는 단독으로 선다: 테두리 대신 깊이 (09-04) */
   return (
     <section className="rounded-lg bg-surface p-4 shadow-e1 md:p-6">

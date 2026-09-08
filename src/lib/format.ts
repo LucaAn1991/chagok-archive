@@ -1,3 +1,5 @@
+import type { CardStatus } from "@/types";
+
 /**
  * 대상·예정일 표기 규칙 (08-28 확정).
  *
@@ -14,19 +16,21 @@ export function formatMonthDayWeekday(input: string | Date): string {
   return `${date.getMonth() + 1}월 ${date.getDate()}일 (${weekday})`;
 }
 
-/** 'YYYY-MM-DD' → 'M월 D일'. 값이 없으면 «날짜 미정» */
-export function formatMonthDay(dateKey: string): string {
-  if (!dateKey) return "날짜 미정";
-  const [, m, d] = dateKey.split("-").map(Number);
-  return `${m}월 ${d}일`;
-}
-
 /** 대상 한 줄 표기 — «나를 모르는 사람에게» */
 export function audienceLine(label: string): string {
   return `${label}에게`;
 }
 
-/** 대상 + 예정일 — «나를 모르는 사람에게 · 12월 3일» */
-export function audienceDateLine(label: string, dateKey: string): string {
-  return `${audienceLine(label)} · ${formatMonthDay(dateKey)}`;
+/**
+ * 카드 CTA 라벨 — **여기 한 곳에서만 정한다** (09-08).
+ *
+ * `FeaturedContentCard`는 라벨을 통째로 넘겨받아 상태를 안 봤고, `TodayCardRail`은
+ * 상태를 봤다. 그래서 같은 홈 안에서 **이미 만들어 둔 카드(「업로드 대기」 배지)에
+ * 「제작하기」라고 적히는** 자리가 생겼다. 두 곳이 각자 판단하는 한 또 갈라진다.
+ *
+ * `ahead` — 오늘이 아니라 «앞으로» 올릴 카드일 때(홈 C 분기). 「미리」가 붙는다.
+ */
+export function cardCtaLabel(status: CardStatus, ahead = false): string {
+  if (status !== "planned") return "이어서 보기"; // 만들어 뒀다 — 남은 건 올리는 일
+  return ahead ? "미리 제작하기" : "제작하기";
 }

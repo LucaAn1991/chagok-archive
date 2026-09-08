@@ -4,7 +4,7 @@ import Link from "next/link";
 import StatusBadge from "@/components/StatusBadge";
 import CardThumb from "@/components/CardThumb";
 import { contentTypeForAudience } from "@/lib/audiences";
-import { audienceLine } from "@/lib/format";
+import { audienceLine, cardCtaLabel } from "@/lib/format";
 import type { Card } from "@/types";
 
 /**
@@ -66,7 +66,7 @@ export default function TodayCardRail({ cards }: { cards: Card[] }) {
                 href={`/card/${card.id}/result`}
                 className="mt-auto flex h-11 items-center justify-center rounded-md border-2 border-berry bg-surface text-body font-semibold text-berry transition-colors duration-200 hover:bg-berry-tint hover:text-berry-dark"
               >
-                {card.status === "planned" ? "제작하기" : "이어서 보기"}
+                {cardCtaLabel(card.status)}
               </Link>
             </div>
           </article>
