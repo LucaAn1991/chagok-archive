@@ -118,3 +118,9 @@ desktop.ini
 *.temp
 .tmp/
 .playwright-mcp/
+
+# ---------- graphify ----------
+# 코드·문서에서 뽑은 지식 그래프 산출물. graph.json만 1.5MB이고,
+# 파일이 바뀔 때마다 통째로 갈려서 diff가 의미 없다.
+# 필요하면 `/graphify .`로 각자 다시 만든다.
+graphify-out/
