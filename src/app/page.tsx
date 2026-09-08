@@ -59,12 +59,25 @@ export default function RootPage() {
    홈 (로그인)
    ============================================================ */
 
-/** 로컬 기준 'YYYY-MM-DD' */
+/** 로컬 기준 'YYYY-MM-DD' — KST로 맞춘 Date(`kstToday()`)를 넘겨서 쓴다 */
 function toDateKey(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+/**
+ * KST 기준 «오늘»의 'YYYY-MM-DD'. 홈의 날짜 판정은 전부 이걸 쓴다 (09-08).
+ *
+ * 예전엔 기기 시간대를 그대로 썼다 — 헤더는 `kstToday()`로 KST 날짜를 찍는데
+ * 카드 판정만 로컬이라, 시간대가 다른 기기에서 열면 둘이 하루씩 어긋났다.
+ * 어긋나면 오늘 카드가 「날짜 지난 카드」(D)로 잘못 잡히고, D는 경고 없이
+ * `scheduledDate`를 다음 발행일로 덮어쓴다 — 남의 일정이 조용히 밀린다.
+ * 한국 사용자 전용 서비스라 기준을 KST 하나로 못박는다.
+ */
+function kstTodayKey(now: Date = new Date()): string {
+  return toDateKey(kstToday(now));
 }
 
 /**
@@ -97,7 +110,7 @@ function nextPublishDates(
 /** C(날짜 없음) 카드들에 발행 주기대로 날짜를 배분해 저장한다 — 한 장씩 차례로 */
 async function assignDatesToCards(cards: Card[], uploadDays: number[], takenDates: string[]) {
   const taken = new Set(takenDates);
-  const targets = nextPublishDates(uploadDays, toDateKey(new Date()), cards.length, taken);
+  const targets = nextPublishDates(uploadDays, kstTodayKey(), cards.length, taken);
   // Firestore 배치 상한(500) 아래로 끊어서 커밋한다
   for (let i = 0; i < cards.length; i += 450) {
     const batch = writeBatch(db);
@@ -184,11 +197,13 @@ function Home({ uid }: { uid: string }) {
         const uploadDays: number[] = Array.isArray(userSnap.data().uploadDays)
           ? userSnap.data().uploadDays
           : [0, 3];
-        const mondayFirstIndex = (new Date().getDay() + 6) % 7; // JS 0=일 → 0=월 규약으로
+        // 요일·주 범위·오늘 모두 KST 기준 하나로 맞춘다 (09-08, kstTodayKey 주석)
+        const kstNow = kstToday();
+        const mondayFirstIndex = (kstNow.getDay() + 6) % 7; // JS 0=일 → 0=월 규약으로
         const publishToday = uploadDays.includes(mondayFirstIndex);
 
-        const todayKey = toDateKey(new Date());
-        const { start, end } = thisWeekRange(new Date());
+        const todayKey = toDateKey(kstNow);
+        const { start, end } = thisWeekRange(kstNow);
         const cardsRef = collection(db, "cards");
 
         /*
@@ -356,8 +371,10 @@ function HomeReady({
   takenDates: string[];
   onReload: () => void;
 }) {
+  // now는 «지금 몇 시»가 필요한 인사말용이라 진짜 현재 시각 그대로 둔다.
+  // 날짜 판정만 KST로 맞춘다 — kstToday()를 greetingFor에 넘기면 시각이 0시로 뭉개진다.
   const now = new Date();
-  const todayKey = toDateKey(now);
+  const todayKey = kstTodayKey(now);
 
   // E — 이번 주(A)가 비었고 날짜 없는 카드(C)만 있으면, C가 그날의 주 행동이 된다 (§6)
   const situation = todayCard
@@ -677,7 +694,7 @@ function UpcomingSection({
 }) {
   const [picked, setPicked] = useState<"week" | "month">("week");
 
-  const todayKey = toDateKey(new Date());
+  const todayKey = kstTodayKey();
   // 「올릴」 목록 — 이미 올린 카드는 접는다. 이미 만들어둔 카드(올리기만 남음)는 들어온다
   const shown = new Set(excludeIds ?? []);
   const week = weekCards.filter((c) => c.status !== "published" && !shown.has(c.id));
