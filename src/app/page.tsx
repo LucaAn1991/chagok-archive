@@ -18,6 +18,7 @@ import {
 import { ArrowUp, ChevronRight } from "lucide-react";
 import { auth, db } from "@/lib/firebase/client";
 import AppTopNav from "@/components/AppTopNav";
+import NoticeBanner from "@/components/NoticeBanner";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import FeaturedContentCard from "@/components/FeaturedContentCard";
 import TodayCardRail from "@/components/TodayCardRail";
@@ -296,6 +297,7 @@ function Home({ uid }: { uid: string }) {
   return (
     <div className="flex flex-1 flex-col">
       <AppTopNav />
+      <NoticeBanner />
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/*

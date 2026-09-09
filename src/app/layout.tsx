@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { getSeoInfo } from "@/lib/server/seo";
 import "./globals.css";
 
 /*
@@ -29,11 +30,14 @@ const nanumSquareNeo = localFont({
   ],
 });
 
-export const metadata: Metadata = {
-  title: "차곡",
-  description:
-    "말하면 정리되고, 정리되면 일정이 되고, 일정이 하나씩 콘텐츠로 완성된다. 인스타그램 콘텐츠 기획 어시스턴트.",
-};
+/**
+ * 서비스명·소개 문구는 백오피스 설정에서 바꾼다 (09-09 · 백오피스 기획 §2-⑤).
+ * getSeoInfo가 캐시를 물고 있어 정적 렌더는 유지되고, admin 저장 시 태그로 갱신된다.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const seo = await getSeoInfo();
+  return { title: seo.serviceName, description: seo.seoDescription };
+}
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

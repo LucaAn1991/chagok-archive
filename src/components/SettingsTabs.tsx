@@ -17,6 +17,7 @@ import { usePathname } from "next/navigation";
 const TABS = [
   { href: "/settings/content", label: "콘텐츠" },
   { href: "/settings/account", label: "계정" },
+  { href: "/settings/support", label: "고객센터" }, // 09-08 인앱 문의 · 09-09 공지·FAQ 포함
 ] as const;
 
 export default function SettingsTabs() {
