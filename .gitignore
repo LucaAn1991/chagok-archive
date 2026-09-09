@@ -66,6 +66,8 @@ next-env.d.ts
 # 실행 중 계속 변하는 기록이라 diff가 의미 없고, 종종 토큰·개인정보가 섞임
 *.log
 logs/
+# 위 logs/ 패턴의 예외 — 감사 로그 API 라우트는 소스 코드다 (09-09)
+!src/app/api/admin/logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
