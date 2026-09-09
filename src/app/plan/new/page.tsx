@@ -646,6 +646,31 @@ function NewPlanScreen() {
     setReady(false);
     setPlanId(null);
     setChatText("");
+    setFreeTopic(false);
+    setConfirmError(false);
+    /*
+      ③~⑦ 상태도 함께 비운다 (09-09).
+
+      09-02 이후 붙은 기획안·다듬기·템플릿·사진 상태가 여기서 빠져 있어서,
+      「새 기획」을 눌러도 이전 기획의 기획안이 그대로 남았다. 새 주제로 ②를 지나면
+      `drafts.length > 0` 가드가 «이미 있다»고 보고 새 기획안을 만들지 않아
+      **이전 기획의 기획안이 새 기획 것처럼 떠 있었고**, 그 상태로 「이 N개로 갈게요」를
+      누르면 새 planId에는 기획안이 없어 400이 났다.
+      스톡 후보는 planId 기준(`stockFetchedFor`)으로 새로 받아오므로 비워도 된다.
+    */
+    setDrafts([]);
+    setDraftsDone(false);
+    setDraftsError(null);
+    setRefineIndex(null);
+    setRefineTurns({});
+    setRefineStream(null);
+    setVariants({});
+    setVariantsLoading(null);
+    setStyleId(null);
+    setStockOptions([]);
+    setStockPage(1);
+    setSelectedStocks([]);
+    setUserPhotos([]);
     void runTurn({ kind: "init", idea: "", from: null });
   }
 
