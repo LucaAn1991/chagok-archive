@@ -11,6 +11,13 @@ import { addCustomAudience, loadCustomAudiences } from "@/lib/custom-audiences";
 import AppTopNav from "@/components/AppTopNav";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import AIChatBubble, { SystemEventLine } from "@/components/AIChatBubble";
+import { LogoSymbol } from "@/components/Logo";
+import {
+  PLAN_INTRO_LEAD,
+  PLAN_INTRO_REST,
+  PLAN_INTRO_TEXT,
+  TOPIC_STARTERS,
+} from "@/lib/plan/intro";
 import {
   TopicLine,
   type PlanPhotos,
@@ -192,6 +199,8 @@ function NewPlanScreen() {
   const [planId, setPlanId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [topicSuggestions, setTopicSuggestions] = useState<string[] | null>(null); // ① 후보
+  // ① 첫 화면에서 고른 칩 (09-09) — 입력창 안내 문구만 바꾼다. AI 호출·전송 없음
+  const [starter, setStarter] = useState<string | null>(null);
   const [proposal, setProposal] = useState<Proposal | null>(null); // ② 후보
   const [summary, setSummary] = useState<PlanSummary>({
     topic: "",
@@ -205,8 +214,8 @@ function NewPlanScreen() {
   const [failed, setFailed] = useState<TurnPayload | null>(null);
   const [ready, setReady] = useState(false); // ③으로 넘어갈 수 있는 상태
   const [styleId, setStyleId] = useState<StyleId | null>(null); // ③ 분위기 (09-02)
-  // 설정 분야를 풀고 시작했는가 (09-02) — 칩을 한 번만 보여주려고 기억한다
-  const [freeTopic, setFreeTopic] = useState(false);
+  // 「다른 이야기」(설정 분야 풀기, 09-02)의 화면 상태는 09-09에 첫 화면 칩이 고정 4개로
+  // 바뀌면서 읽는 곳이 없어져 지웠다. 서버로 보내는 길(`payload.freeTopic`)은 그대로 있다.
   const [isMock, setIsMock] = useState(false);
 
   // ② 대상 선택 — 초안 저장·복구를 위해 카드가 아니라 페이지가 들고 있는다 (08-28)
@@ -554,6 +563,20 @@ function NewPlanScreen() {
       if (data.summary && typeof data.summary === "object") {
         setSummary(data.summary as PlanSummary);
       }
+      if (payload.kind === "update" && data.topicChanged === true) {
+        /*
+          주제가 실제로 바뀌었다 (09-09). 서버가 옛 주제의 기획안·기획의도를 비웠으므로
+          화면의 기획안·고른 표시·다듬기 상태도 함께 비운다. `drafts`가 비면 아래
+          effect가 ③을 새 주제로 다시 돌린다. 고른 대상은 그대로다.
+        */
+        setDrafts([]);
+        setDraftsDone(false);
+        setDraftsError(null);
+        setRefineIndex(null);
+        setRefineTurns({});
+        setRefineStream(null);
+        setVariants({});
+      }
       if (payload.kind !== "update") {
         setTopicSuggestions((data.topicSuggestions as string[] | null) ?? null);
         if (data.topicSuggestions && window.matchMedia("(min-width: 768px)").matches) {
@@ -646,7 +669,7 @@ function NewPlanScreen() {
     setReady(false);
     setPlanId(null);
     setChatText("");
-    setFreeTopic(false);
+    setStarter(null);
     setConfirmError(false);
     /*
       ③~⑦ 상태도 함께 비운다 (09-09).
@@ -1038,6 +1061,13 @@ function NewPlanScreen() {
                   <div key={i} className="flex flex-col gap-4">
                     {m.role === "system" ? (
                       <SystemEventLine text={m.text} />
+                    ) : i === 0 && m.role === "assistant" && m.text === PLAN_INTRO_TEXT ? (
+                      /*
+                        첫 메시지가 고정 인사(서버가 저장한 그 문구)면 앞 문장을 살짝 굵게 그린다
+                        (09-09). 칩을 고른 뒤에도 같은 문구가 남는다 — 저장된 첫 메시지가 곧
+                        이 문구라서다. 옛 세션의 AI 인사는 글자가 달라 보통 말풍선으로 보인다.
+                      */
+                      <IntroBubble />
                     ) : (
                       <AIChatBubble
                         role={m.role}
@@ -1047,24 +1077,17 @@ function NewPlanScreen() {
                         }
                       />
                     )}
-                    {/* ① 주제 후보 — 대상 질문과 같은 흐름 (08-31 확정):
-                        고르면 목록 전체가 사라지고, 값은 사용자 말풍선으로만 남는다 */}
+                    {/* ① 시작점 칩 4개 (09-09) — 누르면 입력창 안내 문구만 바뀌고 커서가 간다.
+                        전송·AI 호출은 없고, 사용자가 적어 보낸 원문이 주제가 된다.
+                        칩은 보낼 때까지 남는다(바꿔 고를 수 있게). 서버의 topicSuggestions는
+                        «첫 화면인가»의 신호로만 쓴다 */}
                     {i === 0 && topicSuggestions && !sending && !failed && (
                       <TopicSuggestionPicker
-                        suggestions={topicSuggestions}
-                        onPick={(t) => {
+                        picked={starter}
+                        onPick={(label) => {
                           dismissBanner();
-                          setTopicSuggestions(null);
-                          sendText(t);
-                        }}
-                        freeTopicUsed={freeTopic}
-                        onFreeTopic={() => {
-                          dismissBanner();
-                          setFreeTopic(true);
-                          setTopicSuggestions(null);
-                          setMessages([]);
-                          setPlanId(null);
-                          void runTurn({ kind: "init", idea: "", from: null, freeTopic: true });
+                          setStarter(label);
+                          setFocusToken((k) => k + 1);
                         }}
                       />
                     )}
@@ -1198,6 +1221,8 @@ function NewPlanScreen() {
                   value={chatText}
                   onChange={setChatText}
                   focusToken={focusToken}
+                  // 고른 칩의 안내 문구 — 없으면 입력창의 기본 문구 (09-09)
+                  placeholder={TOPIC_STARTERS.find((s) => s.label === starter)?.hint}
                   onSend={sendText}
                 />
               )}
@@ -1549,43 +1574,68 @@ function RestoreBanner({ onNew }: { onNew: () => void }) {
    ① 주제 후보 — 열린 질문 금지, 4개 제시 (IA 2.1-①)
    ============================================================ */
 
-function TopicSuggestionPicker({
-  suggestions,
-  onPick,
-  onFreeTopic,
-  freeTopicUsed,
-}: {
-  suggestions: string[];
-  onPick: (topic: string) => void;
-  /** 설정한 분야 말고 다른 이야기로 후보를 다시 받는다 (09-02) */
-  onFreeTopic?: () => void;
-  /** 이미 다른 이야기로 받아온 상태면 칩을 숨긴다 — 누를 데가 없다 */
-  freeTopicUsed?: boolean;
-}) {
-  // 대상 질문과 **같은 Chip 컴포넌트·같은 흐름** (08-31 확정) —
-  // 고르는 즉시 전송되고 목록은 사라진다. 값은 사용자 말풍선으로 남는다
+/**
+ * 첫 인사 말풍선 (09-09). 문구는 `lib/plan/intro.ts` — 서버가 저장하는 값과 한 곳에서 관리한다.
+ *
+ * `AIChatBubble`은 문자열만 받아서 한 문장만 굵게 만들 수 없다. 공통 컴포넌트를
+ * 건드리지 않으려고 **같은 모양(아바타·「차곡」·말풍선 클래스)**을 여기서 그대로 그린다.
+ * AIChatBubble의 assistant 마크업이 바뀌면 이것도 같이 맞춘다.
+ * 강조는 700이 아니라 600 — 굵은 글씨는 제목·라벨에만 쓴다 (DESIGN §3).
+ */
+function IntroBubble() {
   return (
-    <div className="flex flex-wrap gap-2">
-      {suggestions.map((t) => (
-        <Chip key={t} label={t} selected={false} onToggle={() => onPick(t)} />
-      ))}
+    <div className="flex flex-col gap-1.5">
+      <span className="flex items-center gap-2">
+        <LogoSymbol size={20} />
+        <span className="text-label font-semibold text-sub">차곡</span>
+      </span>
+      <p className="max-w-[85%] rounded-lg rounded-tl-sm border border-line bg-surface px-4 py-3 text-body text-ink md:max-w-[70%] lg:max-w-full">
+        <span className="font-semibold">{PLAN_INTRO_LEAD}</span> {PLAN_INTRO_REST}
+      </p>
+    </div>
+  );
+}
 
-      {/*
-        「다른 이야기」 (09-02) — 온보딩에서 정한 분야가 대화의 기본값인데,
-        다른 주제를 쓰려면 설정을 고치러 가야 했다. 여기서 그 기획에 한해 분야를
-        풀어준다. **가로막는 선택 화면을 두지 않는다** — 칩 줄에 하나 더 얹으면
-        같은 선택을 마찰 없이 준다 (DESIGN.md §1 「빈칸을 주지 않는다」).
-      */}
-      {onFreeTopic && !freeTopicUsed && (
-        <button
-          type="button"
-          onClick={onFreeTopic}
-          className="flex h-9 items-center rounded-pill border border-dashed border-line bg-surface px-4
-                     text-body text-sub transition-colors duration-200 hover:border-berry hover:text-ink"
-        >
-          다른 이야기
-        </button>
-      )}
+function TopicSuggestionPicker({
+  picked,
+  onPick,
+}: {
+  /** 지금 고른 칩의 라벨. 없으면 null */
+  picked: string | null;
+  /** 칩을 고르면 라벨을 알린다 — 부모가 입력창 안내 문구를 바꾸고 커서를 준다 */
+  onPick: (label: string) => void;
+}) {
+  /*
+    시작점 칩 4개 (09-09, 문구는 lib/plan/intro.ts).
+
+    **누르는 것으로 끝나지 않는다.** 예전엔 고르는 즉시 그 문구가 전송돼 AI가 주제를
+    지어냈는데, 지금은 안내 문구만 바꾸고 사용자가 직접 적어 보낸다. 그래서 칩은
+    보낼 때까지 남고 고른 것만 선택 상태로 보인다(다른 칩으로 바꿔 고를 수 있다).
+
+    `grid-cols-4`라 폭이 좁아도 줄이 바뀌지 않고, 칩은 칸을 꽉 채운다.
+    모양은 Chip과 같게 두되 글자를 가운데 놓고 여백을 줄였다 —
+    375px에서 넉 장이 한 줄에 들어가야 해서다.
+  */
+  const base =
+    "flex min-h-11 w-full items-center justify-center whitespace-nowrap rounded-pill px-2 text-body transition-colors duration-200";
+  const idle = "border border-line bg-surface text-ink hover:bg-surface-muted";
+  const on = "border-2 border-berry bg-berry-light font-semibold text-berry-dark";
+  return (
+    <div className="grid grid-cols-4 gap-2">
+      {TOPIC_STARTERS.map((s) => {
+        const selected = s.label === picked;
+        return (
+          <button
+            key={s.label}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onPick(s.label)}
+            className={`${base} ${selected ? on : idle}`}
+          >
+            {s.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
