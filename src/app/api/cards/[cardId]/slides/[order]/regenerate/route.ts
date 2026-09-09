@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { getUidFromRequest } from "@/lib/api/auth";
+import { imageGenGate } from "@/lib/server/ops";
 import { canBuildFromTemplate, photosForSheet } from "@/lib/imagegen/build-sheets";
 import { generateSheet } from "@/lib/imagegen";
 import { storeSlideImage } from "@/lib/imagegen/store";
@@ -27,6 +28,8 @@ export async function POST(
   req: NextRequest,
   ctx: RouteContext<"/api/cards/[cardId]/slides/[order]/regenerate">,
 ) {
+  const gate = await imageGenGate(); // 긴급 스위치 (백오피스 기획 §2-⑤)
+  if (gate) return gate;
   const uid = await getUidFromRequest(req);
   if (!uid) {
     return NextResponse.json({ error: "로그인이 필요해요." }, { status: 401 });

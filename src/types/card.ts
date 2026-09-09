@@ -70,6 +70,15 @@ export type Card = {
 
   caption: Caption | null; // 캡션 생성(F7) 전에는 null
   slides: Slide[]; // 카드뉴스 5~8장 (F8). 생성 전에는 빈 배열
+  /**
+   * 시안 생성 결과 집계 (09-08 · 백오피스 기획 §1-①). 시안 템플릿 경로로 제작된
+   * 카드만 값이 있다 — 렌더러 전용 카드(옛 카드·text-only)는 폴백이 아니라 0이다.
+   *
+   * 장별 진실은 `slide.origin`인데 Firestore가 배열 속성으로는 검색을 못 해서,
+   * 생성 실패 큐·폴백률 집계가 쓸 카드 단위 합계를 따로 둔다. 재생성 적용 시 재계산.
+   */
+  generatedCount?: number; // origin === 'generated' 장 수
+  fallbackCount?: number; // 시안 실패로 렌더러로 물러선 장 수
 
   createdAt: Timestamp;
   updatedAt: Timestamp;

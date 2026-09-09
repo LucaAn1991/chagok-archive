@@ -74,7 +74,17 @@ export async function POST(
     ...(photoUrl ? { sheetPhotoUrls: [photoUrl] } : {}),
   };
   const slides = card.slides.map((s) => (s.order === index ? next : s));
-  await cardRef.update({ slides, updatedAt: FieldValue.serverTimestamp() });
+  // 폴백 집계 재계산 (09-08) — 실패했던 장이 성공으로 바뀌면 큐·폴백률에서 빠져야 한다
+  const generatedCount = slides.filter((s) => s.origin === "generated").length;
+  const fallbackCount = slides.filter(
+    (s) => s.sheetIndex != null && s.origin !== "generated",
+  ).length;
+  await cardRef.update({
+    slides,
+    generatedCount,
+    fallbackCount,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 
   return NextResponse.json({ ok: true, kept: "new", slide: next });
 }

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { getUidFromRequest } from "@/lib/api/auth";
+import { imageGenGate } from "@/lib/server/ops";
 import { generateSlides } from "@/lib/ai/slides";
 import { isClaudeConfigured } from "@/lib/ai/caption";
 import { isStockConfigured } from "@/lib/stock";
@@ -24,6 +25,8 @@ export async function POST(
   req: NextRequest,
   ctx: RouteContext<"/api/cards/[cardId]/render">,
 ) {
+  const gate = await imageGenGate(); // 긴급 스위치 (백오피스 기획 §2-⑤)
+  if (gate) return gate;
   const uid = await getUidFromRequest(req);
   if (!uid) {
     return NextResponse.json({ error: "로그인이 필요해요." }, { status: 401 });
@@ -151,6 +154,9 @@ export async function POST(
               visualType,
               templateId,
               status: "pending",
+              // 폴백 집계 (09-08) — 생성 실패 큐·폴백률이 이 값으로 검색한다
+              generatedCount: built.generated,
+              fallbackCount: built.fallback,
               updatedAt: FieldValue.serverTimestamp(),
             });
 
@@ -204,6 +210,9 @@ export async function POST(
       visualType,
       templateId,
       status: "pending",
+      // 렌더러 전용 경로 — 폴백이 아니라 0으로 리셋한다 (재제작 시 옛 값 잔류 방지)
+      generatedCount: 0,
+      fallbackCount: 0,
       updatedAt: FieldValue.serverTimestamp(),
     });
 
