@@ -3,6 +3,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { getPlanningAI } from "@/lib/ai";
 import { verifyRequest } from "@/lib/server/request-auth";
+import { planningGate } from "@/lib/server/ops";
 
 /**
  * POST /api/plans/[planId]/continue — 이어서 기획하기 (F11 · PLAN §6 · IA 2.4).
@@ -15,6 +16,8 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ planId: string }> },
 ) {
+  const gate = await planningGate(); // 긴급 스위치 (백오피스 기획 §2-⑤)
+  if (gate) return gate;
   const session = await verifyRequest(request);
   if (!session) {
     return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });

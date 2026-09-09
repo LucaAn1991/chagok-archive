@@ -4,6 +4,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { getPlanningAI } from "@/lib/ai";
 import type { PlanningContext } from "@/lib/ai";
 import { verifyRequest } from "@/lib/server/request-auth";
+import { planningGate } from "@/lib/server/ops";
 
 /**
  * POST /api/plans — 기획 세션 생성 (draft) + 첫 턴 (PLAN §6 · F2).
@@ -13,6 +14,8 @@ import { verifyRequest } from "@/lib/server/request-auth";
  * 없으면 AI 인사만 담아 만든다 (① 주제 확인 단계는 주제가 없을 때만 존재).
  */
 export async function POST(request: Request) {
+  const gate = await planningGate(); // 긴급 스위치 (백오피스 기획 §2-⑤)
+  if (gate) return gate;
   const session = await verifyRequest(request);
   if (!session) {
     return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });

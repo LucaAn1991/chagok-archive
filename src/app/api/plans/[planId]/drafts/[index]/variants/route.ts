@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { getPlanningAI } from "@/lib/ai";
 import { verifyRequest } from "@/lib/server/request-auth";
+import { planningGate } from "@/lib/server/ops";
 import type { PlanDraft } from "@/types";
 
 /**
@@ -23,6 +24,8 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ planId: string; index: string }> },
 ) {
+  const gate = await planningGate(); // 긴급 스위치 (백오피스 기획 §2-⑤)
+  if (gate) return gate;
   const session = await verifyRequest(request);
   if (!session) {
     return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
