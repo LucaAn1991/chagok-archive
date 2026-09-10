@@ -7,6 +7,8 @@ import { verifyRequest } from "@/lib/server/request-auth";
 import { planningGate } from "@/lib/server/ops";
 import { ndjson } from "@/lib/server/ndjson";
 import { parseTargeting, parsePromo } from "@/lib/plan/targeting";
+import { PLAN_INTRO_TOPIC_SUGGESTIONS } from "@/lib/plan/intro";
+import { TOPIC_ACCEPTED_REPLY, audienceCandidates, topicFromText } from "@/lib/plan/topic";
 import type { Promo, Targeting } from "@/types";
 import { suffix로 } from "@/lib/josa";
 
@@ -150,17 +152,17 @@ export async function POST(
         });
       }
       if (topic) {
-        // ② 단계에서 멈춤 — 후보를 다시 계산해 준다 (저장된 대화는 그대로)
-        const turn = await ai.ideaTurn(topic, ctx);
+        // ② 단계에서 멈춤 — 대상 후보를 다시 준다 (저장된 대화는 그대로).
+        // 후보는 고정 목록이라 AI를 부르지 않는다 (09-09, lib/plan/topic.ts)
         return NextResponse.json({
-          reply: null, proposal: turn.proposal ?? null, topicSuggestions: null,
+          reply: null, proposal: audienceCandidates(), topicSuggestions: null,
           summary, readyToConfirm: false, isMock,
         });
       }
-      // ① 단계에서 멈춤 — 주제 후보를 다시 계산
-      const turn = await ai.greeting(ctx);
+      // ① 단계에서 멈춤 — 주제 칩을 다시 띄운다. 칩 문구는 화면에 고정돼 있어
+      // AI를 부르지 않고 «① 단계» 신호(빈 배열)만 돌려준다 (09-09, lib/plan/intro.ts)
       return NextResponse.json({
-        reply: null, proposal: null, topicSuggestions: turn.topicSuggestions ?? null,
+        reply: null, proposal: null, topicSuggestions: PLAN_INTRO_TOPIC_SUGGESTIONS,
         summary, readyToConfirm: false, isMock,
       });
     }
@@ -168,17 +170,28 @@ export async function POST(
     // ── 기획안 카드 부분 수정 — AI 호출 없이 반영하고 짧게 답한다 ──
     if (update) {
       const prevTopic: string = planSnap.get("topic") ?? "";
+      const nextTopic = update.topic !== undefined ? topicFromText(update.topic) : prevTopic;
+      const topicChanged = nextTopic !== prevTopic;
+      /*
+        주제가 **실제로** 바뀌면 그 주제에서 파생된 값을 무효화한다 (09-09).
+
+        예전에는 topic만 갈아 끼우고 purposes·intent·drafts를 그대로 뒀다. 그래서
+        기획안이 생긴 뒤 주제를 고치면 옛 주제로 만든 기획안·기획의도가 남아, 다듬기와
+        카드 확정이 옛 산출물을 그대로 썼다(「런던베이글」로 고쳤는데 「고양이」 카드).
+        사용자가 고른 대상(audiences)은 주제와 무관한 선택이라 그대로 둔다.
+        기획안은 화면이 다시 만든다 — 응답의 `topicChanged`가 그 신호다.
+      */
       const merged = {
-        topic: update.topic ?? prevTopic,
+        topic: nextTopic,
         audiences: update.audiences ?? planSnap.get("audiences"),
-        purposes: update.purposes ?? planSnap.get("purposes"),
-        intent: update.intent ?? planSnap.get("intent"),
+        purposes: topicChanged ? [] : (update.purposes ?? planSnap.get("purposes")),
+        intent: topicChanged ? "" : (update.intent ?? planSnap.get("intent")),
       };
 
       // 주제만 바뀐 경우 — 흔적을 대화에 한 줄 남긴다 (08-28).
       // 과거 발화는 고치지 않고, 전/후 주제·시각이 히스토리(messages)에 그대로 남는다
       const topicOnly =
-        update.topic !== undefined && update.topic !== prevTopic &&
+        topicChanged &&
         update.audiences === undefined && update.purposes === undefined &&
         update.intent === undefined;
 
@@ -189,7 +202,7 @@ export async function POST(
        * 부연은 칩이 눈앞에 보이므로 반복하지 않는다.
        */
       const systemEvent = topicOnly
-        ? `주제를 「${update.topic}」${suffix로(update.topic ?? "")} 바꿨어요`
+        ? `주제를 「${nextTopic}」${suffix로(nextTopic)} 바꿨어요`
         : null;
       const reply = topicOnly ? null : "반영했어요. 기획안을 업데이트했습니다.";
 
@@ -202,7 +215,9 @@ export async function POST(
 
       await planRef.update({
         ...merged,
-        seriesTitle: update.topic ?? planSnap.get("seriesTitle") ?? merged.topic,
+        seriesTitle: topicChanged ? nextTopic : (planSnap.get("seriesTitle") ?? merged.topic),
+        // 옛 주제로 만든 기획안(고른 표시 포함)은 비운다 — 화면이 새 주제로 다시 만든다
+        ...(topicChanged ? { drafts: [] } : {}),
         messages: [...planSnap.get("messages"), ...appended],
       });
       return NextResponse.json({
@@ -213,6 +228,8 @@ export async function POST(
         summary: merged,
         // 단계를 앞지르지 않는다 — 대상이 정해진 뒤에만 카드 생성으로 갈 수 있다 (08-28)
         readyToConfirm: merged.audiences.length > 0,
+        // 화면이 기획안·다듬기 상태를 비우고 ③을 다시 돌리는 신호 (09-09)
+        topicChanged,
         isMock,
       });
     }
@@ -266,11 +283,17 @@ export async function POST(
       }, "plans/messages 선택턴");
     }
 
-    // ── 자유 발화·주제 후보 선택 — 주제를 (다시) 잡고 ② 후보를 제시한다 ──
-    return ndjson(async (emit) => {
-      const turn = await ai.ideaTurn(text, ctx, emit);
+    // ── 자유 발화 — 원문을 그대로 주제로 잡고 ② 후보를 제시한다 ──
+    /*
+      **AI를 부르지 않는다** (09-09 확정). 예전에는 `ideaTurn`이 온보딩 분야를 참고해
+      주제를 다듬었는데, 짧게 적으면 분야로 빈칸을 메운 주제가 나왔다. 지금은 사용자가
+      적은 말이 곧 주제다(`lib/plan/topic.ts`). 응답 형식(NDJSON)은 화면이 그대로
+      읽도록 유지한다 — 흘려보낼 글자가 없을 뿐이다.
+    */
+    return ndjson(async () => {
+      const nextTopic = topicFromText(text);
       const merged = {
-        topic: turn.topic ?? topic,
+        topic: nextTopic,
         audiences: [], // 주제가 새로 잡히면 선택은 처음부터 (IA 2.1 순서)
         purposes: [],
         intent: "",
@@ -278,15 +301,17 @@ export async function POST(
       await planRef.update({
         ...merged,
         seriesTitle: "",
+        // 주제가 바뀌었으면 옛 주제의 기획안도 비운다 (update 분기와 같은 규칙)
+        ...(nextTopic !== topic ? { drafts: [] } : {}),
         messages: [
           ...planSnap.get("messages"),
           { role: "user", text, createdAt: now },
-          { role: "assistant", text: turn.reply, createdAt: now },
+          { role: "assistant", text: TOPIC_ACCEPTED_REPLY, createdAt: now },
         ],
       });
       return {
-        reply: turn.reply,
-        proposal: turn.proposal ?? null,
+        reply: TOPIC_ACCEPTED_REPLY,
+        proposal: audienceCandidates(),
         topicSuggestions: null,
         summary: merged,
         readyToConfirm: false,

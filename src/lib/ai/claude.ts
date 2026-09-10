@@ -31,12 +31,20 @@ import type {
 const EFFORT_TURN = "low" as const;
 const EFFORT_CARD = "medium" as const;
 
-/** 온보딩에서 받은 맥락을 시스템 프롬프트 꼬리에 붙인다 */
+/**
+ * 온보딩에서 받은 맥락을 시스템 프롬프트 꼬리에 붙인다 — **말투만** (09-09).
+ *
+ * 「만드는 콘텐츠」(온보딩 분야)는 더 이상 넣지 않는다. 시스템 프롬프트에 화자의
+ * 정체성으로 들어가면 사용자 프롬프트의 주제 한 줄보다 세게 작용해서, 주제가
+ * 「런던베이글 빵집」이어도 «고양이 콘텐츠를 만드는 분이라…»로 목적·기획의도가
+ * 잡히고, 그 값이 ③ 기획안 프롬프트에 «참고»로 실려 카드 제목까지 번졌다.
+ * **지금 사용자가 적은 주제가 유일한 소재 정보다.** 분야는 온보딩 값으로 저장만 되고
+ * 기획 프롬프트 어디에도 들어가지 않는다. `ctx.field`를 받는 형태는 그대로 두되
+ * (호출부·타입을 건드리지 않으려고) 여기서 읽지 않는다.
+ */
 function contextBlock(ctx: { field: string; tone: string }): string {
-  const lines = ["", "사용자 정보:"];
-  lines.push(`- 만드는 콘텐츠: ${ctx.field || "(아직 안 밝힘)"}`);
-  if (ctx.tone) lines.push(`- 선호하는 말투: ${ctx.tone}`);
-  return lines.join("\n");
+  if (!ctx.tone) return "";
+  return ["", "사용자 정보:", `- 선호하는 말투: ${ctx.tone}`].join("\n");
 }
 
 /*
