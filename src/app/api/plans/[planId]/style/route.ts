@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { verifyRequest } from "@/lib/server/request-auth";
+import { getStyleOverlay } from "@/lib/server/ops";
 import { CARD_STYLES, isReady } from "@/lib/render/card-styles";
 import type { StyleId } from "@/types";
 
@@ -45,6 +46,16 @@ export async function PATCH(
     }
     if (!isReady(CARD_STYLES[styleId as StyleId])) {
       return NextResponse.json({ error: "아직 준비 중인 분위기예요." }, { status: 400 });
+    }
+    /*
+      백오피스에서 진열을 내린 템플릿도 막는다 (09-10 · 백오피스 기획 §2-①).
+      화면이 목록에서 빼는 것만으로는 «신규 선택 차단»이 되지 않는다 — 목록을
+      받아둔 채 켜져 있던 탭이나 주소를 직접 찌르는 요청이 그대로 통과한다.
+      이미 그 템플릿으로 저장해둔 기획은 건드리지 않는다(여기는 새로 고르는 길뿐).
+    */
+    const { hidden } = await getStyleOverlay();
+    if (hidden.has(styleId)) {
+      return NextResponse.json({ error: "지금은 고를 수 없는 템플릿이에요." }, { status: 400 });
     }
   }
 

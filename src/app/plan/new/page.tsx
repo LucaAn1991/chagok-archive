@@ -166,6 +166,87 @@ async function saveStyle(planId: string, styleId: StyleId): Promise<void> {
   }
 }
 
+/**
+ * 진열된 템플릿 목록 (09-10 · 백오피스 기획 §2-①).
+ *
+ * 화면이 `STYLE_ORDER`를 직접 읽으면 백오피스에서 내린 템플릿이 그대로 보인다.
+ * 그래서 «무엇을 보여줄지»는 `GET /api/styles`가, «어떻게 그릴지»는 그대로
+ * `card-styles.ts`가 맡는다. 표시 이름도 백오피스 값이 있으면 그걸 쓴다.
+ *
+ * 못 불러오면 코드 정의 그대로 간다 — 운영 설정 하나 때문에 기획을 못 끝내면 안 된다.
+ */
+type ListedStyle = { id: StyleId; label: string; ready: boolean };
+
+const CODE_STYLES: ListedStyle[] = STYLE_ORDER.map((id) => ({
+  id,
+  label: CARD_STYLES[id].label,
+  ready: isReady(CARD_STYLES[id]),
+}));
+
+/**
+ * **고를 수 있는 것들의 순서를 섞는다** (09-02). 고정 순서로 두면 맨 앞 한둘만 눌린다 —
+ * 뒤에 있는 템플릿은 있는 줄도 모르고 지나간다. 가로로 넘겨 보게 만든 것도 같은 이유다.
+ * 쓸 수 없는 것(에셋 준비 중)은 섞지 않고 뒤에 붙인다 — 못 고르는 것이 앞줄에 끼어
+ * 있으면 넘겨 보는 흐름이 끊긴다.
+ *
+ * 그리는 중이 아니라 **목록이 도착한 그때** 한 번 섞는다. 그릴 때마다 섞으면 고르려고
+ * 손을 뻗는 사이에 자리가 바뀐다.
+ *
+ * 백오피스의 진열 순서는 그래서 여기에 반영되지 않는다 — 관리 목록 전용이다
+ * (백오피스 기획 §2-① v1 결정).
+ */
+function shuffleReadyFirst(list: ListedStyle[]): ListedStyle[] {
+  const ready = list.filter((s) => s.ready);
+  const rest = list.filter((s) => !s.ready);
+  for (let i = ready.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [ready[i], ready[j]] = [ready[j], ready[i]];
+  }
+  return [...ready, ...rest];
+}
+
+function useListedStyles(): ListedStyle[] | null {
+  const [styles, setStyles] = useState<ListedStyle[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/styles")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((data: { styles?: { id: string; label?: string; ready?: boolean }[] }) => {
+        // 우리 API지만 모르는 id가 오면 그리다 터진다 — 코드에 있는 것만 남긴다
+        const listed = (data.styles ?? [])
+          .filter((s): s is { id: StyleId; label?: string; ready?: boolean } => s.id in CARD_STYLES)
+          .map((s) => ({
+            id: s.id,
+            label: s.label ?? CARD_STYLES[s.id].label,
+            ready: isReady(CARD_STYLES[s.id]),
+          }));
+        if (alive) setStyles(shuffleReadyFirst(listed.length > 0 ? listed : CODE_STYLES));
+      })
+      .catch(() => {
+        if (alive) setStyles(shuffleReadyFirst(CODE_STYLES));
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return styles;
+}
+
+/**
+ * 추천 한 벌 고르기 — 추천하려던 것이 진열에서 내려갔으면 고를 수 있는 첫 벌로 물러난다.
+ * 목록이 아직이면 코드 기본값을 쓴다(저장은 목록이 온 뒤에만 한다).
+ */
+function pickRecommended(listed: ListedStyle[] | null, hasPhoto: boolean): StyleId {
+  const wanted: StyleId[] = hasPhoto
+    ? ["photo-frame", DEFAULT_STYLE_ID]
+    : [DEFAULT_STYLE_ID, "photo-frame"];
+  if (!listed) return wanted[0];
+  const usable = listed.filter((s) => s.ready);
+  return wanted.find((id) => usable.some((s) => s.id === id)) ?? usable[0]?.id ?? wanted[0];
+}
+
 /** 자동 1회 재시도 (PRD §5-7 ①) — 그다음부터는 사용자가 누른다 */
 async function postWithRetry(path: string, body: unknown, onText?: OnStreamText) {
   try {
@@ -205,6 +286,7 @@ function NewPlanScreen() {
   const [failed, setFailed] = useState<TurnPayload | null>(null);
   const [ready, setReady] = useState(false); // ③으로 넘어갈 수 있는 상태
   const [styleId, setStyleId] = useState<StyleId | null>(null); // ③ 분위기 (09-02)
+  const listedStyles = useListedStyles(); // 진열된 템플릿 (09-10) — null이면 아직 못 받았다
   // 설정 분야를 풀고 시작했는가 (09-02) — 칩을 한 번만 보여주려고 기억한다
   const [freeTopic, setFreeTopic] = useState(false);
   const [isMock, setIsMock] = useState(false);
@@ -403,8 +485,10 @@ function NewPlanScreen() {
     추천값을 **state에 넣지 않고 계산해서 쓴다.** 이펙트 안에서 setState를 부르면
     렌더가 한 번 더 도는데, 사진을 올리거나 지울 때마다 그게 반복된다.
   */
-  const recommendedStyle: StyleId =
-    userPhotos.length > 0 || selectedStocks.length > 0 ? "photo-frame" : DEFAULT_STYLE_ID;
+  const recommendedStyle: StyleId = pickRecommended(
+    listedStyles,
+    userPhotos.length > 0 || selectedStocks.length > 0,
+  );
   const effectiveStyle = styleId ?? recommendedStyle;
 
   /*
@@ -413,11 +497,12 @@ function NewPlanScreen() {
   */
   const defaultStyleSaved = useRef(false);
   useEffect(() => {
-    if (!ready || !planId || styleId !== null || confirmedLock) return;
+    // 진열 목록을 기다린다 — 먼저 저장하면 내려간 템플릿이 기본값으로 박힐 수 있다
+    if (!ready || !planId || styleId !== null || confirmedLock || !listedStyles) return;
     if (defaultStyleSaved.current) return;
     defaultStyleSaved.current = true;
     void saveStyle(planId, recommendedStyle);
-  }, [ready, planId, styleId, confirmedLock, recommendedStyle]);
+  }, [ready, planId, styleId, confirmedLock, recommendedStyle, listedStyles]);
 
   /*
     추천 사진 불러오기 (09-01) — 주제가 정해진 뒤에 한 번만.
@@ -1135,7 +1220,11 @@ function NewPlanScreen() {
                         다시 고르기
                       </button>
                     </div>
-                    <StylePicker selected={effectiveStyle} onPick={pickStyle} />
+                    <StylePicker
+                      styles={listedStyles}
+                      selected={effectiveStyle}
+                      onPick={pickStyle}
+                    />
                   </>
                 )}
 
@@ -1901,7 +1990,10 @@ function ChatInputBar({
 }
 
 /**
- * ⑥ 템플릿 고르기 (09-02) — 6종 중 하나.
+ * ⑥ 템플릿 고르기 (09-02) — 진열된 것 중 하나.
+ *
+ * **목록은 `GET /api/styles`가 준다 (09-10).** 백오피스에서 내린 템플릿은 오지 않고,
+ * 표시 이름을 바꿨으면 그 이름이 온다. 그리는 법은 그대로 `card-styles.ts`가 갖는다.
  *
  * **「분위기」에서 「템플릿」으로 이름을 바꿨다 (09-02).** 원래 「템플릿」은 제작 결과
  * 화면에서 «몇 장을 어떤 순서로»를 고르는 다른 것이었는데, 그 선택을 없애면서
@@ -1917,9 +2009,12 @@ function ChatInputBar({
  * 시안과 다른 결과를 받게 된다.
  */
 function StylePicker({
+  styles,
   selected,
   onPick,
 }: {
+  /** 진열된 목록 (09-10). null이면 아직 못 받았다 */
+  styles: ListedStyle[] | null;
   selected: StyleId | null;
   onPick: (id: StyleId) => void;
 }) {
@@ -1933,30 +2028,24 @@ function StylePicker({
   */
   const [detail, setDetail] = useState<StyleId | null>(null);
 
-  /*
-    **순서를 섞는다** (09-02). 고정 순서로 두면 맨 앞 한둘만 눌린다 —
-    뒤에 있는 템플릿은 있는 줄도 모르고 지나간다. 가로로 넘겨 보게 만든 것도 같은 이유다.
-
-    `useState` 초깃값으로 한 번만 섞는다. 그릴 때마다 섞으면 고르려고 손을 뻗는 사이에
-    자리가 바뀐다. 이 화면은 ⑥에서야 나타나므로 서버에서 그려질 일이 없어
-    («기획안을 고른 뒤»는 브라우저에서 정해진다) 서버·브라우저 순서가 어긋날 걱정도 없다.
-
-    쓸 수 없는 템플릿(에셋 준비 중)은 섞지 않고 뒤에 붙인다 — 못 고르는 것이 앞줄에
-    끼어 있으면 넘겨 보는 흐름이 끊긴다.
-  */
-  const [order] = useState<StyleId[]>(() => {
-    const ready = STYLE_ORDER.filter((id) => isReady(CARD_STYLES[id]));
-    const rest = STYLE_ORDER.filter((id) => !isReady(CARD_STYLES[id]));
-    for (let i = ready.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [ready[i], ready[j]] = [ready[j], ready[i]];
-    }
-    return [...ready, ...rest];
-  });
+  // 순서는 목록을 받을 때 이미 섞여서 온다 (`shuffleReadyFirst`) — 여기선 그대로 그린다
+  const order = styles ?? [];
 
   return (
     <section aria-label="템플릿 고르기" className="flex flex-col gap-3">
       <p className="text-body text-ink">어떤 템플릿으로 만들까요?</p>
+
+      {/* 목록을 기다리는 동안 자리를 잡아둔다 — 칸이 툭 나타나면 누르려던 손이 헛나간다 */}
+      {styles === null && (
+        <div className="flex gap-3 overflow-hidden pb-1" aria-hidden>
+          {[0, 1].map((i) => (
+            <div
+              key={i}
+              className="h-[248px] w-[168px] shrink-0 animate-pulse rounded-lg bg-surface-muted sm:w-[196px]"
+            />
+          ))}
+        </div>
+      )}
 
       {/*
         **가로로 넘겨 본다** (09-02). 세로로 깔면 여섯 장이 화면을 통째로 먹어서,
@@ -1968,9 +2057,8 @@ function StylePicker({
         왼쪽이 뭉텅 사라졌다. 칸 안에서 얌전히 흐르게 둔다.
       */}
       <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-1">
-        {order.map((id) => {
+        {order.map(({ id, label, ready }) => {
           const style = CARD_STYLES[id];
-          const ready = isReady(style);
           const on = selected === id;
           const count = TEMPLATE_SHEETS[id]?.length ?? 0;
 
@@ -1981,7 +2069,7 @@ function StylePicker({
               disabled={!ready}
               onClick={() => setDetail(id)}
               aria-pressed={on}
-              aria-label={`${style.label} 템플릿 자세히 보기${on ? " (지금 고른 것)" : ""}`}
+              aria-label={`${label} 템플릿 자세히 보기${on ? " (지금 고른 것)" : ""}`}
               className={[
                 // 폭을 못박아 마지막 칸이 반쯤 잘리게 한다 — 그게 «더 있다»는 신호다
                 "relative flex w-[168px] shrink-0 snap-start flex-col overflow-hidden rounded-lg border text-left transition-colors duration-200 sm:w-[196px]",
@@ -2014,7 +2102,7 @@ function StylePicker({
               )}
 
               <span className="flex flex-col gap-0.5 p-3">
-                <span className="text-body font-semibold text-ink">{style.label}</span>
+                <span className="text-body font-semibold text-ink">{label}</span>
                 <span className="text-caption text-sub">
                   {ready ? style.hint : "준비 중이에요"}
                 </span>
@@ -2035,6 +2123,7 @@ function StylePicker({
       {detail && (
         <TemplateModal
           styleId={detail}
+          label={order.find((s) => s.id === detail)?.label ?? CARD_STYLES[detail].label}
           selected={selected === detail}
           onPick={() => {
             onPick(detail);
@@ -2058,11 +2147,14 @@ function StylePicker({
  */
 function TemplateModal({
   styleId,
+  label,
   selected,
   onPick,
   onClose,
 }: {
   styleId: StyleId;
+  /** 백오피스 표시 이름이 있으면 그것 (09-10) */
+  label: string;
   selected: boolean;
   onPick: () => void;
   onClose: () => void;
@@ -2100,7 +2192,7 @@ function TemplateModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`${CARD_STYLES[styleId].label} 템플릿 자세히 보기`}
+      aria-label={`${label} 템플릿 자세히 보기`}
       className="overlay-in fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
       onClick={onClose}
     >
@@ -2114,7 +2206,7 @@ function TemplateModal({
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-body font-bold text-ink">{CARD_STYLES[styleId].label}</p>
+            <p className="text-body font-bold text-ink">{label}</p>
             <p className="mt-0.5 text-caption text-sub">{CARD_STYLES[styleId].hint}</p>
           </div>
           <button

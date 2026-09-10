@@ -3,6 +3,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { adminDenied, verifyAdmin } from "@/lib/server/admin-auth";
 import { logAdminAction } from "@/lib/server/admin-log";
+import { invalidateOpsCache } from "@/lib/server/ops";
 import { CARD_STYLES, STYLE_ORDER, isReady, type StyleId } from "@/lib/render/card-styles";
 
 /**
@@ -114,6 +115,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "목록이 최신이 아니에요. 새로고침 해주세요." }, { status: 409 });
     }
     await ref.set({ hidden: [...hidden], names, order: ids }, { merge: false });
+    invalidateOpsCache();
     await logAdminAction({
       actorUid: session.uid,
       actorEmail: session.email,
@@ -159,6 +161,7 @@ export async function PATCH(request: Request) {
   }
 
   await ref.set({ hidden: [...hidden], names, order: savedOrder }, { merge: false });
+  invalidateOpsCache(); // 숨김·이름 변경이 이 인스턴스에 바로 닿게 한다 (다른 인스턴스는 60초)
   await logAdminAction({
     actorUid: session.uid,
     actorEmail: session.email,

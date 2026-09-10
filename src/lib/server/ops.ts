@@ -54,16 +54,33 @@ export const DEFAULT_CONFIG: OpsConfig = {
 const FALLBACK_DISABLED_MESSAGE =
   "지금은 잠시 정비 중이에요. 조금 뒤에 다시 시도해주세요.";
 
+/**
+ * 템플릿 진열 속성 (백오피스 기획 §2-① · `ops/styles`).
+ *
+ * **`order`는 담지 않는다.** 기획 화면이 고를 수 있는 템플릿의 순서를 매번 섞기
+ * 때문이다(plan/new 09-02 — 앞자리 편향 방지). 백오피스의 드래그 정렬은 관리
+ * 목록을 보기 좋게 하는 용도로만 남는다. 서비스 진열 순서 도입은 팀 결정 대기.
+ */
+export type StyleOverlay = {
+  /** 진열에서 뺀 id. **신규 선택만** 막는다 — 이미 그 템플릿으로 만든 카드는 그대로 그려진다 */
+  hidden: Set<string>;
+  /** 백오피스에서 바꾼 표시 이름 (없으면 코드의 label) */
+  names: Record<string, string>;
+};
+
 const FLAGS_TTL_MS = 60 * 1000;
 const CONFIG_TTL_MS = 5 * 60 * 1000;
+const STYLES_TTL_MS = 60 * 1000;
 
 let flagsCache: { value: OpsFlags; at: number } | null = null;
 let configCache: { value: OpsConfig; at: number } | null = null;
+let stylesCache: { value: StyleOverlay; at: number } | null = null;
 
 /** admin API가 값을 바꾼 직후 호출 — 이 서버 인스턴스의 캐시를 비운다 */
 export function invalidateOpsCache(): void {
   flagsCache = null;
   configCache = null;
+  stylesCache = null;
 }
 
 function pickBool(v: unknown, fallback: boolean): boolean {
@@ -133,4 +150,24 @@ export async function planningGate(): Promise<Response | null> {
 export async function imageGenGate(): Promise<Response | null> {
   const flags = await getOpsFlags();
   return flags.imageGenEnabled ? null : disabledResponse(flags);
+}
+
+export async function getStyleOverlay(): Promise<StyleOverlay> {
+  if (stylesCache && Date.now() - stylesCache.at < STYLES_TTL_MS) return stylesCache.value;
+  let value: StyleOverlay = { hidden: new Set(), names: {} };
+  try {
+    const raw = (await adminDb.doc("ops/styles").get()).data() ?? {};
+    value = {
+      hidden: new Set(Array.isArray(raw.hidden) ? (raw.hidden as string[]) : []),
+      names:
+        raw.names && typeof raw.names === "object"
+          ? (raw.names as Record<string, string>)
+          : {},
+    };
+  } catch (e) {
+    // 진열 속성을 못 읽으면 코드 정의 그대로 — 전부 보이는 쪽으로 연다
+    console.error("ops/styles 읽기 실패 — 코드 정의 그대로 동작", e);
+  }
+  stylesCache = { value, at: Date.now() };
+  return value;
 }
