@@ -53,7 +53,7 @@ const FAQS = [
 
 export default function Landing() {
   return (
-    <main className="flex flex-1 flex-col">
+    <main id="main" tabIndex={-1} className="flex flex-1 flex-col">
       {/* 상단 바 — 로고 + 로그인 */}
       <header className="mx-auto flex w-full max-w-[960px] items-center justify-between px-4 py-4">
         <LogoFull width={88} />
@@ -77,7 +77,7 @@ export default function Landing() {
         <div className="mt-8 flex flex-col items-center gap-3">
           <Link
             href="/signup"
-            className="flex h-12 w-full max-w-[320px] items-center justify-center rounded-md bg-berry text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+            className="flex h-12 w-full max-w-[320px] items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-[15px] font-semibold text-on-action transition-colors duration-200 hover:bg-action-hover"
           >
             시작하기
           </Link>
@@ -215,7 +215,7 @@ export default function Landing() {
         </p>
         <Link
           href="/signup"
-          className="mx-auto mt-6 flex h-12 w-full max-w-[320px] items-center justify-center rounded-md bg-berry text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+          className="mx-auto mt-6 flex h-12 w-full max-w-[320px] items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-[15px] font-semibold text-on-action transition-colors duration-200 hover:bg-action-hover"
         >
           시작하기
         </Link>

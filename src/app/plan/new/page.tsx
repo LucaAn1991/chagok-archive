@@ -950,7 +950,7 @@ function NewPlanScreen() {
 
       <div className="flex min-w-0 flex-1 flex-col lg:h-dvh lg:overflow-hidden">
         {/* 간격은 --plan-gap 하나로 관리 (08-31) — 바깥 좌우 여백 = 열 사이 간격 */}
-        <main className="mx-auto flex w-full max-w-[560px] flex-1 flex-col px-[var(--plan-gap)] pb-36 pt-3 [--plan-gap:1rem] md:[--plan-gap:1.5rem] lg:max-w-[1080px] lg:min-h-0 lg:pb-[var(--plan-gap)] lg:pt-4">
+        <main id="main" tabIndex={-1} className="mx-auto flex w-full max-w-[560px] flex-1 flex-col px-[var(--plan-gap)] pb-36 pt-3 [--plan-gap:1rem] md:[--plan-gap:1.5rem] lg:max-w-[1080px] lg:min-h-0 lg:pb-[var(--plan-gap)] lg:pt-4">
           {/* 헤더·탭 — 그대로 (지시 §0) */}
           {/* 헤더 — [←] 와 제목만. 칩은 탭 줄로 옮겼다 (08-31 확정) */}
           <header>
@@ -1319,7 +1319,7 @@ function PlanBox({
                 type="button"
                 onClick={saveEdit}
                 aria-label="기획안 확정"
-                className="flex h-10 w-10 items-center justify-center rounded-md bg-berry text-white"
+                className="flex h-10 w-10 items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-on-action"
               >
                 <Check size={16} aria-hidden />
               </button>
@@ -1478,8 +1478,8 @@ function ReadyActionBar({
               type="button"
               onClick={onConfirm}
               disabled={saving}
-              className="flex h-12 w-full items-center justify-center rounded-md bg-berry text-[15px]
-                         font-semibold text-white transition-colors duration-200 hover:bg-berry-dark
+              className="flex h-12 w-full items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-[15px]
+                         font-semibold text-on-action transition-colors duration-200 hover:bg-action-hover
                          disabled:bg-surface-muted disabled:text-sub"
             >
               {saving ? "고친 내용을 저장하는 중···" : "이대로 카드 만들기"}
@@ -1763,7 +1763,7 @@ function ProposalPicker({
           <button
             type="button"
             onClick={() => onSubmit(targeting, promo)}
-            className="mt-5 flex h-11 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+            className="mt-5 flex h-11 w-full items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-body font-semibold text-on-action transition-colors duration-200 hover:bg-action-hover"
           >
             {picked.length === 0
               ? "이대로 기획안 보기"
@@ -1794,7 +1794,7 @@ function ProposalPicker({
           <button
             type="button"
             onClick={() => onSubmit(targeting, promo)}
-            className="flex h-11 flex-1 items-center justify-center rounded-md bg-berry text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+            className="flex h-11 flex-1 items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-body font-semibold text-on-action transition-colors duration-200 hover:bg-action-hover"
           >
             차곡이 정해줄게요
           </button>
@@ -1891,7 +1891,7 @@ function ChatInputBar({
           type="submit"
           aria-label="전송"
           disabled={disabled}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-berry text-white transition-colors duration-200 hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-on-action transition-colors duration-200 hover:bg-action-hover disabled:bg-surface-muted disabled:text-sub"
         >
           <ArrowUp size={18} aria-hidden />
         </button>
@@ -2007,7 +2007,7 @@ function StylePicker({
 
               {/* 고른 것에 표시를 남긴다 — 테두리만으로는 좁은 화면에서 잘 안 보인다 */}
               {on && (
-                <span className="absolute right-2 top-2 flex items-center gap-1 rounded-pill bg-berry px-2 py-1 text-label font-semibold text-white">
+                <span className="absolute right-2 top-2 flex items-center gap-1 rounded-pill bg-action inset-ring inset-ring-action-border px-2 py-1 text-label font-semibold text-on-action">
                   <Check size={11} strokeWidth={3} aria-hidden />
                   고름
                 </span>
@@ -2179,7 +2179,7 @@ function TemplateModal({
               className={[
                 "size-8 rounded-md border text-label font-semibold transition-colors duration-200",
                 i === at
-                  ? "border-berry bg-berry text-white"
+                  ? "border-berry bg-action inset-ring inset-ring-action-border text-on-action"
                   : "border-line bg-surface text-sub hover:bg-surface-muted",
               ].join(" ")}
             >
@@ -2191,7 +2191,7 @@ function TemplateModal({
         <button
           type="button"
           onClick={onPick}
-          className="mt-4 flex h-12 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+          className="mt-4 flex h-12 w-full items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-body font-semibold text-on-action transition-colors duration-200 hover:bg-action-hover"
         >
           {selected ? "이 템플릿으로 계속하기" : "이 템플릿으로 만들기"}
         </button>

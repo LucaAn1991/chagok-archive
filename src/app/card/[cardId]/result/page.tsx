@@ -13,6 +13,8 @@ import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/PageHeader";
 import StockAttribution from "@/components/StockAttribution";
 import { AI_DISCLOSURE } from "@/lib/ai-disclosure";
+import { CARD_TEMPLATES } from "@/lib/card-templates";
+import { resolveStyle } from "@/lib/render/card-styles";
 import type { Card, Caption, Slide } from "@/types";
 
 /**
@@ -29,7 +31,7 @@ import type { Card, Caption, Slide } from "@/types";
  * @TODO: 발행 의향 팝업(F9) 연결 — 발행 상태 관리 구현 시
  */
 
-type Phase = "loading" | "generating" | "ready" | "error" | "not-found";
+type Phase = "loading" | "confirm" | "generating" | "ready" | "error" | "not-found";
 
 /** 슬라이드 텍스트 슬롯의 한국어 라벨. 없는 키는 키 이름 그대로 보여준다 */
 /**
@@ -529,7 +531,7 @@ async function readRender(
           setPhase("ready");
           await fetchAllSlideImages(data.slides.length, await user.getIdToken());
         } else {
-          await generate();
+          setPhase("confirm");
         }
       } catch {
         setErrorMessage("카드를 불러오지 못했어요.");
@@ -614,12 +616,17 @@ async function readRender(
       ? (card.slides.find((sl) => sl.order === editOrder) ?? null)
       : null;
 
+  const selectedTemplate = card?.templateId ? CARD_TEMPLATES[card.templateId] : null;
+  const selectedStyle = card ? resolveStyle(card.styleId) : null;
+
   return (
     <AppShell width={960}>
       <PageHeader fallbackHref={`/card/${cardId}`} backLabel="돌아가기" />
       <div className="mt-3 flex flex-col gap-6">
       <header className="flex flex-col gap-1 pt-4">
-        <h1 className="text-h3 font-bold text-ink">제작 결과</h1>
+        <h1 className="text-h3 font-bold text-ink">
+          {phase === "confirm" ? "제작 전 확인" : "제작 결과"}
+        </h1>
         {card && <p className="text-body text-sub">{card.title}</p>}
         {isMock && (
           <p className="mt-1 self-start rounded-pill bg-surface-muted px-3 py-1 text-caption text-sub">
@@ -630,6 +637,62 @@ async function readRender(
 
       {/* 슬라이드 */}
       <section aria-label="카드뉴스 슬라이드" className="flex flex-col gap-3">
+        {phase === "confirm" && card && (
+          <div className="flex flex-col gap-5 rounded-lg border border-line bg-surface p-5 md:p-6">
+            <div>
+              <h2 className="text-body-l font-semibold text-ink">이 설정으로 제작할까요?</h2>
+              <p className="mt-1 text-body text-sub">
+                제작을 시작하면 선택한 구성과 기획안을 바탕으로 카드뉴스와 캡션을 만들어요.
+              </p>
+            </div>
+            <dl className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-md bg-surface-muted p-3">
+                <dt className="text-label font-semibold text-sub">구성 템플릿</dt>
+                <dd className="mt-1 text-body font-semibold text-ink">
+                  {selectedTemplate?.label ?? "자동 구성"}
+                </dd>
+                <p className="mt-0.5 text-caption text-sub">
+                  {selectedTemplate?.hint ?? "기획안에 맞춰 장수와 구성을 정해요."}
+                </p>
+              </div>
+              <div className="rounded-md bg-surface-muted p-3">
+                <dt className="text-label font-semibold text-sub">비주얼 스타일</dt>
+                <dd className="mt-1 text-body font-semibold text-ink">{selectedStyle?.label}</dd>
+                <p className="mt-0.5 text-caption text-sub">{selectedStyle?.hint}</p>
+                {card.styleId && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={`/api/styles/${card.styleId}/preview?sheet=1`}
+                    alt={`${selectedStyle?.label} 템플릿 미리보기`}
+                    className="mt-3 aspect-square w-28 rounded-sm border border-line bg-surface object-cover"
+                  />
+                )}
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-label font-semibold text-sub">기획안</dt>
+                <dd className="mt-1 break-keep text-body font-semibold text-ink">{card.title}</dd>
+                <p className="mt-1 break-keep text-caption text-sub">
+                  {card.audience} · {card.intent}
+                </p>
+              </div>
+            </dl>
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href={`/card/${cardId}`}
+                className="flex h-11 items-center justify-center rounded-md border-2 border-berry bg-surface px-5 text-body font-semibold text-berry hover:bg-berry-light hover:text-berry-dark"
+              >
+                수정하기
+              </Link>
+              <button
+                type="button"
+                onClick={() => void generate()}
+                className="flex h-11 items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border px-5 text-body font-semibold text-on-action hover:bg-action-hover"
+              >
+                이대로 제작하기
+              </button>
+            </div>
+          </div>
+        )}
         {/*
           만드는 동안의 안내 (09-02).
 
@@ -794,8 +857,8 @@ async function readRender(
                   type="button"
                   onClick={downloadSlides}
                   disabled={downloading}
-                  className="h-11 rounded-md bg-berry px-5 text-body font-semibold text-white
-                             hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+                  className="h-11 rounded-md bg-action inset-ring inset-ring-action-border px-5 text-body font-semibold text-on-action
+                             hover:bg-action-hover disabled:bg-surface-muted disabled:text-sub"
                 >
                   {downloading ? "···" : `이미지 ${slideUrls.filter(Boolean).length}장 저장`}
                 </button>
@@ -915,8 +978,8 @@ async function readRender(
                 type="button"
                 onClick={saveCaption}
                 disabled={saving}
-                className="h-11 rounded-md bg-berry px-5 text-body font-semibold text-white
-                           hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+                className="h-11 rounded-md bg-action inset-ring inset-ring-action-border px-5 text-body font-semibold text-on-action
+                           hover:bg-action-hover disabled:bg-surface-muted disabled:text-sub"
               >
                 {saving ? "···" : "저장"}
               </button>

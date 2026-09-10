@@ -111,12 +111,11 @@ export default function CardThumb({ card, className }: { card: Card; className: 
       />
       <Sparkles size={20} aria-hidden className="relative" />
       {/*
-        제작 전인 카드만 «대기중»이라 적는다. 이미 만든 카드는 사진이 없을 뿐
-        대기중이 아니라, 그렇게 적으면 상태 배지와 어긋난다.
+        **글자를 넣지 않는다** (09-08). 「아직 제작 대기중이에요」를 적고 있었는데,
+        이 그림을 쓰는 두 자리(`FeaturedContentCard` · `TodayCardRail`)가 바로 아래에
+        `StatusBadge` 「제작 대기」를 함께 그린다 — 같은 사실을 40px 간격으로 두 번 말했다.
+        무늬와 ✦만 남기고 상태는 배지 하나가 맡는다.
       */}
-      {card.status === "planned" && (
-        <span className="relative text-label font-semibold">아직 제작 대기중이에요</span>
-      )}
     </div>
   );
 }

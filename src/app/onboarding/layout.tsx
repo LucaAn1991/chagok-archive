@@ -49,7 +49,7 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
 
   if (!allowed) {
     return (
-      <main className="flex flex-1 items-center justify-center p-4">
+      <main id="main" tabIndex={-1} className="flex flex-1 items-center justify-center p-4">
         <p className="text-body text-sub">불러오는 중...</p>
       </main>
     );

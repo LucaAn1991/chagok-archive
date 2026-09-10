@@ -64,7 +64,7 @@ export default function MissedPage() {
 
   if (!uid) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
+      <main id="main" tabIndex={-1} className="flex min-h-screen items-center justify-center">
         <p className="text-body text-sub">불러오는 중…</p>
       </main>
     );
@@ -314,14 +314,20 @@ function MissedView({ uid }: { uid: string }) {
                     <p className="mt-1 text-body text-sub">{card.audience}</p>
 
                     <div className="mt-4 flex flex-wrap items-center gap-2">
-                      {/* 제작 대기 카드는 다음 행동이 «제작» — 제일 앞, primary (09-01) */}
+                      {/* 지난 예정일의 제작은 막고, 날짜 재지정 뒤에만 다시 열어준다. */}
                       {card.status === "planned" && (
-                        <Link
-                          href={`/card/${card.id}/result`}
-                          className="flex h-9 items-center rounded-md bg-berry px-3 text-body font-semibold text-white hover:bg-berry-dark"
-                        >
-                          제작하기
-                        </Link>
+                        <span className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            disabled
+                            className="flex h-9 items-center rounded-md bg-surface-muted px-3 text-body font-semibold text-sub"
+                          >
+                            제작하기
+                          </button>
+                          <span className="text-caption text-sub">
+                            날짜를 오늘 이후로 옮기면 제작할 수 있어요.
+                          </span>
+                        </span>
                       )}
                       {publishId === card.id ? (
                         <span className="flex flex-wrap items-center gap-2">
@@ -338,7 +344,7 @@ function MissedView({ uid }: { uid: string }) {
                             type="button"
                             disabled={busy || !publishDate}
                             onClick={() => void markPublished(card)}
-                            className="h-9 rounded-md bg-berry px-3 text-body font-semibold text-white hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+                            className="h-9 rounded-md bg-action inset-ring inset-ring-action-border px-3 text-body font-semibold text-on-action hover:bg-action-hover disabled:bg-surface-muted disabled:text-sub"
                           >
                             확인
                           </button>
@@ -362,7 +368,7 @@ function MissedView({ uid }: { uid: string }) {
                           className={
                             card.status === "planned"
                               ? "h-9 rounded-md border-2 border-berry bg-surface px-3 text-body font-semibold text-berry hover:bg-berry-light hover:text-berry-dark disabled:border-line disabled:text-sub"
-                              : "h-9 rounded-md bg-berry px-3 text-body font-semibold text-white hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+                              : "h-9 rounded-md bg-action inset-ring inset-ring-action-border px-3 text-body font-semibold text-on-action hover:bg-action-hover disabled:bg-surface-muted disabled:text-sub"
                           }
                         >
                           올렸어요

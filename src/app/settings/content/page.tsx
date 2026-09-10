@@ -197,7 +197,7 @@ export default function ContentSettingsPage() {
       <div className="flex flex-1 flex-col">
         <AppTopNav />
         <div className="flex min-w-0 flex-1 flex-col">
-          <main className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
+          <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
             <div aria-hidden className="flex animate-pulse flex-col gap-4">
               <div className="h-8 w-40 rounded-md bg-surface-muted" />
               <div className="h-32 rounded-lg bg-surface-muted" />
@@ -215,7 +215,7 @@ export default function ContentSettingsPage() {
       <div className="flex flex-1 flex-col">
         <AppTopNav />
         <div className="flex min-w-0 flex-1 flex-col">
-          <main className="mx-auto flex w-full max-w-[960px] flex-1 flex-col items-center justify-center gap-3 p-4">
+          <main id="main" tabIndex={-1} className="mx-auto flex w-full max-w-[960px] flex-1 flex-col items-center justify-center gap-3 p-4">
             <h1 className="text-h3 font-bold text-ink">설정을 불러오지 못했어요</h1>
             <button
               type="button"
@@ -236,7 +236,7 @@ export default function ContentSettingsPage() {
       <AppTopNav />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <main className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
+        <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
           <PageHeader fallbackHref="/" backLabel="돌아가기" />
 
           <div className="mt-2">
@@ -470,8 +470,8 @@ export default function ContentSettingsPage() {
               type="button"
               onClick={save}
               disabled={saving || !dirty}
-              className="h-12 rounded-md bg-berry text-[15px] font-semibold text-white
-                         hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+              className="h-12 rounded-md bg-action inset-ring inset-ring-action-border text-[15px] font-semibold text-on-action
+                         hover:bg-action-hover disabled:bg-surface-muted disabled:text-sub"
             >
               {saving ? "저장하는 중…" : "저장"}
             </button>

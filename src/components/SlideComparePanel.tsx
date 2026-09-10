@@ -79,7 +79,7 @@ export default function SlideComparePanel({
           type="button"
           onClick={() => onKeep(choice)}
           disabled={busy}
-          className="mt-4 flex h-11 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark disabled:opacity-60"
+          className="mt-4 flex h-11 w-full items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-body font-semibold text-on-action transition-colors duration-200 hover:bg-action-hover disabled:opacity-60"
         >
           {busy ? "바꾸는 중···" : choice === "new" ? "새 그림으로 바꾸기" : "지금 것 그대로 두기"}
         </button>

@@ -22,7 +22,6 @@ import NoticeBanner from "@/components/NoticeBanner";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import FeaturedContentCard from "@/components/FeaturedContentCard";
 import TodayCardRail from "@/components/TodayCardRail";
-import PageHeader from "@/components/PageHeader";
 import { formatMonthDayWeekday } from "@/lib/format";
 import { greetingFor, kstToday } from "@/lib/greetings";
 import { isConsentCurrent } from "@/lib/legal/consent-client";
@@ -305,7 +304,7 @@ function Home({ uid }: { uid: string }) {
           모든 폭에서 같은 것을 그리게 되면서 두 줄이 겹쳐 지웠다.
         */}
         {/* 홈 최대 폭 960 (DESIGN.md §4) · 하단 탭에 가리지 않게 모바일만 여유 패딩 */}
-        <main className="mx-auto w-full max-w-[960px] flex-1 px-4 py-3 pb-20 md:p-6 md:pb-8 min-[1200px]:p-8">
+        <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[960px] flex-1 px-4 py-3 pb-20 md:p-6 md:pb-8 min-[1200px]:p-8">
           {state.phase === "loading" && <HomeSkeleton />}
           {state.phase === "error" && (
             <HomeError
@@ -325,6 +324,12 @@ function Home({ uid }: { uid: string }) {
     </div>
   );
 }
+
+/**
+ * 오늘 카드가 여러 장일 때, 첫 장 아래 가로 줄에 곁들이는 최대 장수 (DESIGN §9).
+ * 첫 장까지 합쳐 5장. 넘치는 것은 아래 「이번 주 콘텐츠」 목록이 받는다.
+ */
+const TODAY_RAIL_MAX = 4;
 
 /** 상대일 표기 — 내일 / 모레 / «9월 5일에» (요일 없이) */
 function relativeDayLabel(dateKey: string, todayKey: string): string {
@@ -392,11 +397,13 @@ function HomeReady({
   return (
     <div className="flex flex-col gap-4 md:gap-8">
       {/*
-        홈은 최상위 화면이라 뒤로가기를 그리지 않는다 (09-04).
-        `isRoot`가 바로 이 상황을 위해 있었는데(09-02 신설) 홈에만 안 붙어 있었다 —
-        로그인을 거쳐 들어오면 좌상단에 화살표가 생기고, 눌러봐야 로그인 화면으로 나갔다.
+        홈은 최상위 화면이라 뒤로가기도 화면 제목도 없다 (09-04).
+
+        **09-08 — `<PageHeader isRoot />`를 지웠다.** `isRoot`면 화살표가 없고
+        `title`·`action`도 안 넘기니 `PageHeader`는 `return null`이었다 —
+        아무것도 그리지 않는 컴포넌트를 마운트만 하고 있었다.
+        `isRoot`는 다른 화면에서 계속 쓰이므로 `PageHeader` 쪽은 그대로 둔다.
       */}
-      <PageHeader isRoot />
       {/*
         인사 한 줄 + 오늘 날짜 — 이모지 없음, KST 고정 9구간 (09-01, lib/greetings.ts)
 
@@ -406,7 +413,7 @@ function HomeReady({
         인사는 그 하나가 아니다. 한 줄 메타로 내리고 자리를 아래에 넘긴다.
       */}
       <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <h1 className="text-body font-semibold text-sub">{greetingFor(now)}</h1>
+        <p className="text-body font-semibold text-sub">{greetingFor(now)}</p>
         <span className="text-caption text-sub">{formatMonthDayWeekday(kstToday(now))}</span>
       </header>
 
@@ -419,7 +426,7 @@ function HomeReady({
 
       {situation === "A" && todayCard && (
         <section>
-          <p className="break-keep text-h2 font-bold leading-snug text-ink">
+          <h1 className="break-keep text-h2 font-bold leading-snug text-ink">
             {/*
               여러 장이면 개수를 말한다 (09-03). 「콘텐츠에요!」만 있으면 큰 카드가
               하나뿐이라 «오늘 할 일이 하나»로 읽힌다 — 실제로 그렇게 읽혔다.
@@ -427,16 +434,23 @@ function HomeReady({
             {todayCards.length > 1
               ? `오늘 올릴 콘텐츠가 ${todayCards.length}개 있어요!`
               : "오늘 올릴 콘텐츠에요! 바로 제작해볼까요?"}
-          </p>
-          <div className="mt-3 md:mt-4">
-            {todayCards.length > 1 ? (
-              <TodayCardRail cards={todayCards} />
-            ) : (
-              <FeaturedContentCard
-                card={todayCard}
-                ctaLabel="제작하기"
-                ctaHref={`/card/${todayCard.id}/result`}
-              />
+          </h1>
+          {/*
+            **개수는 문장이 말하고, 무게는 첫 장이 가진다** (09-08, DESIGN §9 개정).
+
+            09-03엔 여러 장이면 가로 줄에 «동등한 카드»를 늘어놓았다. 오늘 7장이면
+            같은 크기·같은 색의 [제작하기]가 7개 서서, §0의 「주 버튼과 보조 버튼을
+            같은 크기로 두지 않는다」·§6의 「한 화면에 primary는 1개」·§9의
+            「하나를 정해서 보여준다」에 한꺼번에 걸렸다.
+
+            09-03이 실제로 고친 것은 **헤드라인**이었다(개수를 말해준다). 그 문장은
+            그대로 두고 무게만 나눈다 — 첫 장은 Featured + primary, 나머지는 곁들임.
+          */}
+          <div className="mt-3 flex flex-col gap-3 md:mt-4">
+            <FeaturedContentCard card={todayCard} ctaHref={`/card/${todayCard.id}/result`} />
+            {/* 곁들임은 최대 4장 — 첫 장까지 5장. 넘치는 것은 아래 목록이 받는다 */}
+            {todayCards.length > 1 && (
+              <TodayCardRail cards={todayCards.slice(1, 1 + TODAY_RAIL_MAX)} />
             )}
           </div>
         </section>
@@ -444,9 +458,9 @@ function HomeReady({
 
       {situation === "B" && (
         <section>
-          <p className="break-keep text-h2 font-bold leading-snug text-ink">
+          <h1 className="break-keep text-h2 font-bold leading-snug text-ink">
             오늘 발행일이에요! 오늘은 어떤 콘텐츠를 올리고 싶으세요?
-          </p>
+          </h1>
           <div className="mt-4">
             <OneLineIdeaInput />
           </div>
@@ -455,15 +469,11 @@ function HomeReady({
 
       {situation === "C" && nextCard && (
         <section>
-          <p className={"break-keep text-h2 font-bold leading-snug text-ink"}>
+          <h1 className="break-keep text-h2 font-bold leading-snug text-ink">
             {relativeDayLabel(nextCard.scheduledDate, todayKey)} 올릴 콘텐츠에요!
-          </p>
+          </h1>
           <div className="mt-3 md:mt-4">
-            <FeaturedContentCard
-              card={nextCard}
-              ctaLabel="미리 제작하기"
-              ctaHref={`/card/${nextCard.id}/result`}
-            />
+            <FeaturedContentCard ahead card={nextCard} ctaHref={`/card/${nextCard.id}/result`} />
           </div>
         </section>
       )}
@@ -471,9 +481,9 @@ function HomeReady({
       {situation === "E" && (
         /* 날짜 없는 카드가 그날의 주 행동 (§6) — 하단 C 줄은 이때 중앙으로 올라와 숨긴다 */
         <section>
-          <p className="break-keep text-h2 font-bold leading-snug text-ink">
+          <h1 className="break-keep text-h2 font-bold leading-snug text-ink">
             언젠가 올릴 콘텐츠가 {somedayCards.length}개 있어요. 날짜를 정해볼까요?
-          </p>
+          </h1>
           <div className="mt-4">
             <AssignDatesControl
               cards={somedayCards}
@@ -488,7 +498,7 @@ function HomeReady({
 
       {situation === "D" && (
         <section>
-          <p className="break-keep text-h2 font-bold leading-snug text-ink">요즘 올리고 싶은 거 있으세요? 여러 개여도 좋아요</p>
+          <h1 className="break-keep text-h2 font-bold leading-snug text-ink">요즘 올리고 싶은 거 있으세요? 여러 개여도 좋아요</h1>
           <div className="mt-4">
             <IdeaInput />
           </div>
@@ -520,8 +530,9 @@ function HomeReady({
         weekCards={weekCards}
         futureCards={futureCards}
         excludeIds={
+          /* 위에 실제로 보여준 것만 뺀다 — 상한(5장)을 넘긴 카드는 이 목록이 받는다 */
           situation === "A"
-            ? todayCards.map((c) => c.id)
+            ? todayCards.slice(0, 1 + TODAY_RAIL_MAX).map((c) => c.id)
             : nextCard
               ? [nextCard.id]
               : []
@@ -573,7 +584,7 @@ function OneLineIdeaInput() {
       <button
         type="submit"
         aria-label="담기"
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-berry text-white transition-colors duration-200 hover:bg-berry-dark"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-on-action transition-colors duration-200 hover:bg-action-hover"
       >
         <ArrowUp size={18} aria-hidden />
       </button>
@@ -626,7 +637,7 @@ function CardRow({ card }: { card: Card }) {
     */
     <Link
       href={`/card/${card.id}`}
-      className="group -mx-2 flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5
+      className="group -mx-2 flex min-h-11 min-w-0 items-center gap-2 rounded-md px-2 py-1.5
                  transition-colors duration-200 hover:bg-berry-light"
     >
       <span
@@ -653,7 +664,7 @@ function DateGroupedList({ cards, todayKey }: { cards: DatedCard[]; todayKey: st
         <div key={group.dateKey} className="flex gap-3">
           <span
             className={[
-              "w-16 shrink-0 pt-1 text-caption",
+              "flex min-h-11 w-16 shrink-0 items-center self-start text-caption",
               group.dateKey === todayKey ? "font-semibold text-berry-dark" : "text-sub",
             ].join(" ")}
           >
@@ -729,22 +740,32 @@ function UpcomingSection({
 
   return (
     <section className="border-y border-line py-2.5">
-      <div className="flex items-baseline justify-between gap-3">
+      {/*
+        **좁은 폭에서는 링크가 아랫줄로 내려간다** (09-08). 「캘린더에서 보기」로 이름을
+        늘리면서 390px에서 한 줄에 다 들어가지 않게 됐다 — 탭을 줄여 글자를 자르는
+        대신 줄을 바꾼다. 탭 이름과 개수가 잘리면 이 줄이 하는 일이 사라진다.
+      */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         {tabs.length === 1 ? (
           <h2 className="text-title font-bold text-ink">{active.label}</h2>
         ) : (
-          <div role="tablist" aria-label="앞으로 올릴 콘텐츠" className="flex min-w-0 gap-1">
+          /*
+            **`role="tab"`을 뗐다** (09-08). `tablist`·`tab`만 있고 `tabpanel`도
+            `aria-controls`도 화살표 키 이동도 없어서, 보조기기에는 「탭이라고 주장하지만
+            탭처럼 굴지 않는 것」이었다. 실제 하는 일은 목록 필터 두 개를 켜고 끄는 것이라
+            **누름 상태를 가진 버튼**(`aria-pressed`)이 정확하다. 코드도 줄어든다.
+          */
+          <div role="group" aria-label="앞으로 올릴 콘텐츠" className="flex min-w-0 gap-1">
             {tabs.map((tab) => {
               const on = tab.key === active.key;
               return (
                 <button
                   key={tab.key}
                   type="button"
-                  role="tab"
-                  aria-selected={on}
+                  aria-pressed={on}
                   onClick={() => setPicked(tab.key)}
                   className={[
-                    "flex h-9 items-center gap-1.5 rounded-md px-2.5 transition-colors duration-200",
+                    "flex h-11 items-center gap-1.5 rounded-md px-2.5 transition-colors duration-200",
                     on
                       ? "bg-berry-light font-bold text-berry-dark"
                       : "text-sub hover:bg-surface-muted hover:text-ink",
@@ -758,18 +779,31 @@ function UpcomingSection({
           </div>
         )}
 
-        {/* 배정 카드 전체 목록은 캘린더가 담당 — 새 페이지를 만들지 않는다 */}
+        {/*
+          배정 카드 전체 목록은 캘린더가 담당 — 새 페이지를 만들지 않는다.
+          이름을 「전체보기」에서 바꿨다 (09-08) — «무엇의» 전체인지 말하지 않아서
+          누르기 전엔 어디로 가는지 알 수 없었다. 갈 곳을 그대로 적는다.
+        */}
         <Link
           href="/calendar"
-          className="shrink-0 text-caption font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
+          className="ml-auto flex h-11 shrink-0 items-center px-1 text-caption font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
         >
-          전체보기
+          캘린더에서 보기
         </Link>
       </div>
 
+      {/* 「남아있다」는 밀린 일감처럼 읽힌다 — §1 Calm에 맞춰 세기만 한다 (09-08) */}
       {tabs.length === 1 && (
-        <p className="mt-0.5 text-caption text-sub">{active.cards.length}개 남아있어요</p>
+        <p className="mt-0.5 text-caption text-sub">{active.cards.length}개 있어요</p>
       )}
+
+      {/*
+        목록이 통째로 갈리는 것을 소리로도 알린다 (09-08). 버튼의 누름 상태는
+        바뀌었다고 읽히지만, **아래 목록이 다른 것으로 바뀐 사실**은 말해주지 않는다.
+      */}
+      <p role="status" className="sr-only">
+        {active.label} {active.cards.length}개
+      </p>
 
       <div className="mt-2">
         <DateGroupedList cards={active.cards} todayKey={active.today} />
@@ -806,7 +840,7 @@ function CollapsedSomeday({
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
-          className="flex min-w-0 items-center gap-1 text-body text-sub transition-colors duration-200 hover:text-ink"
+          className="flex min-h-11 min-w-0 items-center gap-1 text-body text-sub transition-colors duration-200 hover:text-ink"
         >
           <ChevronRight
             size={16}
@@ -876,8 +910,8 @@ function AssignDatesControl({
         onClick={() => setConfirmOpen(true)}
         className={
           primary
-            ? "flex h-11 items-center justify-center rounded-md bg-berry px-6 text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
-            : "shrink-0 text-caption font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
+            ? "flex h-11 items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border px-6 text-body font-semibold text-on-action transition-colors duration-200 hover:bg-action-hover"
+            : "flex h-11 shrink-0 items-center text-caption font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
         }
       >
         날짜 정해주기
@@ -907,7 +941,7 @@ function AssignDatesControl({
             <button
               type="button"
               onClick={() => void run()}
-              className="flex h-10 items-center justify-center rounded-md bg-berry px-4 text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+              className="flex h-10 items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border px-4 text-body font-semibold text-on-action transition-colors duration-200 hover:bg-action-hover"
             >
               이대로 정하기
             </button>
@@ -971,7 +1005,7 @@ function IdeaInput() {
       <button
         type="submit"
         aria-label="전송"
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-berry text-white transition-colors duration-200 hover:bg-berry-dark"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-on-action transition-colors duration-200 hover:bg-action-hover"
       >
         <ArrowUp size={18} aria-hidden />
       </button>
@@ -983,10 +1017,21 @@ function IdeaInput() {
    로딩 · 에러
    ============================================================ */
 
+/**
+ * Auth 판정 대기 — 로그인인지 아닌지 아직 모르는 아주 짧은 구간.
+ *
+ * **09-08 — 글자에서 골격으로 바꿨다.** 「불러오는 중...」 텍스트와 `HomeSkeleton`의
+ * 회색 골격, 같은 「로딩」에 두 가지 말투가 있었다. 골격 쪽을 남긴 이유는 ① 글자는
+ * 읽히는 순간 사라져서 깜빡임으로 보이고 ② 여기서 로그인이면 곧 홈 골격이 이어지므로
+ * 같은 언어로 말하는 편이 이어 붙는다. 로그아웃이면 랜딩이 덮는다.
+ */
 function FullPageLoading() {
   return (
-    <main className="flex flex-1 items-center justify-center p-4">
-      <p className="text-body text-sub">불러오는 중...</p>
+    <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[960px] flex-1 p-4 md:p-6">
+      <div aria-hidden className="flex animate-pulse flex-col gap-4 pt-2">
+        <div className="h-7 w-56 rounded-sm bg-surface-muted" />
+        <div className="h-5 w-72 rounded-sm bg-surface-muted" />
+      </div>
     </main>
   );
 }

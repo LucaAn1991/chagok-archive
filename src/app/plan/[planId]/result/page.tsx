@@ -87,7 +87,7 @@ function PlanResultScreen() {
       <AppTopNav />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <main className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
+        <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
           <PageHeader fallbackHref="/plan/history" backLabel="지난 기획" />
 
           {state.phase === "loading" && (
@@ -118,7 +118,7 @@ function PlanResultScreen() {
               <p className="text-body-l text-ink">이 기획으로 만든 카드가 없어요.</p>
               <Link
                 href="/plan/new"
-                className="mt-6 flex h-11 items-center justify-center rounded-md bg-berry px-6 text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+                className="mt-6 flex h-11 items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border px-6 text-body font-semibold text-on-action transition-colors duration-200 hover:bg-action-hover"
               >
                 새 기획 시작하기
               </Link>
@@ -160,7 +160,7 @@ function PlanResultScreen() {
               <div className="mt-6 flex flex-col gap-2">
                 <Link
                   href="/"
-                  className="flex h-12 w-full items-center justify-center rounded-md bg-berry text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+                  className="flex h-12 w-full items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-[15px] font-semibold text-on-action transition-colors duration-200 hover:bg-action-hover"
                 >
                   홈으로 가기
                 </Link>

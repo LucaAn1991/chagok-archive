@@ -107,7 +107,7 @@ function TargetRow({
             onClick={() => onToggle(o)}
             className={[
               "h-8 rounded-pill px-3 text-label font-semibold transition-colors duration-200 disabled:opacity-60",
-              on ? "bg-berry text-white" : "border border-line bg-surface text-ink hover:bg-surface-muted",
+              on ? "bg-action inset-ring inset-ring-action-border text-on-action" : "border border-line bg-surface text-ink hover:bg-surface-muted",
             ].join(" ")}
           >
             {o}

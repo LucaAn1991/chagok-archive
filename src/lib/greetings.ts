@@ -6,7 +6,7 @@
  * 9구간이 빈틈없이 0~24시를 덮는다 — 어떤 시각에도 문구가 비면 안 된다.
  */
 
-export type GreetingSlot = {
+type GreetingSlot = {
   /** 시작 시(포함, KST) */
   start: number;
   /** 끝 시(제외, KST) */
@@ -14,7 +14,7 @@ export type GreetingSlot = {
   text: string;
 };
 
-export const GREETING_SLOTS: GreetingSlot[] = [
+const GREETING_SLOTS: GreetingSlot[] = [
   { start: 0, end: 5, text: "늦은 시간까지 고생 많으세요" },
   { start: 5, end: 7, text: "오늘 일찍 시작하셨네요" },
   { start: 7, end: 11, text: "좋은 아침이에요!" },

@@ -152,7 +152,7 @@ export default function AccountSettingsPage() {
       <div className="flex flex-1 flex-col">
         <AppTopNav />
         <div className="flex min-w-0 flex-1 flex-col">
-          <main className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
+          <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
             <div aria-hidden className="flex animate-pulse flex-col gap-4">
               <div className="h-8 w-32 rounded-md bg-surface-muted" />
               <div className="h-24 rounded-lg bg-surface-muted" />
@@ -170,7 +170,7 @@ export default function AccountSettingsPage() {
       <AppTopNav />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <main className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
+        <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[960px] flex-1 p-4 pb-24 md:p-6 md:pb-8 min-[1200px]:p-8">
           <PageHeader fallbackHref="/" backLabel="돌아가기" />
 
           <div className="mt-2">
@@ -224,8 +224,8 @@ export default function AccountSettingsPage() {
                     type="button"
                     onClick={() => void saveNickname()}
                     disabled={savingNickname}
-                    className="h-11 rounded-md bg-berry px-5 text-body font-semibold text-white
-                               transition-colors duration-200 hover:bg-berry-dark
+                    className="h-11 rounded-md bg-action inset-ring inset-ring-action-border px-5 text-body font-semibold text-on-action
+                               transition-colors duration-200 hover:bg-action-hover
                                disabled:bg-surface-muted disabled:text-sub"
                   >
                     {savingNickname ? "저장하는 중···" : "저장"}
@@ -298,8 +298,8 @@ export default function AccountSettingsPage() {
                 type="button"
                 onClick={changePassword}
                 disabled={changing || !current || !next}
-                className="h-12 rounded-md bg-berry text-[15px] font-semibold text-white
-                           hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+                className="h-12 rounded-md bg-action inset-ring inset-ring-action-border text-[15px] font-semibold text-on-action
+                           hover:bg-action-hover disabled:bg-surface-muted disabled:text-sub"
               >
                 {changing ? "바꾸는 중…" : "비밀번호 바꾸기"}
               </button>

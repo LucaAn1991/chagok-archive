@@ -48,7 +48,7 @@ export default function BrandPanel() {
     <section
       aria-label="차곡 소개"
       className="hidden w-3/5 shrink-0 items-center justify-center border-r
-                 border-line bg-berry-tint p-16 desktop:flex"
+                 border-line bg-surface-muted p-16 desktop:flex"
     >
       <div className="w-full max-w-[560px]">
         {/* 로고 — 실제 아트워크 (08-31). 글자까지 들어간 전체 마크를 쓴다 */}
@@ -108,7 +108,7 @@ function FeatureCarousel() {
             >
               <span
                 className="flex size-8 items-center justify-center self-start rounded-pill
-                           bg-berry text-caption font-bold text-white"
+                           bg-action inset-ring inset-ring-action-border text-caption font-bold text-on-action"
               >
                 {`0${i + 1}`}
               </span>
@@ -202,7 +202,7 @@ function CalendarMockup() {
               key={day}
               className={
                 day === "27"
-                  ? "flex size-7 items-center justify-center justify-self-center rounded-pill bg-berry text-caption font-bold text-white"
+                  ? "flex size-7 items-center justify-center justify-self-center rounded-pill bg-action inset-ring inset-ring-action-border text-caption font-bold text-on-action"
                   : "flex size-7 items-center justify-center justify-self-center text-caption text-sub"
               }
             >

@@ -118,7 +118,7 @@ export function TopicLine({
         type="button"
         onClick={save}
         aria-label="주제 확정"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-berry text-white transition-colors duration-200 hover:bg-berry-dark"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-on-action transition-colors duration-200 hover:bg-action-hover"
       >
         <Check size={16} aria-hidden />
       </button>
@@ -221,7 +221,7 @@ function EditableRow({
           type="button"
           onClick={save}
           aria-label="저장"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-berry text-white transition-colors duration-200 hover:bg-berry-dark"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-on-action transition-colors duration-200 hover:bg-action-hover"
         >
           <Check size={16} aria-hidden />
         </button>
