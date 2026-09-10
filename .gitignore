@@ -124,3 +124,8 @@ desktop.ini
 # 파일이 바뀔 때마다 통째로 갈려서 diff가 의미 없다.
 # 필요하면 `/graphify .`로 각자 다시 만든다.
 graphify-out/
+
+# ---------- 로컬 작업물 ----------
+# .agents/ : 각자 설치한 스킬. output/ : 팔레트·로고 시안 등 스크래치.
+.agents/
+output/
