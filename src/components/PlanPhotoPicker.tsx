@@ -167,7 +167,7 @@ export default function PlanPhotoPicker({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={photo.imageUrl} alt="" className="h-full w-full object-cover" />
                   {selected && (
-                    <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-pill bg-berry text-white">
+                    <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-pill bg-action inset-ring inset-ring-action-border text-on-action">
                       <Check size={12} aria-hidden />
                     </span>
                   )}

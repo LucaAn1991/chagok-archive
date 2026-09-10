@@ -200,8 +200,8 @@ export default function CardMaterialsPage() {
           type="button"
           onClick={saveAndCraft}
           disabled={saving}
-          className="h-12 rounded-md bg-berry text-[15px] font-semibold text-white
-                     hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+          className="h-12 rounded-md bg-action inset-ring inset-ring-action-border text-[15px] font-semibold text-on-action
+                     hover:bg-action-hover disabled:bg-surface-muted disabled:text-sub"
         >
           {saving ? "···" : dirty ? "저장하고 제작하기" : "제작하기"}
         </button>

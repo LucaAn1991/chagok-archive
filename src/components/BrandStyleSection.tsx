@@ -176,8 +176,8 @@ export default function BrandStyleSection({ initial, onSaved }: Props) {
           type="button"
           onClick={handleSave}
           disabled={saving}
-          className="h-11 rounded-md bg-berry px-5 text-body font-semibold text-white
-                     hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+          className="h-11 rounded-md bg-action inset-ring inset-ring-action-border px-5 text-body font-semibold text-on-action
+                     hover:bg-action-hover disabled:bg-surface-muted disabled:text-sub"
         >
           {saving ? "···" : "저장"}
         </button>

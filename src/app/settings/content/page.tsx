@@ -470,8 +470,8 @@ export default function ContentSettingsPage() {
               type="button"
               onClick={save}
               disabled={saving || !dirty}
-              className="h-12 rounded-md bg-berry text-[15px] font-semibold text-white
-                         hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+              className="h-12 rounded-md bg-action inset-ring inset-ring-action-border text-[15px] font-semibold text-on-action
+                         hover:bg-action-hover disabled:bg-surface-muted disabled:text-sub"
             >
               {saving ? "저장하는 중…" : "저장"}
             </button>

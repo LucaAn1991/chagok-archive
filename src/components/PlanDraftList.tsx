@@ -150,7 +150,7 @@ export default function PlanDraftList({
         type="button"
         onClick={onNext}
         disabled={saving || chosenCount === 0}
-        className="mt-4 flex h-12 w-full items-center justify-center rounded-md bg-berry text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark disabled:opacity-60"
+        className="mt-4 flex h-12 w-full items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-body font-semibold text-on-action transition-colors duration-200 hover:bg-action-hover disabled:opacity-60"
       >
         {saving ? "저장하는 중···" : `이 ${chosenCount}개로 갈게요`}
       </button>
@@ -186,7 +186,7 @@ function DraftCard({
           aria-label={`${draft.audience}용 기획안 ${draft.chosen ? "빼기" : "넣기"}`}
           className={[
             "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-sm border-2 transition-colors duration-200",
-            draft.chosen ? "border-berry bg-berry text-white" : "border-line bg-surface",
+            draft.chosen ? "border-berry bg-action inset-ring inset-ring-action-border text-on-action" : "border-line bg-surface",
             lockedOn ? "cursor-not-allowed opacity-70" : "",
           ].join(" ")}
         >
@@ -420,7 +420,7 @@ function RefinePanel({
               className={[
                 "h-9 rounded-pill px-3.5 text-caption font-semibold transition-colors duration-200 disabled:opacity-60",
                 draft.slideCount === n
-                  ? "bg-berry text-white"
+                  ? "bg-action inset-ring inset-ring-action-border text-on-action"
                   : "border border-line bg-surface text-ink hover:bg-surface-muted",
               ].join(" ")}
             >
@@ -454,7 +454,7 @@ function RefinePanel({
               className={[
                 "max-w-[85%] break-keep rounded-md px-3 py-2 text-caption leading-relaxed",
                 t.role === "user"
-                  ? "self-end bg-berry text-white"
+                  ? "self-end bg-action inset-ring inset-ring-action-border text-on-action"
                   : "self-start bg-surface-muted text-ink",
               ].join(" ")}
             >
@@ -510,7 +510,7 @@ function RefinePanel({
           type="button"
           onClick={send}
           disabled={refining || !text.trim()}
-          className="h-9 shrink-0 rounded-md bg-berry px-4 text-caption font-semibold text-white transition-colors duration-200 hover:bg-berry-dark disabled:opacity-60"
+          className="h-9 shrink-0 rounded-md bg-action inset-ring inset-ring-action-border px-4 text-caption font-semibold text-on-action transition-colors duration-200 hover:bg-action-hover disabled:opacity-60"
         >
           보내기
         </button>

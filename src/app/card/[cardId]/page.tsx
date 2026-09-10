@@ -19,6 +19,8 @@ import { auth, db } from "@/lib/firebase/client";
 import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
+import { CARD_TEMPLATES, TEMPLATE_ORDER } from "@/lib/card-templates";
+import { CARD_STYLES, STYLE_ORDER } from "@/lib/render/card-styles";
 import type { Card } from "@/types";
 
 /**
@@ -35,6 +37,14 @@ import type { Card } from "@/types";
 
 type Phase = "loading" | "ready" | "not-found" | "error";
 
+function templateSlideLabel(layoutId: string): string {
+  if (layoutId.includes("image")) return "이미지";
+  if (layoutId === "cover") return "표지";
+  if (layoutId === "closing") return "마무리";
+  if (layoutId === "list") return "목록";
+  return "본문";
+}
+
 export default function CardDetailPage() {
   const router = useRouter();
   const { cardId } = useParams<{ cardId: string }>();
@@ -44,6 +54,10 @@ export default function CardDetailPage() {
   const [planExists, setPlanExists] = useState(false);
   const [dateDraft, setDateDraft] = useState("");
   const [savingDate, setSavingDate] = useState(false);
+  const [templateDraft, setTemplateDraft] = useState<Card["templateId"]>(null);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [styleDraft, setStyleDraft] = useState<Card["styleId"]>(null);
+  const [savingStyle, setSavingStyle] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false); // ··· 더 보기 (버리기가 산다)
   // 카드뉴스 미리보기 — 완성 PNG는 저장하지 않으므로(PLAN §9) 즉석 렌더 API에서 받는다
@@ -70,6 +84,8 @@ export default function CardDetailPage() {
         }
         setCard(data);
         setDateDraft(data.scheduledDate ?? "");
+        setTemplateDraft(data.templateId);
+        setStyleDraft(data.styleId);
 
         /*
           슬라이드 이미지는 페이지를 막지 않는다 (09-01 버그 수정) — 8장 렌더를
@@ -127,6 +143,36 @@ export default function CardDetailPage() {
     }
   }
 
+  async function saveTemplate() {
+    if (!card || templateDraft === card.templateId) return;
+    setSavingTemplate(true);
+    try {
+      await updateDoc(doc(db, "cards", cardId), { templateId: templateDraft });
+      setCard({ ...card, templateId: templateDraft });
+      showToast("템플릿을 변경했어요.");
+    } catch {
+      setTemplateDraft(card.templateId);
+      showToast("템플릿을 바꾸지 못했어요. 다시 시도해주세요.");
+    } finally {
+      setSavingTemplate(false);
+    }
+  }
+
+  async function saveStyle() {
+    if (!card || styleDraft === card.styleId) return;
+    setSavingStyle(true);
+    try {
+      await updateDoc(doc(db, "cards", cardId), { styleId: styleDraft });
+      setCard({ ...card, styleId: styleDraft });
+      showToast("스타일 템플릿을 변경했어요.");
+    } catch {
+      setStyleDraft(card.styleId);
+      showToast("스타일 템플릿을 바꾸지 못했어요. 다시 시도해주세요.");
+    } finally {
+      setSavingStyle(false);
+    }
+  }
+
   async function discardCard() {
     if (!card) return;
     setDiscarding(true);
@@ -169,10 +215,14 @@ export default function CardDetailPage() {
     );
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+    now.getDate(),
+  ).padStart(2, "0")}`;
   const overdue =
     card.scheduledDate !== undefined && card.scheduledDate < today && card.status !== "published";
   const discarded = card.status === "discarded";
+  const canCraft = card.status !== "planned" || (card.scheduledDate ?? "") >= today;
 
   return (
     <AppShell>
@@ -228,6 +278,109 @@ export default function CardDetailPage() {
                   className="h-8 rounded-md border-2 border-berry bg-surface px-3 text-body font-semibold text-berry disabled:border-line disabled:text-sub"
                 >
                   {savingDate ? "···" : "날짜 저장"}
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="flex min-h-9 items-start gap-3">
+            <label htmlFor="template" className="w-16 shrink-0 pt-1 text-label font-semibold text-sub">
+              템플릿
+            </label>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  id="template"
+                  value={templateDraft ?? ""}
+                  disabled={discarded || card.status !== "planned"}
+                  onChange={(e) => setTemplateDraft((e.target.value || null) as Card["templateId"])}
+                  className="h-8 min-w-0 rounded-md border border-line bg-surface px-2.5 text-body text-ink"
+                >
+                  <option value="">자동 구성</option>
+                  {TEMPLATE_ORDER.map((templateId) => (
+                    <option key={templateId} value={templateId}>
+                      {CARD_TEMPLATES[templateId].label}
+                    </option>
+                  ))}
+                </select>
+                {templateDraft !== card.templateId && (
+                  <button
+                    type="button"
+                    onClick={saveTemplate}
+                    disabled={savingTemplate}
+                    className="h-8 rounded-md border-2 border-berry bg-surface px-3 text-body font-semibold text-berry disabled:border-line disabled:text-sub"
+                  >
+                    {savingTemplate ? "···" : "저장"}
+                  </button>
+                )}
+              </div>
+              <p className="mt-1 break-keep text-caption text-sub">
+                {templateDraft ? CARD_TEMPLATES[templateDraft].hint : "기획안에 맞춰 구성을 정해요."}
+              </p>
+              {templateDraft && (
+                <div className="mt-3">
+                  <p className="text-label font-semibold text-sub">구성 미리보기</p>
+                  <div className="mt-1.5 flex gap-1.5 overflow-x-auto pb-1">
+                    {CARD_TEMPLATES[templateDraft].slides.map((slide, index) => (
+                      <span
+                        key={`${slide.layoutId}-${index}`}
+                        className={[
+                          "flex h-20 w-14 shrink-0 flex-col justify-end rounded-sm p-1.5 text-[10px] font-semibold",
+                          slide.layoutId.includes("image")
+                            ? "bg-berry text-white"
+                            : "bg-berry-light text-berry-dark",
+                        ].join(" ")}
+                      >
+                        <span>{index + 1}</span>
+                        <span>{templateSlideLabel(slide.layoutId)}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex min-h-9 items-start gap-3">
+            <span className="w-16 shrink-0 pt-1 text-label font-semibold text-sub">스타일</span>
+            <div className="min-w-0 flex-1">
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {STYLE_ORDER.map((styleId) => {
+                  const style = CARD_STYLES[styleId];
+                  const selected = styleDraft === styleId;
+                  return (
+                    <button
+                      key={styleId}
+                      type="button"
+                      disabled={discarded || card.status !== "planned"}
+                      onClick={() => setStyleDraft(styleId)}
+                      className={[
+                        "w-28 shrink-0 overflow-hidden rounded-md border text-left disabled:cursor-not-allowed",
+                        selected ? "border-2 border-berry" : "border-line",
+                      ].join(" ")}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/styles/${styleId}/preview?sheet=1`}
+                        alt={`${style.label} 템플릿 미리보기`}
+                        className="aspect-square w-full object-cover"
+                      />
+                      <span className="block truncate px-2 py-1.5 text-caption font-semibold text-ink">
+                        {style.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {styleDraft && (
+                <p className="mt-1 break-keep text-caption text-sub">{CARD_STYLES[styleDraft].hint}</p>
+              )}
+              {styleDraft !== card.styleId && (
+                <button
+                  type="button"
+                  onClick={saveStyle}
+                  disabled={savingStyle}
+                  className="mt-2 h-8 rounded-md border-2 border-berry bg-surface px-3 text-body font-semibold text-berry disabled:border-line disabled:text-sub"
+                >
+                  {savingStyle ? "···" : "스타일 저장"}
                 </button>
               )}
             </div>
@@ -316,12 +469,27 @@ export default function CardDetailPage() {
             파괴적 액션(버리기)은 primary와 같은 크기로 전시하지 않는다 — ··· 메뉴 속으로 (08-31) */}
         {!discarded && (
           <section className="flex flex-col gap-3">
-            <Link
-              href={`/card/${cardId}/result`}
-              className="flex h-12 items-center justify-center rounded-md bg-berry text-[15px] font-semibold text-white hover:bg-berry-dark"
-            >
-              {card.status === "planned" ? "콘텐츠 제작하기" : "캡션·카드뉴스 수정하기"}
-            </Link>
+            {canCraft ? (
+              <Link
+                href={`/card/${cardId}/result`}
+                className="flex h-12 items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-[15px] font-semibold text-on-action hover:bg-action-hover"
+              >
+                {card.status === "planned" ? "콘텐츠 제작하기" : "캡션·카드뉴스 수정하기"}
+              </Link>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled
+                  className="flex h-12 items-center justify-center rounded-md bg-surface-muted text-[15px] font-semibold text-sub"
+                >
+                  콘텐츠 제작하기
+                </button>
+                <p className="text-center text-caption text-sub">
+                  예정일을 오늘 이후로 옮기면 제작할 수 있어요.
+                </p>
+              </>
+            )}
             <div className="flex items-center justify-between">
               <Link
                 href={`/card/${cardId}/materials`}

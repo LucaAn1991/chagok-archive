@@ -169,7 +169,7 @@ function DetailBody({ plan, cards }: { plan: Plan; cards: Card[] }) {
       {/* 이어서 기획하기 (F11) — 하단 버튼 하나 */}
       <Link
         href={`/plan/new?from=${plan.id}`}
-        className="mt-8 flex h-12 w-full items-center justify-center rounded-md bg-berry text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+        className="mt-8 flex h-12 w-full items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-[15px] font-semibold text-on-action transition-colors duration-200 hover:bg-action-hover"
       >
         이어서 기획하기
       </Link>

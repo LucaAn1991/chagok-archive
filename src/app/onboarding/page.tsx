@@ -252,8 +252,8 @@ export default function OnboardingPage() {
               <button
                 type="button"
                 onClick={goToStep2}
-                className="h-12 rounded-md bg-berry text-[15px] font-semibold text-white
-                           hover:bg-berry-dark"
+                className="h-12 rounded-md bg-action inset-ring inset-ring-action-border text-[15px] font-semibold text-on-action
+                           hover:bg-action-hover"
               >
                 좋아하는 게시물 골라보기
               </button>
@@ -289,8 +289,8 @@ export default function OnboardingPage() {
                   type="button"
                   onClick={() => complete(selected)}
                   disabled={submitting || selected.length === 0}
-                  className="h-12 rounded-md bg-berry text-[15px] font-semibold text-white
-                             hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+                  className="h-12 rounded-md bg-action inset-ring inset-ring-action-border text-[15px] font-semibold text-on-action
+                             hover:bg-action-hover disabled:bg-surface-muted disabled:text-sub"
                 >
                   {submitting ? "···" : "첫 콘텐츠를 같이 정해볼까요?"}
                 </button>
@@ -413,7 +413,7 @@ function StyleCarousel({
                     <span className="pointer-events-none absolute inset-0 bg-berry/5" />
                     <span
                       className="absolute right-2 top-2 flex size-7 items-center
-                                 justify-center rounded-pill bg-berry text-white"
+                                 justify-center rounded-pill bg-action inset-ring inset-ring-action-border text-on-action"
                     >
                       <Check size={16} aria-hidden />
                     </span>

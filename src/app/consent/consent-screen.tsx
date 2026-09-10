@@ -274,7 +274,7 @@ export default function ConsentScreen({ termsMd }: { termsMd: string }) {
         onClick={() => (requiredOk ? void submit() : nudgeFirstMissing())}
         className={`mt-6 flex h-12 w-full items-center justify-center rounded-md text-[15px] font-semibold transition-colors duration-200 ${
           requiredOk && !saving
-            ? "bg-berry text-white hover:bg-berry-dark"
+            ? "bg-action inset-ring inset-ring-action-border text-on-action hover:bg-action-hover"
             : "bg-surface-muted text-sub"
         }`}
       >
@@ -290,7 +290,7 @@ function CheckMark({ on }: { on: boolean }) {
     <span
       aria-hidden
       className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-sm border transition-colors duration-200 ${
-        on ? "border-berry bg-berry text-white" : "border-line bg-surface text-transparent"
+        on ? "border-berry bg-action inset-ring inset-ring-action-border text-on-action" : "border-line bg-surface text-transparent"
       }`}
     >
       <Check size={15} />

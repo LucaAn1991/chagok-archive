@@ -16,45 +16,30 @@
    DESIGN.md §2 — 컬러 토큰
    ============================================================ */
 :root {
-  /*
-    Brand — **Warm Blush로 되돌렸다 (09-03).**
-
-    09-02에 무채색(잉크 + 웜 뉴트럴)으로 갈았다가 다시 이 팔레트로 왔다.
-    바꿨던 이유는 색조가 아니라 **면적**이었다 — 로그인 화면에서 옛 `--berry-tint`가
-    화면의 64%를 덮고 있었다. 그 문제는 색을 바꾸지 않아도 §2 「색 비율 75·20·5」를
-    지키면 해결되고, 실제로 지금 화면들은 브랜드색을 CTA·선택 상태·상태 점에만 쓴다.
-
-    ⚠️ **그래서 규칙은 그대로다.** 브랜드색으로 넓은 면을 칠하지 않는다.
-    `--berry-tint`를 배경 대신 쓰고 싶어지면 그때 다시 64%가 된다.
-  */
-  --berry:         #A85578;  /* 메인 — CTA · 선택 상태 · 핵심 강조 */
-  --berry-dark:    #914868;  /* hover · 연한 분홍 면 위의 글자 */
-  --berry-light:   #F2DCE5;  /* 칩 배경 · 연한 강조 면 */
-  --berry-tint:    #F0E6EA;  /* berry-light보다 더 연한 면 */
-  --purple:        #7A68A0;  /* AI 포인트 · 보조 강조. 09-04 — 옛 #806FA6은 흰 배경 4.43:1(AA 미달) */
-  --coral:         #F28A72;  /* 장식 전용 — 텍스트 금지 (대비 2.43:1) */
-
-  /* Surface */
-  --bg:            #FCF8F7;  /* 페이지 배경 (Warm Blush) */
-  --surface:       #FFFFFF;  /* 카드 · 입력 · 모달 */
-  --surface-muted: #F6F2F4;  /* 중립 표면 */
-  --line:          #E8E1E4;
-
-  /* Text */
-  --ink:           #2D292B;
-  --sub:           #6F6A6D;  /* 09-04 — surface-muted 위 4.44:1(AA 미달)이라 한 단계 어둡게 */
-
-  /* 카드 상태 — 명도 계단식 (진할수록 완료에 가깝다). 08-31 crafted 제거로 4색 */
-  --st-planned:    #C9B2E0;  /* 제작 대기 — 라벤더(빈 링으로 그려도 보이게). 09-03 */
-  --st-pending:    #C77BA0;  /* 업로드 대기 — 중간 톤으로 진하게(할 일 남음, 눈에 띄게). 09-03 계단 확대 */
-  --st-published:  #A85578;  /* 발행 완료 = berry */
-  --st-discarded:  #C4BDB7;  /* 버림 */
-
-  /* 에러 — DESIGN.md §2 하단 [제안, 확정 대기] */
-  --warn:          #A6472F;
-
-  /* 그라데이션 — 3곳에서만 (✦ · 생성 완료 · 기획 카드 테두리) — DESIGN.md §2 */
-  --grad: linear-gradient(135deg, #7A68A0, #A85578, #F28A72);
+  /* Charcoal + Lime — DESIGN.md §2. CTA 면과 링크/포커스 색을 분리한다.
+     berry/purple/coral 이름은 기존 유틸리티 호환용이며 새 CTA는 action을 쓴다. */
+  --action: #D5F267;
+  --action-hover: #C7E554;
+  --on-action: #202124;
+  --action-border: #778942;
+  --berry: #30332B;
+  --berry-dark: #202124;
+  --berry-light: #EDF5D9;
+  --berry-tint: #F5F8ED;
+  --purple: #4E6132;
+  --coral: #D5F267;
+  --bg: #FFFFFF;
+  --surface: #FFFFFF;
+  --surface-muted: #F5F5F3;
+  --line: #E4E5E0;
+  --ink: #202124;
+  --sub: #62645E;
+  --st-planned: #82906A;
+  --st-pending: #62733C;
+  --st-published: #30332B;
+  --st-discarded: #858880;
+  --warn: #A6472F;
+  --grad: linear-gradient(135deg, #D5F267, #D5F267);
 
   /* DESIGN.md §4 — Radius */
   --r-sm:   8px;
@@ -73,14 +58,14 @@
     격자로 반복되는 것(캘린더 칸·리스트 행)은 테두리, 단독으로 서는 카드는 --e-1.
     둘 다 두르면 09-03 이전의 «흰 상자 한 가지»로 되돌아간다.
   */
-  --e-1:     0 1px 2px rgba(45, 41, 43, 0.04), 0 2px 8px rgba(45, 41, 43, 0.04);
-  --e-2:     0 4px 16px rgba(45, 41, 43, 0.08);
-  --e-modal: 0 12px 40px rgba(45, 41, 43, 0.14);
+  --e-1:     0 1px 2px rgba(32, 33, 36, 0.04), 0 2px 8px rgba(32, 33, 36, 0.04);
+  --e-2:     0 4px 16px rgba(32, 33, 36, 0.08);
+  --e-modal: 0 12px 40px rgba(32, 33, 36, 0.14);
 
   /*
     다크 모드를 정의하지 않았다(DESIGN.md §18).
     이 선언이 없으면 브라우저가 입력·스크롤바를 임의로 어둡게 칠해
-    Warm Blush 팔레트와 어긋난다.
+    Charcoal + Lime 팔레트와 어긋난다.
   */
   color-scheme: light;
 }
@@ -90,6 +75,10 @@
    inline이라 값이 복사되지 않고 위 :root 변수를 그대로 참조한다
    ============================================================ */
 @theme inline {
+  --color-action: var(--action);
+  --color-action-hover: var(--action-hover);
+  --color-on-action: var(--on-action);
+  --color-action-border: var(--action-border);
   --color-berry:         var(--berry);
   --color-berry-dark:    var(--berry-dark);
   --color-berry-light:   var(--berry-light);
@@ -217,7 +206,7 @@ body {
   `inset` 그림자로 안쪽 1px을 덧그려 2px 테두리처럼 보이게 한다.
   border-width를 2px로 올리면 칸 안 글자가 1px씩 밀려 흔들린다.
 
-  바깥에 옅은 링을 두르지 않는다 — berry 테두리(흰 배경 위 4.96:1,
+  바깥에 옅은 링을 두르지 않는다 — 차콜 테두리(흰 배경 위 높은 대비,
   DESIGN.md §15)만으로 focus를 알아볼 수 있고, 링을 더하면 다시 두 겹이 된다.
 */
 /*
@@ -252,6 +241,8 @@ select:focus-visible:not([data-focus-ring="none"]) {
 }
 .loader-run {
   animation: loader-run 0.5s ease-in-out infinite;
+  /* 원본 픽셀 실루엣은 유지하고, 제작 중 캐릭터만 대표 연두색 계열로 맞춘다. */
+  filter: hue-rotate(95deg) saturate(1.45) brightness(1.05);
 }
 .loader-track {
   background-image: repeating-linear-gradient(

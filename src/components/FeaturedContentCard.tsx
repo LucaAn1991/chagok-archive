@@ -57,7 +57,7 @@ export default function FeaturedContentCard({
 
       <Link
         href={ctaHref}
-        className="mt-4 flex h-11 w-full md:mt-5 items-center justify-center rounded-md bg-berry text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-berry-dark md:h-11"
+        className="mt-4 flex h-11 w-full md:mt-5 items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-[15px] font-semibold text-on-action transition-colors duration-200 hover:bg-action-hover md:h-11"
       >
         {ctaLabel}
       </Link>

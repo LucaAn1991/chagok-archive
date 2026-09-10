@@ -208,8 +208,8 @@ export default function SignupPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="mt-2 h-12 rounded-md bg-berry text-[15px] font-semibold text-white
-                         hover:bg-berry-dark disabled:bg-surface-muted disabled:text-sub"
+              className="mt-2 h-12 rounded-md bg-action inset-ring inset-ring-action-border text-[15px] font-semibold text-on-action
+                         hover:bg-action-hover disabled:bg-surface-muted disabled:text-sub"
             >
               {submitting ? "···" : "가입하기"}
             </button>

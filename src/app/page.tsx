@@ -582,7 +582,7 @@ function OneLineIdeaInput() {
       <button
         type="submit"
         aria-label="담기"
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-berry text-white transition-colors duration-200 hover:bg-berry-dark"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-on-action transition-colors duration-200 hover:bg-action-hover"
       >
         <ArrowUp size={18} aria-hidden />
       </button>
@@ -908,7 +908,7 @@ function AssignDatesControl({
         onClick={() => setConfirmOpen(true)}
         className={
           primary
-            ? "flex h-11 items-center justify-center rounded-md bg-berry px-6 text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+            ? "flex h-11 items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border px-6 text-body font-semibold text-on-action transition-colors duration-200 hover:bg-action-hover"
             : "flex h-11 shrink-0 items-center text-caption font-semibold text-berry transition-colors duration-200 hover:text-berry-dark"
         }
       >
@@ -939,7 +939,7 @@ function AssignDatesControl({
             <button
               type="button"
               onClick={() => void run()}
-              className="flex h-10 items-center justify-center rounded-md bg-berry px-4 text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+              className="flex h-10 items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border px-4 text-body font-semibold text-on-action transition-colors duration-200 hover:bg-action-hover"
             >
               이대로 정하기
             </button>
@@ -1003,7 +1003,7 @@ function IdeaInput() {
       <button
         type="submit"
         aria-label="전송"
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-berry text-white transition-colors duration-200 hover:bg-berry-dark"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border text-on-action transition-colors duration-200 hover:bg-action-hover"
       >
         <ArrowUp size={18} aria-hidden />
       </button>

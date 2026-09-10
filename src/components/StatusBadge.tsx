@@ -1,10 +1,10 @@
+import { Check, PencilLine, Upload, X } from "lucide-react";
 import type { CardStatus } from "@/types";
 
 /**
  * 카드 상태 배지 — DESIGN.md §11 상태 모델.
- * 상태색(--st-*)은 대비가 낮아 텍스트에 쓸 수 없다(§15) — 점(indicator)에만 칠하고
- * 글자는 --sub로 쓴다. 색만으로 상태를 구분하지 않는다는 규칙(§15)도 라벨 병행으로 지킨다.
- * 발행 완료는 점 대신 ✓ — 끝난 일임이 한눈에 보이게 (08-31).
+ * 색상만으로 단계를 구분하지 않는다. 제작·업로드·발행을 서로 다른 아이콘과 표면으로
+ * 보여줘, 빠르게 훑어도 다음 할 일을 알 수 있게 한다.
  */
 const STATUS_LABEL: Record<CardStatus, string> = {
   planned: "제작 대기",
@@ -13,38 +13,31 @@ const STATUS_LABEL: Record<CardStatus, string> = {
   discarded: "버림",
 };
 
-const STATUS_COLOR: Record<CardStatus, string> = {
-  planned: "var(--st-planned)",
-  pending: "var(--st-pending)",
-  published: "var(--st-published)",
-  discarded: "var(--st-discarded)",
-};
-
 export default function StatusBadge({ status: rawStatus }: { status: CardStatus }) {
   // 과도기 방어 — DB에 남은 옛 'crafted' 값은 pending으로 보여준다 (08-31 상태 개편)
   const status: CardStatus = STATUS_LABEL[rawStatus] ? rawStatus : "pending";
   return (
     <span
       className={[
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill bg-surface-muted px-2.5 py-1 text-caption font-medium",
-        // 진행 중 상태는 또렷하게, 끝난 상태(발행 완료)만 차분한 회색 (09-01)
-        status === "published" ? "text-sub" : "text-ink",
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill px-2.5 py-1 text-caption font-medium",
+        // 제작 중은 윤곽, 업로드 대기는 연두 표면, 완료는 강한 채움으로 구분한다.
+        status === "planned"
+          ? "border border-st-planned bg-surface text-sub"
+          : status === "pending"
+            ? "bg-berry-light text-berry-dark"
+            : status === "published"
+              ? "bg-action text-on-action"
+              : "bg-surface-muted text-sub",
       ].join(" ")}
     >
-      {status === "published" ? (
-        <span aria-hidden className="font-semibold">
-          ✓
-        </span>
-      ) : status === "planned" ? (
-        /* 제작 대기 = 빈 링 (아직 안 만듦). 업로드 대기(꽉 찬 점)와 형태로 갈린다 (09-03) */
-        <span aria-hidden className="h-2 w-2 rounded-pill border-2 border-st-planned" />
+      {status === "planned" ? (
+        <PencilLine size={13} strokeWidth={2} aria-hidden />
+      ) : status === "pending" ? (
+        <Upload size={13} strokeWidth={2} aria-hidden />
+      ) : status === "published" ? (
+        <Check size={13} strokeWidth={2.5} aria-hidden />
       ) : (
-        /* 업로드 대기 = 꽉 찬 점 (만들어 둠) */
-        <span
-          aria-hidden
-          className="h-2 w-2 rounded-pill"
-          style={{ background: STATUS_COLOR[status] }}
-        />
+        <X size={13} strokeWidth={2} aria-hidden />
       )}
       {STATUS_LABEL[status]}
     </span>

@@ -185,7 +185,7 @@ export default function PlanHistoryPage() {
               <p className="text-body-l text-ink">아직 지난 기획이 없어요</p>
               <Link
                 href="/plan/new"
-                className="mt-6 flex h-11 items-center justify-center rounded-md bg-berry px-6 text-body font-semibold text-white transition-colors duration-200 hover:bg-berry-dark"
+                className="mt-6 flex h-11 items-center justify-center rounded-md bg-action inset-ring inset-ring-action-border px-6 text-body font-semibold text-on-action transition-colors duration-200 hover:bg-action-hover"
               >
                 새 기획 시작하기
               </Link>
